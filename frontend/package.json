@@ -6,9 +6,11 @@
     "build:icons": "node scripts/build-icon-catalog.mjs",
     "prebuild": "node scripts/build-icon-catalog.mjs",
     "start": "ng serve --port 4201",
+    "serve:prod": "node scripts/serve-static.mjs",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "postinstall": "patch-package"
   },
   "private": true,
   "packageManager": "npm@11.13.0",
@@ -39,6 +41,7 @@
     "@material-symbols/svg-400": "^0.45.5",
     "jsdom": "^28.0.0",
     "lucide-static": "^1.21.0",
+    "patch-package": "^8.0.1",
     "prettier": "^3.8.1",
     "simple-icons": "^16.24.0",
     "typescript": "~5.9.2",

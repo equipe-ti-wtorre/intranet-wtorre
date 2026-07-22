@@ -73,9 +73,13 @@ export class MuralComponent implements OnInit {
     });
   }
 
+  rotuloEvento(ev: Evento): string {
+    return (ev.rotulo || ev.tipo || '').trim();
+  }
+
   tituloEvento(ev: Evento): string {
-    const tipo = ev.tipo?.trim();
-    return tipo ? `${tipo} · ${ev.titulo}` : ev.titulo;
+    const rotulo = this.rotuloEvento(ev);
+    return rotulo ? `${rotulo} · ${ev.titulo}` : ev.titulo;
   }
 
   subtituloEvento(ev: Evento): string {

@@ -47,7 +47,7 @@
         @for (r of reservas(); track r.eventId || r.id || r.start) {
           <article class="reserva-card">
             <div class="reserva-head">
-              <strong>{{ reservaTitulo(r) }}</strong>
+              <strong>{{ reservaOrganizer(r) || 'Reservado' }}</strong>
               @if (podeCancelar(r)) {
                 <button
                   type="button"
@@ -64,7 +64,6 @@
               <span class="ico">📅</span>
               {{ formatDateTimeBr(r.start) }} até {{ formatDateTimeBr(r.end) }}
             </p>
-            <p class="organizer"><span class="ico">👤</span> {{ reservaOrganizer(r) }}</p>
           </article>
         }
       </div>

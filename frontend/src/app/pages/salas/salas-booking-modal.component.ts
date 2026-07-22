@@ -464,6 +464,10 @@ export class SalasBookingModalComponent implements OnDestroy {
             mensagem =
               err.error?.mensagem ||
               'Não foi possível criar a reserva no calendário do organizador. Tente novamente ou contate o suporte.';
+          } else if (code === 'REQUESTER_TENANT_UNKNOWN') {
+            mensagem =
+              err.error?.mensagem ||
+              'Não foi possível identificar o ambiente do organizador. Use um e-mail com domínio mapeado nesta localidade.';
           } else if (code === 'ROOM_CONFLICT') {
             mensagem =
               err.error?.mensagem ||

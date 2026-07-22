@@ -59,6 +59,12 @@ async function buscarDaFonte(fonte, { ignorarCache = false } = {}) {
     throw err;
   }
 
+  eventos = eventos.map((ev) => ({
+    ...ev,
+    logoUrl: fonte.logoUrl || null,
+    rotulo: fonte.rotulo || null,
+  }));
+
   cache.set(key, {
     eventos,
     expiresAt: now + getTtlMs(),

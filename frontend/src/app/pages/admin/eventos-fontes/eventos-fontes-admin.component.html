@@ -193,6 +193,28 @@
       <div class="help">Quantidade máxima de eventos importados desta fonte (vazio = sem limite).</div>
     </div>
 
+    <div class="field">
+      <label for="ef-rotulo">Rótulo do tipo</label>
+      <input
+        id="ef-rotulo"
+        type="text"
+        formControlName="rotulo"
+        maxlength="60"
+        placeholder="Ex.: Agenda, Cultura, OUTRO…"
+      />
+      <div class="help">
+        Substitui o texto do tipo (ex.: OUTRO) no título da home. Vazio = usa o tipo detectado pelo parser.
+      </div>
+    </div>
+
+    <div class="field">
+      <app-doc-entidade-logo-picker
+        formControlName="logoUrl"
+        [uploadLogo]="uploadLogoFonte"
+      />
+      <div class="help">Exibido no lugar do tipo na lista de próximos eventos da home.</div>
+    </div>
+
     <div class="toggle-field">
       <div>
         <div class="tt">Ativo</div>
@@ -230,7 +252,7 @@
             }
           </span>
           <div>
-            <div class="preview-titulo">{{ ev.tipo }} · {{ ev.titulo }}</div>
+            <div class="preview-titulo">{{ ev.rotulo || ev.tipo }} · {{ ev.titulo }}</div>
             <div class="preview-sub">{{ ev.dataTexto }}@if (ev.subtitulo) { · {{ ev.subtitulo }} }</div>
           </div>
         </li>

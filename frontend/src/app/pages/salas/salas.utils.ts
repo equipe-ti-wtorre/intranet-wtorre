@@ -159,7 +159,6 @@ export function buildDayTimeSlots(
 
   for (let h = 0; h < 24; h++) {
     for (const min of [0, 30]) {
-      if (h === 23 && min === 30) continue;
       const start = new Date(base);
       start.setHours(h, min, 0, 0);
       const end = new Date(start);

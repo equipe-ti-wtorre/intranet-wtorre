@@ -22,6 +22,8 @@ function mapFonte(row) {
     ordem: row.ordem,
     limite: row.limite != null ? Number(row.limite) : null,
     configJson: parseConfigJson(row.config_json),
+    logoUrl: row.logo_url || null,
+    rotulo: row.rotulo || null,
     criadoEm: row.criado_em,
     atualizadoEm: row.atualizado_em,
   };
@@ -74,8 +76,8 @@ async function criar(data) {
   const pool = getPool();
   const configJson = data.configJson != null ? JSON.stringify(data.configJson) : null;
   const [result] = await pool.execute(
-    `INSERT INTO eventos_fontes (codigo, nome, url, parser_tipo, ativo, ordem, limite, config_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO eventos_fontes (codigo, nome, url, parser_tipo, ativo, ordem, limite, config_json, logo_url, rotulo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.codigo,
       data.nome,
@@ -85,6 +87,8 @@ async function criar(data) {
       data.ordem ?? 0,
       data.limite ?? null,
       configJson,
+      data.logoUrl ?? null,
+      data.rotulo ?? null,
     ]
   );
   return buscarPorId(result.insertId);
@@ -123,6 +127,14 @@ async function atualizar(id, data) {
   if (configJson !== undefined) {
     fields.push('config_json = ?');
     params.push(configJson);
+  }
+  if (data.logoUrl !== undefined) {
+    fields.push('logo_url = ?');
+    params.push(data.logoUrl || null);
+  }
+  if (data.rotulo !== undefined) {
+    fields.push('rotulo = ?');
+    params.push(data.rotulo || null);
   }
 
   if (!fields.length) return buscarPorId(id);

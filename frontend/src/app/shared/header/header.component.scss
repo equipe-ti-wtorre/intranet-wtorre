@@ -34,7 +34,11 @@ nav.menu {
 
 @mixin navrow-compact-menu-items($padding, $font-size, $gap, $icon-size: 15px) {
   nav.menu {
-    gap: if($gap != null, $gap, 2px);
+    @if $gap != null {
+      gap: $gap;
+    } @else {
+      gap: 2px;
+    }
 
     .bar-trigger,
     .bar-link {

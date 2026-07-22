@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS eventos_fontes (
   ordem           INT NOT NULL DEFAULT 0,
   limite          INT NULL,
   config_json     JSON NULL,
+  logo_url        VARCHAR(500) NULL,
+  rotulo          VARCHAR(60) NULL,
   criado_em       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   atualizado_em   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_eventos_fontes_ativo_ordem (ativo, ordem)

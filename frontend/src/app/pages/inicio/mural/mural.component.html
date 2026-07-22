@@ -76,7 +76,11 @@
                   <div class="ev-t">{{ tituloEvento(ev) }}</div>
                   <div class="ev-s">{{ subtituloEvento(ev) }}</div>
                 </div>
-                <span class="ev-tag">{{ ev.tipo }}</span>
+                @if (ev.logoUrl) {
+                  <img class="ev-logo" [src]="ev.logoUrl" [alt]="ev.fonteNome" loading="lazy" />
+                } @else {
+                  <span class="ev-tag">{{ rotuloEvento(ev) }}</span>
+                }
               </a>
             } @else {
               <div class="event">
@@ -96,7 +100,11 @@
                   <div class="ev-t">{{ tituloEvento(ev) }}</div>
                   <div class="ev-s">{{ subtituloEvento(ev) }}</div>
                 </div>
-                <span class="ev-tag">{{ ev.tipo }}</span>
+                @if (ev.logoUrl) {
+                  <img class="ev-logo" [src]="ev.logoUrl" [alt]="ev.fonteNome" loading="lazy" />
+                } @else {
+                  <span class="ev-tag">{{ rotuloEvento(ev) }}</span>
+                }
               </div>
             }
           }

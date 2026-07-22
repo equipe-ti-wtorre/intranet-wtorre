@@ -5,11 +5,17 @@ import {
   NG_VALUE_ACCESSOR,
 } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { AdminDropzoneComponent } from '../admin/admin-dropzone/admin-dropzone.component';
 import { MenuService } from '../../services/menu.service';
 import { DocumentosService } from '../../services/documentos.service';
 import { AlertasService } from '../../services/alertas.service';
 import { TopbarLogo } from '../../models/topbar.model';
+
+export type LogoPickerUploadFn = (file: File) => Observable<{
+  url: string;
+  compactado?: boolean;
+}>;
 
 @Component({
   selector: 'app-doc-entidade-logo-picker',
@@ -31,6 +37,8 @@ export class DocEntidadeLogoPickerComponent implements ControlValueAccessor, OnI
   private readonly alertas = inject(AlertasService);
 
   readonly disabled = input(false);
+  /** Quando informado, usa este upload em vez do endpoint de documentos/páginas. */
+  readonly uploadLogo = input<LogoPickerUploadFn | null>(null);
 
   readonly logosGrupo = signal<TopbarLogo[]>([]);
   readonly carregandoLogos = signal(true);
@@ -101,7 +109,11 @@ export class DocEntidadeLogoPickerComponent implements ControlValueAccessor, OnI
   onLogoFile(file: File): void {
     if (this.estaDesabilitado()) return;
     this.uploadando.set(true);
-    this.documentosService.uploadPaginaLogo(file).subscribe({
+    const customUpload = this.uploadLogo();
+    const upload$ = customUpload
+      ? customUpload(file)
+      : this.documentosService.uploadPaginaLogo(file);
+    upload$.subscribe({
       next: (res) => {
         this.patchValor(res.url);
         if (res.compactado) {

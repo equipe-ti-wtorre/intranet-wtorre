@@ -9,6 +9,16 @@ export interface Evento {
   url: string | null;
   imagemUrl: string | null;
   emoji: string;
+  logoUrl?: string | null;
+  /** Rótulo configurável da fonte; quando presente, substitui `tipo` na home. */
+  rotulo?: string | null;
+}
+
+export interface EventoFonteLogoUploadResponse {
+  url: string;
+  compactado: boolean;
+  largura: number | null;
+  altura: number | null;
 }
 
 export interface EventosProximosResponse {
@@ -29,6 +39,8 @@ export interface EventoFonte {
   ordem: number;
   limite: number | null;
   configJson: Record<string, unknown> | null;
+  logoUrl: string | null;
+  rotulo: string | null;
   criadoEm?: string;
   atualizadoEm?: string;
 }
@@ -47,6 +59,8 @@ export interface EventoFontePayload {
   ativo: boolean;
   ordem: number;
   limite: number | null;
+  logoUrl?: string | null;
+  rotulo?: string | null;
 }
 
 export interface EventoFonteTesteResponse {

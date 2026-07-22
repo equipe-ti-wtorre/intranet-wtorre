@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   EventoFonte,
+  EventoFonteLogoUploadResponse,
   EventoFontePayload,
   EventoFonteTesteResponse,
   EventoParserTipo,
@@ -42,6 +43,15 @@ export class EventosFontesService {
     return this.http.post<EventoFonteTesteResponse>(this.api(`/eventos/fontes/${id}/testar`), {});
   }
 
+  uploadLogo(file: File): Observable<EventoFonteLogoUploadResponse> {
+    const form = new FormData();
+    form.append('imagem', file);
+    return this.http.post<EventoFonteLogoUploadResponse>(
+      this.api('/eventos/fontes/upload-logo'),
+      form
+    );
+  }
+
   private toBody(payload: Partial<EventoFontePayload>): Record<string, unknown> {
     const body: Record<string, unknown> = {};
     if (payload.codigo !== undefined) body['codigo'] = payload.codigo;
@@ -51,6 +61,8 @@ export class EventosFontesService {
     if (payload.ativo !== undefined) body['ativo'] = payload.ativo;
     if (payload.ordem !== undefined) body['ordem'] = payload.ordem;
     if (payload.limite !== undefined) body['limite'] = payload.limite;
+    if (payload.logoUrl !== undefined) body['logoUrl'] = payload.logoUrl;
+    if (payload.rotulo !== undefined) body['rotulo'] = payload.rotulo;
     return body;
   }
 }

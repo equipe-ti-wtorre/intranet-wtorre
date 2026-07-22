@@ -104,6 +104,11 @@ const env = {
   eventosCacheTtlMin: Number(process.env.EVENTOS_CACHE_TTL_MIN) || 60,
   eventosLimite: Number(process.env.EVENTOS_LIMITE) || 6,
   eventosAgendaLimite: Number(process.env.EVENTOS_AGENDA_LIMITE) || 60,
+  eventosFontesLogosDir:
+    process.env.EVENTOS_FONTES_LOGOS_DIR ||
+    path.join(__dirname, '..', '..', 'storage', 'eventos-fontes-logos'),
+  eventosFontesLogoUploadMaxMb:
+    Number(process.env.EVENTOS_FONTES_LOGO_UPLOAD_MAX_MB) || 2,
   pbiEnabled:
     process.env.PBI_ENABLED === '1' || process.env.PBI_ENABLED === 'true',
   pbiTenantId: process.env.PBI_TENANT_ID || '',

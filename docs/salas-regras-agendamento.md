@@ -91,14 +91,18 @@ Reservas feitas em `/salas` seguem o **Assistente de agendamento** do Outlook:
 | Onde o evento é criado? | Calendário do organizador (`POST /users/{requesterEmail}/events`). |
 | Como a sala é convidada? | Attendee `type: resource` (mailbox da sala) + campo `location`. |
 | Participantes? | Attendees `type: required` no mesmo evento. |
-| Fallback para calendário da sala? | **Não.** Se o Graph retornar 400/403/404 no calendário do organizador, a reserva falha com `REQUESTER_CALENDAR_UNAVAILABLE`. |
-| Quem executa no Graph? | API SalasReuniao (credenciais app-only), em nome do tenant. |
+| Fallback se Graph falhar no organizador? | **Não.** 400/403/404 no calendário do organizador → `REQUESTER_CALENDAR_UNAVAILABLE`. |
+| Quem executa no Graph? | API SalasReuniao (credenciais app-only) no **tenant do organizador** (domínio → `domainToApiLocalidade`), não necessariamente no da sala. |
+| Como a sala aceita? | **Fluxo nativo do Exchange.** A sala (recurso) aceita o convite via AutoAccept e o Exchange mantém o evento do organizador e a reserva da sala vinculados. A API **não** cria evento espelho. |
+| Requisito cross-tenant | A mailbox da sala precisa aceitar convites de outro tenant: `Set-CalendarProcessing -AutomateProcessing AutoAccept -ProcessExternalMeetingMessages $true -DeleteSubject $false -AddOrganizerToSubject $false`. Sem isso a sala não responde como aceita. |
 
 **Implicações:**
 
-- O `eventId` devolvido pertence ao calendário do organizador — cancelamento e check-in usam esse ID.
-- A ocupação da grade da sala vem do convite como **recurso**, não apenas do texto em Local.
+- O `eventId` devolvido pertence ao calendário do organizador — cancelamento e check-in usam esse ID e o token Graph do tenant do organizador.
+- A grade/lista de reservas lê o calendário da **sala** (cópia aceita pelo recurso via AutoAccept), que preserva título e organizador reais.
+- **Cancelamento propaga nos dois sentidos:** cancelar no Outlook (organizador) libera a sala automaticamente pelo vínculo do Exchange; cancelar na intranet apaga o evento do organizador e o Exchange envia o cancelamento à sala.
 - O proxy da intranet **valida e encaminha** o `requesterEmail` do body (não sobrescreve com o JWT). Quem está autenticado precisa ter e-mail válido na sessão, mas o organizador da reserva pode ser outra pessoa.
+- Domínio do organizador não mapeado → `REQUESTER_TENANT_UNKNOWN`.
 - Cancelamento na intranet: **organizador da reserva** ou usuário com perfil `ADMIN`.
 
 ### Ordem de validação no `BookRoomUseCase`
@@ -109,7 +113,7 @@ Reservas feitas em `/salas` seguem o **Assistente de agendamento** do Outlook:
 4. Verifica conflitos de **outros participantes** → `PARTICIPANT_CONFLICT` (409).
 5. Verifica conflito do **solicitante** → `REQUESTER_CONFLICT` (409).
 6. Verifica conflito da **sala** → `ROOM_CONFLICT` (409).
-7. Cria o evento no Graph; se check-in estiver ativo na sala, marca categoria `SalasReuniao.RequireCheckIn`.
+7. Resolve o tenant Graph do organizador via `domainToApiLocalidade` e cria o evento nesse tenant; se check-in estiver ativo na sala, marca categoria `SalasReuniao.RequireCheckIn`.
 
 A pré-visualização **não bloqueia** — apenas informa. O bloqueio ocorre na reserva (salvo flags de override).
 
@@ -123,6 +127,7 @@ A pré-visualização **não bloqueia** — apenas informa. O bloqueio ocorre na
 | 409 | `REQUESTER_CONFLICT` | Solicitante com compromisso sobreposto | Sim, com `allowRequesterConflict: true` |
 | 409 | `PARTICIPANT_CONFLICT` | Outro participante ocupado | Sim, com `allowParticipantConflict: true` |
 | 403/502 | `REQUESTER_CALENDAR_UNAVAILABLE` | Graph não criou evento no calendário do organizador (400/403/404) | **Não** |
+| 400/502 | `REQUESTER_TENANT_UNKNOWN` | Domínio do organizador sem mapeamento ou tenant não configurado | **Não** |
 
 ### Mensagens padrão (API)
 
@@ -130,6 +135,15 @@ A pré-visualização **não bloqueia** — apenas informa. O bloqueio ocorre na
 - `REQUESTER_CONFLICT`: *"O solicitante já possui compromisso neste horário."*
 - `PARTICIPANT_CONFLICT`: *"A agenda de outro participante está ocupada neste horário: {emails}."*
 - `REQUESTER_CALENDAR_UNAVAILABLE`: *"Não foi possível criar a reserva no seu calendário. Verifique permissões do aplicativo ou tente novamente."*
+- `REQUESTER_TENANT_UNKNOWN`: *"Não foi possível identificar o tenant do organizador. Verifique se o domínio do e-mail está mapeado."*
+
+### Checklist Azure (tenant secundário / Allianz)
+
+Se a prévia funcionar e a reserva ainda falhar com `REQUESTER_CALENDAR_UNAVAILABLE` **no mesmo tenant** da sala/organizador, validar no app registration `ALLIANZ_CLIENT_ID`:
+
+1. Permissão de aplicativo `Calendars.ReadWrite` com **admin consent**.
+2. `User.Read.All` e `Place.Read.All` (directory/rooms).
+3. Se existir **Application Access Policy** no Exchange, incluir mailboxes de usuários (não só resources).
 
 ### Flags no `POST /api/book`
 

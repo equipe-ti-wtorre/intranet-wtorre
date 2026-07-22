@@ -169,7 +169,7 @@
                 [class.available]="isRoomAvailable()"
                 [class.busy]="!isRoomAvailable()"
               >
-                <span class="preview-label">Sala ({{ preview.room.email }})</span>
+                <span class="preview-label" [attr.title]="preview.room.email">Sala ({{ preview.room.email }})</span>
               </div>
               @for (p of preview.participants; track p.email) {
                 <div
@@ -179,7 +179,10 @@
                   [class.unverified]="participantPreviewKind(p.email) === 'unverified'"
                   [class.requester]="isRequesterEmail(p.email)"
                 >
-                  <span class="preview-label">
+                  <span
+                    class="preview-label"
+                    [attr.title]="(isRequesterEmail(p.email) ? 'Organizador: ' : '') + p.email"
+                  >
                     {{ isRequesterEmail(p.email) ? 'Organizador: ' : '' }}{{ p.email }}
                     @if (participantPreviewKind(p.email) === 'unverified') {
                       <small class="preview-status-hint"> — não verificado</small>

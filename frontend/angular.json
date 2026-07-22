@@ -61,8 +61,15 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
+            "host": "127.0.0.1",
             "port": 4201,
-            "proxyConfig": "proxy.conf.json"
+            "proxyConfig": "proxy.conf.json",
+            "allowedHosts": [
+              "intranet.nubankparque.com",
+              "intranet.basecoworking.space",
+              "intranet.novoanhangabau.com.br",
+              "intranet.wtorre.com.br"
+            ]
           },
           "configurations": {
             "production": {

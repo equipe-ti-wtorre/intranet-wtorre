@@ -57,13 +57,13 @@
                   [class.free]="slot.status === 'free'"
                   [class.busy]="slot.status === 'occupied'"
                   [class.selected]="slot.status === 'free' && isSelected(slot)"
-                  [style.grid-column]="slot.colspan ? 'span ' + slot.colspan : null"
+                  [style.--span]="slot.colspan || 1"
                   [disabled]="slot.status !== 'free'"
                   (click)="onSlotClick(slot)"
                 >
                   @if (slot.status === 'occupied') {
                     <span class="slot-time">{{ slot.label }}</span>
-                    <span class="slot-sub">{{ slot.organizer || slot.subject }}</span>
+                    <span class="slot-sub">{{ slot.organizer || 'Reservado' }}</span>
                   } @else {
                     <span class="slot-time">{{ slot.label }}</span>
                     <span class="slot-sub">30 min</span>

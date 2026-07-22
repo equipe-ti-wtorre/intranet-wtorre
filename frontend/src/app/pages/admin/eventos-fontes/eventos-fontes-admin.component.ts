@@ -2,18 +2,23 @@ import { Component, OnInit, computed, effect, inject, signal } from '@angular/co
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
+import {
+  DocEntidadeLogoPickerComponent,
+  LogoPickerUploadFn,
+} from '../../../shared/documentos/doc-entidade-logo-picker.component';
 import { AlertasService } from '../../../services/alertas.service';
 import { EventosFontesService } from '../../../services/eventos-fontes.service';
 import {
   Evento,
   EventoFonte,
+  EventoFontePayload,
   EventoParserTipo,
 } from '../../../models/evento.model';
 
 @Component({
   selector: 'app-eventos-fontes-admin',
   standalone: true,
-  imports: [ReactiveFormsModule, AdminModalComponent],
+  imports: [ReactiveFormsModule, AdminModalComponent, DocEntidadeLogoPickerComponent],
   templateUrl: './eventos-fontes-admin.component.html',
   styleUrl: './eventos-fontes-admin.component.scss',
 })
@@ -21,6 +26,9 @@ export class EventosFontesAdminComponent implements OnInit {
   private readonly fontesService = inject(EventosFontesService);
   private readonly fb = inject(FormBuilder);
   private readonly alertas = inject(AlertasService);
+
+  readonly uploadLogoFonte: LogoPickerUploadFn = (file) =>
+    this.fontesService.uploadLogo(file);
 
   readonly parsers = signal<EventoParserTipo[]>([]);
   readonly fontes = signal<EventoFonte[]>([]);
@@ -53,14 +61,19 @@ export class EventosFontesAdminComponent implements OnInit {
 
   private buscaTimer: ReturnType<typeof setTimeout> | null = null;
 
-  readonly form = this.fb.nonNullable.group({
+  readonly form = this.fb.group({
     codigo: ['', [Validators.required, Validators.pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)]],
-    nome: ['', Validators.required],
-    url: ['', [Validators.required, Validators.pattern(/^https?:\/\//i)]],
-    parserTipo: ['', Validators.required],
-    ordem: [0],
-    limite: ['' as string | number],
-    ativo: [true],
+    nome: this.fb.nonNullable.control('', Validators.required),
+    url: this.fb.nonNullable.control('', [
+      Validators.required,
+      Validators.pattern(/^https?:\/\//i),
+    ]),
+    parserTipo: this.fb.nonNullable.control('', Validators.required),
+    ordem: this.fb.nonNullable.control(0),
+    limite: this.fb.nonNullable.control('' as string | number),
+    ativo: this.fb.nonNullable.control(true),
+    rotulo: this.fb.control<string | null>(null),
+    logoUrl: this.fb.control<string | null>(null),
   });
 
   constructor() {
@@ -128,6 +141,8 @@ export class EventosFontesAdminComponent implements OnInit {
       ordem: 0,
       limite: '',
       ativo: true,
+      rotulo: null,
+      logoUrl: null,
     });
     this.form.controls.codigo.updateValueAndValidity();
     this.modalAberto.set(true);
@@ -145,6 +160,8 @@ export class EventosFontesAdminComponent implements OnInit {
       ordem: fonte.ordem,
       limite: fonte.limite ?? '',
       ativo: fonte.ativo,
+      rotulo: fonte.rotulo ?? null,
+      logoUrl: fonte.logoUrl ?? null,
     });
     this.form.controls.codigo.updateValueAndValidity();
     this.modalAberto.set(true);
@@ -167,7 +184,7 @@ export class EventosFontesAdminComponent implements OnInit {
       Validators.pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     ]);
     this.form.controls.codigo.enable();
-    this.form.reset({ ordem: 0, ativo: true, limite: '' });
+    this.form.reset({ ordem: 0, ativo: true, limite: '', rotulo: null, logoUrl: null });
     this.form.controls.codigo.updateValueAndValidity();
   }
 
@@ -196,27 +213,21 @@ export class EventosFontesAdminComponent implements OnInit {
         ? null
         : Number(limiteRaw);
 
-    const payload: {
-      codigo?: string;
-      nome: string;
-      url: string;
-      parserTipo: string;
-      ordem: number;
-      limite: number | null;
-      ativo: boolean;
-    } = {
-      nome: raw.nome.trim(),
-      url: raw.url.trim(),
-      parserTipo: raw.parserTipo,
+    const payload: EventoFontePayload = {
+      nome: (raw.nome || '').trim(),
+      url: (raw.url || '').trim(),
+      parserTipo: raw.parserTipo || '',
       ordem: Number(raw.ordem) || 0,
       limite: limite && Number.isFinite(limite) ? limite : null,
-      ativo: raw.ativo,
+      ativo: !!raw.ativo,
+      rotulo: raw.rotulo?.trim() || null,
+      logoUrl: raw.logoUrl?.trim() || null,
     };
 
     const editId = this.editandoId();
 
     if (!editId) {
-      payload.codigo = raw.codigo.trim().toLowerCase();
+      payload.codigo = (raw.codigo || '').trim().toLowerCase();
     }
 
     this.salvando.set(true);

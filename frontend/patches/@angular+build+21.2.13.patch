@@ -1,0 +1,22 @@
+diff --git a/node_modules/@angular/build/src/tools/vite/utils.js b/node_modules/@angular/build/src/tools/vite/utils.js
+index 27bfc3f..0075295 100755
+--- a/node_modules/@angular/build/src/tools/vite/utils.js
++++ b/node_modules/@angular/build/src/tools/vite/utils.js
+@@ -17,8 +17,15 @@ const node_module_1 = require("node:module");
+ const node_path_1 = require("node:path");
+ const utils_1 = require("../esbuild/utils");
+ function pathnameWithoutBasePath(url, basePath) {
+-    const parsedUrl = new URL(url, 'http://localhost');
+-    const pathname = decodeURIComponent(parsedUrl.pathname);
++    let pathname;
++    try {
++        pathname = decodeURIComponent(new URL(url, 'http://localhost').pathname);
++    }
++    catch {
++        // Malformed request URL (e.g. "//", "http://", bad percent-encoding).
++        // Fall back to root so the request is passed along instead of crashing the dev server.
++        return '/';
++    }
+     // slice(basePath.length - 1) to retain the trailing slash
+     return basePath !== '/' && pathname.startsWith(basePath)
+         ? pathname.slice(basePath.length - 1)

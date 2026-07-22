@@ -1,7 +1,16 @@
+const fs = require('fs');
+const path = require('path');
 const fontesRepo = require('../repositories/eventos-fontes.repository');
 const eventosService = require('../services/eventos/eventos.service');
 const parsers = require('../services/eventos/parsers');
 const auditRepo = require('../repositories/auditLog.repository');
+const { env } = require('../config/env');
+const { processLogoImage } = require('../services/grupo-logos-image.service');
+const { ensureEventosFontesLogosDir } = require('../config/eventos-fontes-logo-upload');
+const {
+  STORED_URL_PREFIX,
+  cleanupOrphanFonteLogo,
+} = require('../utils/eventos-fontes-logo.util');
 
 const CODIGO_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -186,6 +195,27 @@ function bodyParaFonte(body, { parcial = false, codigoFixo } = {}) {
     data.ativo = body.ativo === true || body.ativo === 1 || body.ativo === '1';
   }
 
+  const logoUrl = body.logo_url ?? body.logoUrl;
+  if (!parcial || logoUrl !== undefined) {
+    const value = logoUrl == null ? '' : String(logoUrl).trim();
+    if (value.length > 500) {
+      const err = new Error('URL do logo deve ter no máximo 500 caracteres.');
+      err.status = 400;
+      throw err;
+    }
+    data.logoUrl = value || null;
+  }
+
+  if (!parcial || body.rotulo !== undefined) {
+    const value = body.rotulo == null ? '' : String(body.rotulo).trim();
+    if (value.length > 60) {
+      const err = new Error('Rótulo deve ter no máximo 60 caracteres.');
+      err.status = 400;
+      throw err;
+    }
+    data.rotulo = value || null;
+  }
+
   return data;
 }
 
@@ -271,6 +301,13 @@ async function atualizarFonte(req, res) {
 
     const data = bodyParaFonte(req.body, { parcial: true });
     const atualizada = await fontesRepo.atualizar(id, data);
+    if (
+      data.logoUrl !== undefined &&
+      atual.logoUrl &&
+      atual.logoUrl !== atualizada?.logoUrl
+    ) {
+      await cleanupOrphanFonteLogo(atual.logoUrl, fontesRepo);
+    }
     eventosService.invalidarCache(atual.codigo);
     if (atualizada?.codigo && atualizada.codigo !== atual.codigo) {
       eventosService.invalidarCache(atualizada.codigo);
@@ -291,11 +328,63 @@ async function removerFonte(req, res) {
     }
 
     await fontesRepo.remover(id);
+    if (atual.logoUrl) {
+      await cleanupOrphanFonteLogo(atual.logoUrl, fontesRepo, id);
+    }
     eventosService.invalidarCache(atual.codigo);
     await audit(req, 'EVENTOS_FONTE_REMOVER');
     res.json({ ok: true });
   } catch (err) {
     handleError(res, err);
+  }
+}
+
+async function uploadLogo(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ mensagem: 'Arquivo de imagem é obrigatório.' });
+    }
+
+    const inputPath = req.file.path;
+    const { outputPath, compactado, largura, altura } = await processLogoImage(
+      inputPath,
+      req.file.originalname
+    );
+
+    const filename = path.basename(outputPath);
+    const url = `${STORED_URL_PREFIX}${filename}`;
+
+    return res.json({
+      url,
+      compactado,
+      largura,
+      altura,
+    });
+  } catch (err) {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    return res.status(err.status || 500).json({ mensagem: err.message });
+  }
+}
+
+async function serveLogoFile(req, res) {
+  try {
+    ensureEventosFontesLogosDir();
+    const filename = path.basename(req.params.filename || '');
+    if (!filename || filename.includes('..')) {
+      return res.status(400).json({ mensagem: 'Arquivo inválido.' });
+    }
+
+    const filePath = path.join(env.eventosFontesLogosDir, filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ mensagem: 'Arquivo não encontrado.' });
+    }
+
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(filePath);
+  } catch (err) {
+    return res.status(err.status || 500).json({ mensagem: err.message });
   }
 }
 
@@ -324,4 +413,6 @@ module.exports = {
   atualizarFonte,
   removerFonte,
   testarFonte,
+  uploadLogo,
+  serveLogoFile,
 };
