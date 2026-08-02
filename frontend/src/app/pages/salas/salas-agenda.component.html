@@ -57,7 +57,7 @@
                   [class.free]="slot.status === 'free'"
                   [class.busy]="slot.status === 'occupied'"
                   [class.selected]="slot.status === 'free' && isSelected(slot)"
-                  [style.--span]="slot.colspan || 1"
+                  [style.grid-column]="slot.colspan ? 'span ' + slot.colspan : null"
                   [disabled]="slot.status !== 'free'"
                   (click)="onSlotClick(slot)"
                 >

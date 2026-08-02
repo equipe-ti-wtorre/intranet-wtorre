@@ -17,7 +17,6 @@
         @for (sala of salas(); track sala.email) {
           <article class="room-card" (click)="salaClick.emit(sala)">
             <h3>{{ sala.name }}</h3>
-            <p class="meta"><span class="ico">✉</span> {{ sala.email }}</p>
             <p class="meta"><span class="ico">👥</span> Capacidade: {{ sala.capacity }}</p>
             <span class="badge-ocupacao">{{ sala.occupancyPercent }}% ocupado</span>
             <span class="see-times">

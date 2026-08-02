@@ -532,15 +532,16 @@
 }
 
 .slots-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.65rem;
 }
 
+@media (max-width: 900px) {
+  .slots-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 .slot {
-  --span: 1;
-  flex: var(--span) 1 0;
-  min-width: calc(var(--span) * 6rem);
   border-radius: var(--salas-radius-sm);
   border: 1px solid transparent;
   padding: 0.55rem 0.35rem;
@@ -552,10 +553,6 @@
   text-align: center;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
-}
-
-@media (max-width: 900px) {
-  .slot { min-width: calc(var(--span) * 4.5rem); }
 }
 
 .slot.past {

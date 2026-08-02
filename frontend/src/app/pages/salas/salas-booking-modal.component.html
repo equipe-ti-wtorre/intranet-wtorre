@@ -24,7 +24,7 @@
             <span class="ico">✉</span>
             <div>
               <small>Sala</small>
-              <strong>{{ sala()?.email }}</strong>
+              <strong>{{ sala()?.name }}</strong>
             </div>
           </div>
           <div class="resumo-item">
@@ -169,7 +169,7 @@
                 [class.available]="isRoomAvailable()"
                 [class.busy]="!isRoomAvailable()"
               >
-                <span class="preview-label" [attr.title]="preview.room.email">Sala ({{ preview.room.email }})</span>
+                <span class="preview-label" [attr.title]="sala()?.name">Sala ({{ sala()?.name }})</span>
               </div>
               @for (p of preview.participants; track p.email) {
                 <div
