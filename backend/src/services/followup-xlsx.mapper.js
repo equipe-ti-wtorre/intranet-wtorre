@@ -19,8 +19,23 @@ const RM_HEADER_MAP = {
   mapa_cotacao: ['mapadecotacao', 'mapa de cotacao', 'mapa de cotação', 'mapa cotacao'],
   numero_approvo: ['numeroapprovo', 'numero approvo', 'número approvo'],
   centro_custo: ['centrodecusto', 'centro de custo'],
-  nome_filial: ['nomefilial', 'nome filial'],
+  nome_filial: [
+    'nomedafilial',
+    'nome da filial',
+    'nome filial',
+    'nomefilial',
+    'filial nome',
+    'desc filial',
+    'descricao filial',
+    'descrição filial',
+  ],
   cod_filial: ['codfilial', 'cod filial', 'codigo filial', 'código filial', 'cod. filial', 'cód. filial'],
+  tipo_documento: [
+    'tipodocumento',
+    'tipo documento',
+    'tipo de documento',
+    'tipodedocumento',
+  ],
 };
 
 const MATRIZ_HEADER_MAP = {
@@ -107,6 +122,43 @@ function parseIntLike(value) {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
+function normalizeTipoDocumento(value) {
+  const raw = parseTexto(value);
+  if (!raw) return null;
+  const u = raw.toUpperCase();
+  if (u.includes('ADITIVO')) return 'ADITIVO DE CONTRATO';
+  if (u.includes('CONTRATO')) return 'CONTRATO';
+  if (u.includes('PEDIDO')) return 'PEDIDO';
+  return raw;
+}
+
+function statusFromPedidoSheet(tipoDocumento, statusRaw) {
+  const st = String(statusRaw || '')
+    .trim()
+    .toUpperCase();
+  const tipo = normalizeTipoDocumento(tipoDocumento) || '';
+  const isContrato = tipo.includes('CONTRATO') || tipo.includes('ADITIVO');
+  if (st.includes('REPROV')) {
+    return isContrato ? 'Aditivo/Contrato Reprovado' : 'Pedido Reprovado';
+  }
+  if (st.includes('APROVAÇÃO') || st.includes('APROVACAO') || st.includes('EM APROV')) {
+    return isContrato ? 'Aditivo/Contrato em aprovação' : 'Pedido Aberto';
+  }
+  if (st.includes('APROV')) {
+    return isContrato ? 'Aditivo/Contrato Aprovado' : 'Pedido Atendido';
+  }
+  return isContrato ? 'Aditivo/Contrato em aprovação' : 'Pedido Aberto';
+}
+
+function dedupeKeyOf(s) {
+  return [
+    s.n_requisicao,
+    s.cod_filial || '',
+    s.tipo_documento || '',
+    s.pedido_contrato || '',
+  ].join('|');
+}
+
 function buildColumnIndex(headers, headerMap) {
   const index = {};
   const norms = headers.map((h) => normalizeHeader(h));
@@ -162,7 +214,7 @@ function sheetToRows(workbook, sheetName) {
   return { sheetName: name, headers, dataRows };
 }
 
-function parseTblRm(workbook, sheetName = 'TblRM') {
+function parseTblRm(workbook, sheetName = 'Requisição') {
   const { headers, dataRows, sheetName: resolved } = sheetToRows(workbook, sheetName);
   const col = buildColumnIndex(headers, RM_HEADER_MAP);
   if (col.n_requisicao == null || col.usuario == null) {
@@ -187,16 +239,19 @@ function parseTblRm(workbook, sheetName = 'TblRM') {
     }
     codFilial = codFilial || '';
 
-    const dedupeKey = `${nReq}|${codFilial}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
+    const pedidoContratoRaw = cell(row, col.pedido_contrato);
+    let pedidoContrato = parseTexto(pedidoContratoRaw);
+    if (pedidoContrato == null && typeof pedidoContratoRaw === 'number' && Number.isFinite(pedidoContratoRaw)) {
+      pedidoContrato = String(Math.trunc(pedidoContratoRaw));
+    }
 
-    solicitacoes.push({
+    const item = {
       n_requisicao: nReq,
       requisitante: parseTexto(cell(row, col.requisitante)),
       usuario: usuario.toLowerCase(),
       status_geral: parseTexto(cell(row, col.status_geral)),
-      pedido_contrato: parseTexto(cell(row, col.pedido_contrato)),
+      tipo_documento: normalizeTipoDocumento(cell(row, col.tipo_documento)),
+      pedido_contrato: pedidoContrato,
       fornecedor: parseTexto(cell(row, col.fornecedor)),
       valor_total_pedido: parseMoeda(cell(row, col.valor_total_pedido)),
       saldo_pedido: parseMoeda(cell(row, col.saldo_pedido)),
@@ -207,10 +262,124 @@ function parseTblRm(workbook, sheetName = 'TblRM') {
       centro_custo: parseTexto(cell(row, col.centro_custo)),
       nome_filial: parseTexto(cell(row, col.nome_filial)),
       cod_filial: codFilial,
-    });
+    };
+
+    const dedupeKey = dedupeKeyOf(item);
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    solicitacoes.push(item);
   }
 
-  return { solicitacoes, linhas_lidas: dataRows.length, sheetName: resolved, headers };
+  return { solicitacoes, linhas_lidas: dataRows.length, sheetName: resolved, headers, seen };
+}
+
+/**
+ * Importa a aba Pedido.Contrato.Aditivo (fonte dos Pedidos/Contratos/Aditivos).
+ * Número do documento → pedido_contrato; vincula RM/usuário quando a aba Requisição referencia o mesmo número.
+ * Em conflito com linha da Requisição no mesmo documento+filial+tipo, prevalece esta aba.
+ */
+function mergePedidoContratoAditivo(workbook, solicitacoes, seen, sheetName = 'Pedido.Contrato.Aditivo') {
+  let sheet;
+  try {
+    sheet = sheetToRows(workbook, sheetName);
+  } catch (err) {
+    if (err.code === 'SHEET_MISSING') return { adicionados: 0, atualizados: 0 };
+    throw err;
+  }
+
+  const headers = sheet.headers.map((h) => compactHeader(h));
+  const idx = {
+    numero: headers.findIndex((h) => h === 'numero' || h === 'numerodocumento'),
+    tipo: headers.findIndex((h) => h.includes('tipodedocumento') || h === 'tipodocumento'),
+    filial: headers.findIndex((h) => h === 'filial' || h === 'codfilial'),
+    status: headers.findIndex((h) => h === 'status'),
+    valor: headers.findIndex((h) => h.includes('valor')),
+    agente: headers.findIndex((h) => h === 'agente' || h === 'fornecedor'),
+  };
+  if (idx.numero < 0 || idx.tipo < 0) return { adicionados: 0, atualizados: 0 };
+
+  const nomeByFilial = new Map();
+  const byPedidoFilialTipo = new Map();
+  const byPedido = new Map();
+  const byPedidoFilial = new Map();
+
+  for (const s of solicitacoes) {
+    if (s.cod_filial && s.nome_filial) nomeByFilial.set(s.cod_filial, s.nome_filial);
+    if (!s.pedido_contrato) continue;
+    const kTipo = `${s.pedido_contrato}|${s.cod_filial || ''}|${s.tipo_documento || ''}`;
+    byPedidoFilialTipo.set(kTipo, s);
+    const kFilial = `${s.pedido_contrato}|${s.cod_filial || ''}`;
+    if (!byPedidoFilial.has(kFilial)) byPedidoFilial.set(kFilial, s);
+    if (!byPedido.has(s.pedido_contrato)) byPedido.set(s.pedido_contrato, s);
+  }
+
+  let adicionados = 0;
+  let atualizados = 0;
+
+  for (const row of sheet.dataRows) {
+    const numero = parseIntLike(cell(row, idx.numero));
+    if (numero == null) continue;
+    const tipoDocumento = normalizeTipoDocumento(cell(row, idx.tipo));
+    if (!tipoDocumento) continue;
+
+    let codFilial = parseTexto(cell(row, idx.filial));
+    const filRaw = cell(row, idx.filial);
+    if (codFilial == null && typeof filRaw === 'number' && Number.isFinite(filRaw)) {
+      codFilial = String(Math.trunc(filRaw));
+    }
+    codFilial = codFilial || '';
+
+    const pedidoContrato = String(numero);
+    const linked =
+      byPedidoFilial.get(`${pedidoContrato}|${codFilial}`) ||
+      byPedido.get(pedidoContrato) ||
+      null;
+
+    const item = {
+      n_requisicao: linked?.n_requisicao ?? numero,
+      requisitante: linked?.requisitante || null,
+      usuario: linked?.usuario || '',
+      status_geral: statusFromPedidoSheet(tipoDocumento, cell(row, idx.status)),
+      tipo_documento: tipoDocumento,
+      pedido_contrato: pedidoContrato,
+      fornecedor: parseTexto(cell(row, idx.agente)),
+      valor_total_pedido: parseMoeda(cell(row, idx.valor)),
+      saldo_pedido: null,
+      data_emissao_pedido: null,
+      data_aprovacao_rm: null,
+      mapa_cotacao: null,
+      numero_approvo: null,
+      centro_custo: linked?.centro_custo || null,
+      nome_filial: linked?.nome_filial || nomeByFilial.get(codFilial) || null,
+      cod_filial: codFilial,
+    };
+
+    const keyTipo = `${pedidoContrato}|${codFilial}|${tipoDocumento}`;
+    const existing = byPedidoFilialTipo.get(keyTipo);
+    if (existing) {
+      const oldKey = dedupeKeyOf(existing);
+      const idxExisting = solicitacoes.indexOf(existing);
+      if (idxExisting >= 0) {
+        solicitacoes[idxExisting] = item;
+        seen.delete(oldKey);
+        seen.add(dedupeKeyOf(item));
+        byPedidoFilialTipo.set(keyTipo, item);
+        atualizados += 1;
+      }
+      continue;
+    }
+
+    const dk = dedupeKeyOf(item);
+    if (seen.has(dk)) continue;
+    seen.add(dk);
+    solicitacoes.push(item);
+    byPedidoFilialTipo.set(keyTipo, item);
+    byPedidoFilial.set(`${pedidoContrato}|${codFilial}`, item);
+    if (!byPedido.has(pedidoContrato)) byPedido.set(pedidoContrato, item);
+    adicionados += 1;
+  }
+
+  return { adicionados, atualizados, sheetName: sheet.sheetName };
 }
 
 function parseTblMatriz(workbook, sheetName = 'TblMatrizMensagens') {
@@ -244,9 +413,21 @@ function parseTblMatriz(workbook, sheetName = 'TblMatrizMensagens') {
  * Alternativa (não usada): Graph Workbook API
  *   GET /sites/{siteId}/drive/items/{itemId}/workbook/worksheets/{aba}/usedRange
  */
-function parseWorkbookBuffer(buffer, { abaRm = 'TblRM', abaMatriz = 'TblMatrizMensagens' } = {}) {
+function parseWorkbookBuffer(buffer, { abaRm = 'Requisição', abaMatriz = 'TblMatrizMensagens' } = {}) {
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const rm = parseTblRm(workbook, abaRm);
+  const merge = mergePedidoContratoAditivo(workbook, rm.solicitacoes, rm.seen);
+  rm.docs_adicionados = merge.adicionados || 0;
+  rm.docs_atualizados = merge.atualizados || 0;
+
+  // Garante unicidade após merge/replace da aba Pedido.Contrato.Aditivo
+  const unique = new Map();
+  for (const s of rm.solicitacoes) {
+    unique.set(dedupeKeyOf(s), s);
+  }
+  rm.solicitacoes = [...unique.values()];
+  rm.seen = new Set(rm.solicitacoes.map(dedupeKeyOf));
+
   let matriz = { itens: [], linhas_lidas: 0, sheetName: null, headers: [] };
   try {
     matriz = parseTblMatriz(workbook, abaMatriz);
@@ -275,4 +456,6 @@ module.exports = {
   listSheetHeaders,
   parseTblRm,
   parseTblMatriz,
+  mergePedidoContratoAditivo,
+  normalizeTipoDocumento,
 };

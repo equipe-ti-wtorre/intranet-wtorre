@@ -69,7 +69,7 @@ async function testarConexao() {
       detalhe: `Arquivo baixado (${buffer.length} bytes).`,
     });
 
-    const abaRm = config.aba_rm || 'TblRM';
+    const abaRm = config.aba_rm || 'Requisição';
     const abaMatriz = config.aba_matriz || 'TblMatrizMensagens';
     const headers = listSheetHeaders(buffer, [abaRm, abaMatriz]);
 
@@ -123,7 +123,7 @@ async function sincronizar() {
     const { buffer } = await baixarPlanilha(token, config);
 
     const parsed = parseWorkbookBuffer(buffer, {
-      abaRm: config.aba_rm || 'TblRM',
+      abaRm: config.aba_rm || 'Requisição',
       abaMatriz: config.aba_matriz || 'TblMatrizMensagens',
     });
 

@@ -142,6 +142,23 @@ export class TreinamentosAdminComponent implements OnInit {
 
   onVisibilidadesTreinoChange(v: VisibilidadeEntidadeInput[]): void {
     this.visibilidadesTreinoInput.set(v);
+    const prev = new Map(this.visibilidadesTreino().map((item) => [Number(item.pagina_id), item]));
+    this.visibilidadesTreino.set(
+      v.map((item) => {
+        const pag = this.paginas().find((p) => p.id === item.pagina_id);
+        const existing = prev.get(Number(item.pagina_id));
+        return {
+          pagina_id: item.pagina_id,
+          pagina_nome: pag?.nome ?? existing?.pagina_nome,
+          pagina_slug: pag?.slug ?? existing?.pagina_slug,
+          categoria_id: item.categoria_id,
+          categoria_nome:
+            existing?.categoria_id === item.categoria_id ? existing?.categoria_nome : undefined,
+          categoria_slug:
+            existing?.categoria_id === item.categoria_id ? existing?.categoria_slug : undefined,
+        };
+      })
+    );
   }
 
   novo(): void {

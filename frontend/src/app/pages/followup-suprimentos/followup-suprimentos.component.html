@@ -10,7 +10,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />
             <path
-              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
             />
           </svg>
           Configurar
@@ -37,25 +37,91 @@
     </section>
 
     <section class="toolbar">
-      <div class="field-label">Consultar por número da RM</div>
       <div class="search-row">
-        <label class="search-input">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            type="text"
-            inputmode="numeric"
-            placeholder="Digite o número da RM…"
-            aria-label="Número da RM"
-            [ngModel]="busca()"
-            (ngModelChange)="busca.set($event)"
-            (keydown.enter)="pesquisar()"
-          />
-        </label>
+        <div class="search-field">
+          <span class="field-label">Nº RM</span>
+          <label class="search-input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="text"
+              inputmode="numeric"
+              placeholder="Requisição…"
+              aria-label="Número da RM"
+              [ngModel]="buscaRm()"
+              (ngModelChange)="buscaRm.set($event)"
+              (keydown.enter)="pesquisarRm()"
+            />
+          </label>
+        </div>
+
+        <div class="search-field">
+          <span class="field-label">Nº Contrato / Pedido</span>
+          <label class="search-input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="text"
+              inputmode="numeric"
+              placeholder="Documento…"
+              aria-label="Número do contrato ou pedido"
+              [ngModel]="buscaDoc()"
+              (ngModelChange)="buscaDoc.set($event)"
+              (keydown.enter)="pesquisarDocumento()"
+            />
+          </label>
+        </div>
+
         <button type="button" class="btn btn-primary btn-search" (click)="pesquisar()">Pesquisar</button>
         <button type="button" class="btn btn-ghost btn-search" (click)="limparBusca()">Minhas RMs</button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-search"
+          [class.active-toggle]="ccPainelAberto()"
+          (click)="toggleCentroCustoPainel()"
+        >
+          Centro de Custo
+        </button>
+
+        <div class="tipo-row" role="group" aria-label="Tipo de documento">
+          <button
+            type="button"
+            class="chip"
+            [class.active]="tipoFiltro() === 'solicitacao'"
+            (click)="selecionarTipo('solicitacao')"
+          >
+            Solicitação
+            @if (contagemPorTipo().solicitacao > 0) {
+              <span class="cnt">{{ contagemPorTipo().solicitacao }}</span>
+            }
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.active]="tipoFiltro() === 'contrato'"
+            (click)="selecionarTipo('contrato')"
+          >
+            Contrato/Aditivo
+            @if (contagemPorTipo().contrato > 0) {
+              <span class="cnt">{{ contagemPorTipo().contrato }}</span>
+            }
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.active]="tipoFiltro() === 'pedido'"
+            (click)="selecionarTipo('pedido')"
+          >
+            Pedido
+            @if (contagemPorTipo().pedido > 0) {
+              <span class="cnt">{{ contagemPorTipo().pedido }}</span>
+            }
+          </button>
+        </div>
       </div>
 
       @if (filiaisChips().length) {
@@ -73,9 +139,11 @@
             <button
               type="button"
               class="chip"
+              [class.has-tip]="!!f.nome"
+              [attr.data-tip]="f.nome || null"
               [class.active]="filialFiltro() === f.codigo"
               (click)="selecionarFilial(f.codigo)"
-              [title]="f.nome || f.codigo"
+              [attr.aria-label]="f.nome ? 'Filial ' + f.codigo + ': ' + f.nome : 'Filial ' + f.codigo"
             >
               {{ f.codigo }}
               @if (f.qtd > 0) {
@@ -85,19 +153,41 @@
           }
         </div>
       }
+
+      @if (ccPainelAberto() && centrosCustoChips().length) {
+        <div class="filials" role="group" aria-label="Filtrar por centro de custo">
+          <span class="tag">CENTRO DE CUSTO</span>
+          <button
+            type="button"
+            class="chip"
+            [class.active]="ccFiltro() === null"
+            (click)="selecionarCentroCusto(null)"
+          >
+            Todos
+          </button>
+          @for (c of centrosCustoChips(); track c.codigo) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="ccFiltro() === c.codigo"
+              (click)="selecionarCentroCusto(c.codigo)"
+              [title]="c.codigo"
+            >
+              {{ c.codigo }}
+              @if (c.qtd > 0) {
+                <span class="cnt">{{ c.qtd }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
     </section>
 
     <div class="results-head">
-      <h2>
-        @if (modoBusca() && buscaNumero()) {
-          Resultado da busca pela solicitação nº <em>{{ buscaNumero() }}</em>
-        } @else {
-          {{ contexto() }}
-        }
-      </h2>
+      <h2>{{ contexto() }}</h2>
       <span class="count">
         {{ listaExibida().length }}
-        {{ listaExibida().length === 1 ? 'pedido encontrado' : 'pedidos encontrados' }}
+        {{ listaExibida().length === 1 ? 'registro encontrado' : 'registros encontrados' }}
       </span>
     </div>
 
@@ -108,10 +198,18 @@
     } @else if (!listaExibida().length) {
       <div class="empty">
         <b>Nenhuma solicitação encontrada</b>
-        @if (modoBusca()) {
-          Não existe solicitação com o número “{{ busca() }}” (ou você não tem permissão para vê-la).
+        @if (modoBusca() && buscaEscopo() === 'documento') {
+          Não existe contrato/pedido com o número “{{ buscaNumero() }}”.
+        } @else if (modoBusca()) {
+          Não existe requisição com o número “{{ buscaNumero() }}”.
+        } @else if (ccFiltro()) {
+          Nenhuma solicitação para o centro de custo selecionado.
         } @else if (filialFiltro()) {
           Nenhuma solicitação para a filial {{ filialFiltro() }}.
+        } @else if (tipoFiltro() === 'contrato') {
+          Você ainda não possui contratos/aditivos na base de follow-up.
+        } @else if (tipoFiltro() === 'pedido') {
+          Você ainda não possui pedidos na base de follow-up.
         } @else {
           Você ainda não possui solicitações na base de follow-up.
         }
@@ -127,10 +225,25 @@
               <div>
                 <div class="rm">
                   <span class="num">RM {{ r.n_requisicao }}</span>
-                  <span class="meta">Filial <b>{{ r.cod_filial || '—' }}</b></span>
+                  <span
+                    class="meta"
+                    [class.has-tip]="!!(r.nome_filial || nomeFilial(r.cod_filial))"
+                    [attr.data-tip]="r.nome_filial || nomeFilial(r.cod_filial) || null"
+                    [attr.title]="r.nome_filial || nomeFilial(r.cod_filial) || null"
+                    [attr.aria-label]="
+                      (r.nome_filial || nomeFilial(r.cod_filial))
+                        ? 'Filial ' + (r.cod_filial || '—') + ': ' + (r.nome_filial || nomeFilial(r.cod_filial))
+                        : 'Filial ' + (r.cod_filial || '—')
+                    "
+                  >
+                    Filial <b>{{ r.cod_filial || '—' }}</b>
+                  </span>
                 </div>
                 @if (r.requisitante) {
                   <div class="solic">Solicitante · <b>{{ r.requisitante }}</b></div>
+                }
+                @if (r.tipo_documento) {
+                  <div class="solic">Tipo · <b>{{ r.tipo_documento }}</b></div>
                 }
               </div>
               <span class="badge" [attr.data-tone]="tone">

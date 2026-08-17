@@ -199,7 +199,7 @@ export class DocumentoCategoriaComponent implements OnInit, OnDestroy {
 
     this.contentRefresh.treinamentosChanged$
       .pipe(takeUntilDestroyed())
-      .subscribe(() => this.recarregarConteudo());
+      .subscribe(() => this.recarregar());
   }
 
   ngOnInit(): void {

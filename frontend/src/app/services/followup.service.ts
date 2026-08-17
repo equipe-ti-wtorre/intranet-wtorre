@@ -32,8 +32,12 @@ export class FollowupService {
     return this.http.get<FollowupFilial[]>(this.api('/filiais'));
   }
 
-  porNumero(numero: number | string): Observable<FollowupSolicitacao[]> {
-    return this.http.get<FollowupSolicitacao[]>(this.api(`/solicitacao/${numero}`));
+  porNumero(
+    numero: number | string,
+    escopo: 'rm' | 'documento' | 'todos' = 'todos'
+  ): Observable<FollowupSolicitacao[]> {
+    const params = escopo && escopo !== 'todos' ? { escopo } : undefined;
+    return this.http.get<FollowupSolicitacao[]>(this.api(`/solicitacao/${numero}`), { params });
   }
 
   obterConfig(): Observable<FollowupConfig> {
