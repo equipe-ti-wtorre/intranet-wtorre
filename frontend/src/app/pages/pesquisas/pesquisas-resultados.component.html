@@ -1,0 +1,255 @@
+<div class="breadcrumb-row">
+  <button type="button" class="btn-back" (click)="voltar()">
+    <app-pesq-icon name="arrow-left" [size]="14" />
+    Voltar
+  </button>
+  @if (data(); as d) {
+    <span class="crumb-path">Formulários / <b>{{ d.formulario.titulo }}</b></span>
+  }
+</div>
+
+@if (loading()) {
+  <p class="page-sub">Carregando…</p>
+} @else if (data(); as d) {
+  <div class="builder-head">
+    <div class="builder-title-wrap">
+      <div>
+        <h1 class="page-title" style="font-size: 22px; margin: 0 0 8px">{{ d.formulario.titulo }}</h1>
+        <div class="badge-row">
+          <span class="badge typepill">{{ tipoLabel() }}</span>
+          <span class="badge" [class]="statusClass()">{{ statusText() }}</span>
+          @if (d.formulario.publicoAlvo === 'externos') {
+            <span class="badge exec">Externo (sem Comunicados)</span>
+          }
+          @if (d.formulario.eventoAtivo === false) {
+            <span class="badge recusada">Evento desativado</span>
+          }
+          @if (d.formulario.status === 'publicado' && d.formulario.janela === 'antes') {
+            <span class="badge pending">Aguardando abertura</span>
+          }
+        </div>
+      </div>
+    </div>
+    <div class="builder-actions">
+      @if (podeEditar()) {
+        <button type="button" class="btn-secondary" (click)="editar()">
+          <app-pesq-icon name="edit" [size]="15" />
+          Editar
+        </button>
+      }
+      <button type="button" class="btn-secondary" (click)="exportar()">
+        <app-pesq-icon name="download" [size]="15" />
+        Exportar
+      </button>
+      <button type="button" class="btn-primary" [disabled]="agindo()" (click)="togglePublicar()">
+        <app-pesq-icon name="megaphone" [size]="16" />
+        {{ d.formulario.status === 'publicado' ? 'Despublicar' : 'Publicar' }}
+      </button>
+      <button type="button" class="btn-danger" [disabled]="agindo()" (click)="excluir()">
+        <app-pesq-icon name="trash" [size]="15" />
+        Excluir
+      </button>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="toggle-row">
+      <div class="toggle-text">
+        <b>Bloqueio manual</b>
+        <span>Se desativado, bloqueia na hora, mesmo dentro do horário. Ligado, a janela é quem abre e fecha.</span>
+      </div>
+      <label class="switch">
+        <input
+          type="checkbox"
+          [checked]="d.formulario.eventoAtivo !== false"
+          (change)="toggleEvento($any($event.target).checked)"
+          [disabled]="agindo()"
+        />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  @if (d.formulario.publicoAlvo === 'externos') {
+    <div class="form-card">
+      <h3><app-pesq-icon name="link" [size]="17" /> Convite externo</h3>
+      <div class="field">
+        <label>Link público</label>
+        <div class="link-copy-row">
+          <input type="text" [value]="linkPublico()" readonly />
+          <button type="button" class="btn-secondary" (click)="copiarLink()">
+            <app-pesq-icon name="link" [size]="15" />
+            Copiar
+          </button>
+        </div>
+      </div>
+      <div class="guest-table" style="margin-top: 16px">
+        @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
+          <p class="page-sub">Nenhum convidado na lista.</p>
+        } @else {
+          @for (g of d.formulario.convidados || []; track g.id || g.email) {
+            <div class="guest-row">
+              <span>{{ g.nome || '—' }}</span>
+              <span>{{ g.cpfMascara || '***' }}</span>
+              <span>{{ g.email }}</span>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <div class="stat-row">
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--done-bg); color: var(--done-fg)">
+        <app-pesq-icon name="check" />
+      </div>
+      <div>
+        <div class="stat-num">{{ d.total }}</div>
+        <div class="stat-label">Respostas recebidas</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--review-bg); color: var(--review-fg)">
+        <app-pesq-icon name="bar" />
+      </div>
+      <div>
+        <div class="stat-num">{{ d.taxa }}%</div>
+        <div class="stat-label">Taxa de resposta</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--pending-bg); color: var(--pending-fg)">
+        <app-pesq-icon name="clock" />
+      </div>
+      <div>
+        <div class="stat-num">{{ d.pendentes }}</div>
+        <div class="stat-label">Pendentes</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--draft-bg); color: var(--draft-fg)">
+        <app-pesq-icon name="clock" />
+      </div>
+      <div>
+        <div class="stat-num">—</div>
+        <div class="stat-label">Tempo médio</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <h3><app-pesq-icon name="bar" [size]="17" /> Respostas ao longo do tempo</h3>
+    <svg viewBox="0 0 560 170" class="dash-chart">
+      <line x1="26" y1="144" x2="534" y2="144" stroke="currentColor" stroke-width="1" opacity="0.15" />
+      @for (b of chartBars(); track b.label + $index) {
+        <rect [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" rx="4" fill="#2f52e0" [attr.opacity]="b.op">
+          <title>{{ b.label }}: {{ b.value }}</title>
+        </rect>
+        <text [attr.x]="b.x + b.w / 2" y="162" font-size="10" text-anchor="middle" fill="#727d95">{{ b.label }}</text>
+      }
+    </svg>
+  </div>
+
+  <div class="form-card">
+    <h3><app-pesq-icon name="list-checks" [size]="17" /> Resultados por pergunta</h3>
+    @if (!d.perguntas.length) {
+      <p class="page-sub">Nenhuma pergunta neste formulário.</p>
+    }
+    @for (q of d.perguntas; track q.id) {
+      <div class="qbreak-item">
+        <div class="qbreak-title">{{ q.texto }}</div>
+        @if (q.tipo === 'escala') {
+          <div class="scale-avg">
+            <span class="num">{{ q.agregados.media ?? 0 }}</span>
+            <span class="lbl">média de 5</span>
+          </div>
+          @for (bar of escalaBars(q); track bar.label) {
+            <div class="bar-option">
+              <span class="bar-label">{{ bar.label }}</span>
+              <div class="bar-track"><div class="bar-fill" [style.width.%]="bar.pct"></div></div>
+              <span class="bar-pct">{{ bar.pct }}%</span>
+            </div>
+          }
+        } @else if (q.tipo === 'sim_nao' || q.tipo === 'multipla_escolha') {
+          @if (!choiceBars(q).length) {
+            <p class="page-sub">Ainda sem respostas.</p>
+          }
+          @for (bar of choiceBars(q); track bar.label) {
+            <div class="bar-option">
+              <span class="bar-label">{{ bar.label }}</span>
+              <div class="bar-track"><div class="bar-fill" [style.width.%]="bar.pct"></div></div>
+              <span class="bar-pct">{{ bar.pct }}%</span>
+            </div>
+          }
+        } @else {
+          @if (!samples(q).length) {
+            <p class="page-sub">Ainda sem respostas.</p>
+          } @else {
+            <div style="font-size: 11.8px; color: var(--slate-500); margin-bottom: 9px">Exemplos de respostas</div>
+            @for (s of samples(q); track $index) {
+              <div class="sample-quote">“{{ s }}”</div>
+            }
+          }
+        }
+      </div>
+    }
+  </div>
+
+  <div class="form-card">
+    <h3><app-pesq-icon name="users" [size]="17" /> Participantes</h3>
+    <div class="list-card" style="box-shadow: none; border: 1px solid var(--border-soft)">
+      @if (d.formulario.anonimo) {
+        <div class="empty-state" style="padding: 34px 10px">
+          <app-pesq-icon name="lock" [size]="28" />
+          <p>Respostas anônimas — a identidade dos participantes não é exibida.</p>
+        </div>
+      } @else if (!d.respondentes.length) {
+        <div class="empty-state" style="padding: 34px 10px">
+          <app-pesq-icon name="inbox" [size]="28" />
+          <p>Nenhuma resposta recebida ainda.</p>
+        </div>
+      } @else {
+        @for (r of d.respondentes; track r.name + r.date) {
+          <div class="list-row">
+            <div class="row-icon"><app-pesq-icon name="user" /></div>
+            <div class="row-main">
+              <p class="row-title">{{ r.name }}</p>
+              <div class="row-meta">
+                <span>{{ r.dept }}</span>
+                <span>·</span>
+                <span>Respondeu em {{ r.date }}</span>
+              </div>
+            </div>
+            <button type="button" class="row-action" (click)="verRespondente(r.name)">
+              <app-pesq-icon name="eye" [size]="13" />
+              Ver respostas
+            </button>
+          </div>
+        }
+      }
+    </div>
+  </div>
+}
+
+@if (answerModal(); as modal) {
+  <div class="modal-overlay" (click)="fecharModal()">
+    <div class="modal-card" style="max-width: 520px" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title">{{ modal.title }}</h3>
+          <p class="modal-sub">{{ modal.sub }}</p>
+        </div>
+        <button type="button" class="btn-close" (click)="fecharModal()" aria-label="Fechar">
+          <app-pesq-icon name="x" [size]="15" />
+        </button>
+      </div>
+      @for (row of modal.answers; track $index) {
+        <div class="review-row">
+          <span class="k">{{ row.q }}</span>
+          <span class="v">{{ row.a }}</span>
+        </div>
+      }
+    </div>
+  </div>
+}

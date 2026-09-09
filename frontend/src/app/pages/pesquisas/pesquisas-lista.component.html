@@ -1,0 +1,67 @@
+<div class="breadcrumb-row">
+  <button type="button" class="btn-back" (click)="voltar()">
+    <app-pesq-icon name="arrow-left" [size]="14" />
+    Voltar
+  </button>
+  <span class="crumb-path">{{ meta().parent }} / <b>{{ meta().child }}</b></span>
+</div>
+
+<div class="toolbar">
+  <div class="search-box">
+    <app-pesq-icon name="search" [size]="16" />
+    <input
+      type="search"
+      placeholder="Buscar por título ou categoria..."
+      [value]="q()"
+      (input)="onBusca($any($event.target).value)"
+    />
+  </div>
+  <button type="button" class="filter-chip" [class.active]="filtro() === 'all'" (click)="setFiltro('all')">
+    Todos
+  </button>
+  <button type="button" class="filter-chip" [class.active]="filtro() === 'pending'" (click)="setFiltro('pending')">
+    Pendente
+  </button>
+  <button type="button" class="filter-chip" [class.active]="filtro() === 'done'" (click)="setFiltro('done')">
+    Concluído
+  </button>
+  <button type="button" class="filter-chip" [class.active]="filtro() === 'draft'" (click)="setFiltro('draft')">
+    Rascunho
+  </button>
+</div>
+
+<div class="list-card">
+  @if (loading()) {
+    <div class="empty-state"><p>Carregando…</p></div>
+  } @else if (!items().length) {
+    <div class="empty-state">
+      <app-pesq-icon name="search" [size]="34" />
+      <p>Nenhum item encontrado para este filtro.</p>
+    </div>
+  } @else {
+    @for (it of items(); track it.kind + '-' + it.id) {
+      <div class="list-row">
+        <div class="row-icon"><app-pesq-icon name="file-text" /></div>
+        <div class="row-main">
+          <p class="row-title">{{ it.title }}</p>
+          <div class="row-meta">
+            <span>{{ it.category }}</span>
+            <span>·</span>
+            <span>{{ it.date }}</span>
+          </div>
+        </div>
+        <span
+          class="badge"
+          [class.pending]="it.status === 'pending'"
+          [class.done]="it.status === 'done'"
+          [class.draft]="it.status === 'draft'"
+          [class.review]="it.status === 'review'"
+        >{{ statusLabel[it.status] }}</span>
+        <button type="button" class="row-action" (click)="acao(it)">
+          <app-pesq-icon [name]="meta().actionIcon" [size]="13" />
+          {{ meta().actionLabel }}
+        </button>
+      </div>
+    }
+  }
+</div>

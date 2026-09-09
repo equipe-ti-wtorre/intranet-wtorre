@@ -1,0 +1,216 @@
+<div class="admin-page pesquisas-admin-page">
+  <header class="page-head">
+    <div>
+      <h1>Central de Pesquisas</h1>
+      <p class="page-subtitle">Acompanhe formulários e templates visuais.</p>
+    </div>
+  </header>
+
+  <section class="card pesquisas-unified-card">
+    <nav class="admin-tabs" aria-label="Central de Pesquisas">
+      <button type="button" class="admin-tab" [class.active]="aba() === 'formularios'" (click)="selecionarAba('formularios')">
+        <span class="tab-label">Formulários</span>
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'templates'" (click)="selecionarAba('templates')">
+        <span class="tab-label">Templates</span>
+      </button>
+    </nav>
+
+    <div class="pane-head">
+      <div class="search">
+        <input
+          type="search"
+          [placeholder]="aba() === 'templates' ? 'Buscar por nome, código ou wordmark…' : 'Buscar por título, categoria ou autor…'"
+          [value]="q()"
+          (input)="onBusca($any($event.target).value)"
+        />
+      </div>
+      @if (aba() === 'templates') {
+        <button type="button" class="btn btn-primary" (click)="novoTemplate()">Novo template</button>
+      }
+    </div>
+
+    @if (aba() === 'templates') {
+      @if (loading()) {
+        <p class="empty">Carregando…</p>
+      } @else if (!templates().length) {
+        <p class="empty">Nenhum template encontrado.</p>
+      } @else {
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Wordmark</th>
+                <th>Cor</th>
+                <th>Status</th>
+                <th class="col-acoes">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of templates(); track t.codigo) {
+                <tr>
+                  <td>
+                    <strong>{{ t.nome }}</strong>
+                    <div class="tpl-codigo">{{ t.codigo }}</div>
+                  </td>
+                  <td>{{ t.wordmark }}</td>
+                  <td>
+                    <span class="col-dot">
+                      <span class="swatch" [style.background]="t.corPrimaria"></span>
+                      <span class="hex">{{ t.corPrimaria }}</span>
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge-status" [class.off]="!t.ativo">{{ t.ativo ? 'Ativo' : 'Inativo' }}</span>
+                  </td>
+                  <td class="actions">
+                    <button type="button" class="iact" title="Editar" (click)="editarTemplate(t)">Editar</button>
+                    @if (t.codigo !== 'wtorre') {
+                      <button type="button" class="iact danger" title="Excluir" (click)="excluirTemplate(t)">Excluir</button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    } @else if (loading()) {
+      <p class="empty">Carregando…</p>
+    } @else if (!items().length) {
+      <p class="empty">Nenhum registro encontrado.</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Título</th>
+              <th>Categoria</th>
+              <th>Autor</th>
+              <th>Status</th>
+              <th class="col-acoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (it of items(); track it.kind + '-' + it.id) {
+              <tr>
+                <td><strong>{{ it.title }}</strong></td>
+                <td>{{ it.category }}</td>
+                <td>{{ it.criadorNome || '—' }}</td>
+                <td>
+                  <span class="badge-status" [class.off]="it.status === 'draft' || it.formStatus === 'encerrado' || it.reqStatus === 'rejeitada'">
+                    {{ it.formStatus || statusLabel[it.status] }}
+                  </span>
+                </td>
+                <td class="actions">
+                  <button type="button" class="iact" title="Ver" (click)="ver(it)">Ver</button>
+                  @if (aba() === 'formularios' && it.formStatus === 'publicado') {
+                    <button type="button" class="iact" (click)="encerrar(it)">Encerrar</button>
+                  }
+                  <button type="button" class="iact danger" (click)="excluir(it)">Excluir</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  [title]="tituloModal()"
+  subtitle="Cores, wordmark e raio usados no formulário público e no preview."
+  icon="folder"
+  [salvando]="salvando()"
+  [saveDisabled]="form.invalid"
+  [saveLabel]="salvando() ? 'Salvando…' : 'Salvar'"
+  (save)="salvarTemplate()"
+  (cancel)="fecharModal()"
+>
+  <form [formGroup]="form" (ngSubmit)="salvarTemplate()">
+    <div class="field">
+      <label for="tpl-codigo">Código *</label>
+      <input id="tpl-codigo" formControlName="codigo" type="text" maxlength="40" placeholder="ex.: wtorre" />
+      @if (form.controls.codigo.touched && form.controls.codigo.invalid) {
+        <div class="help err">Use letras minúsculas, números e hífen.</div>
+      }
+      @if (editandoId()) {
+        <div class="help">O código não pode ser alterado depois de criado.</div>
+      }
+    </div>
+
+    <div class="field">
+      <label for="tpl-nome">Nome *</label>
+      <input id="tpl-nome" formControlName="nome" type="text" maxlength="80" />
+    </div>
+
+    <div class="field">
+      <label for="tpl-wordmark">Wordmark *</label>
+      <input id="tpl-wordmark" formControlName="wordmark" type="text" maxlength="80" placeholder="Ex.: WTORRE" />
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="tpl-cor">Cor primária *</label>
+        <div class="cor-field">
+          <input
+            id="tpl-cor"
+            type="color"
+            [value]="form.controls.corPrimaria.value"
+            (input)="form.controls.corPrimaria.setValue($any($event.target).value)"
+          />
+          <input type="text" formControlName="corPrimaria" maxlength="7" aria-label="Hex primária" />
+        </div>
+        @if (form.controls.corPrimaria.touched && form.controls.corPrimaria.invalid) {
+          <div class="help err">Use o formato #RRGGBB.</div>
+        }
+      </div>
+      <div class="field">
+        <label for="tpl-cor-escura">Cor escura *</label>
+        <div class="cor-field">
+          <input
+            id="tpl-cor-escura"
+            type="color"
+            [value]="form.controls.corPrimariaEscura.value"
+            (input)="form.controls.corPrimariaEscura.setValue($any($event.target).value)"
+          />
+          <input type="text" formControlName="corPrimariaEscura" maxlength="7" aria-label="Hex escura" />
+        </div>
+        @if (form.controls.corPrimariaEscura.touched && form.controls.corPrimariaEscura.invalid) {
+          <div class="help err">Use o formato #RRGGBB.</div>
+        }
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="tpl-raio">Raio (px) *</label>
+        <input id="tpl-raio" formControlName="raioPx" type="number" min="0" max="40" />
+      </div>
+      <div class="field">
+        <label for="tpl-ordem">Ordem</label>
+        <input id="tpl-ordem" formControlName="ordem" type="number" min="0" max="999" />
+      </div>
+    </div>
+
+    <div class="toggle-field">
+      <div>
+        <div class="tt">Ativo</div>
+        <div class="ts">
+          @if (isWtorre()) {
+            O template WTorre é o padrão e não pode ser desativado.
+          } @else {
+            Templates inativos não aparecem no criar formulário.
+          }
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" formControlName="ativo" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </form>
+</app-admin-modal>

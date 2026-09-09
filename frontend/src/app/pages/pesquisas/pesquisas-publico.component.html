@@ -1,0 +1,105 @@
+<div class="pesq-app pesq-public">
+  <div class="cn">
+    @if (loading() && !payload()) {
+      <p class="page-sub">Carregando…</p>
+    } @else if (enviado()) {
+      <div
+        class="guest-wrap"
+        [style.--tpl-primary]="tpl().corPrimaria"
+        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+        [style.--tpl-radius.px]="tpl().raioPx"
+      >
+        <div class="guest-banner" style="margin: 0; border-radius: var(--tpl-radius)">
+          <div class="guest-wordmark"><span class="wm-dot"></span>{{ tpl().wordmark }}</div>
+          <h3 class="guest-title">Obrigado</h3>
+          <p class="guest-sub">Sua resposta foi registrada.</p>
+        </div>
+      </div>
+    } @else if (bloqueado(); as msg) {
+      <div
+        class="guest-wrap"
+        [style.--tpl-primary]="tpl().corPrimaria"
+        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+        [style.--tpl-radius.px]="tpl().raioPx"
+      >
+        <div class="guest-banner" style="margin: 0; border-radius: var(--tpl-radius)">
+          <div class="guest-wordmark"><span class="wm-dot"></span>{{ tpl().wordmark }}</div>
+          <h3 class="guest-title">{{ meta()?.titulo || 'Formulário' }}</h3>
+          <p class="guest-sub">{{ msg }}</p>
+        </div>
+      </div>
+    } @else if (payload(); as p) {
+      <app-pesquisas-guest-form
+        mode="answer"
+        [titulo]="p.titulo"
+        [descricao]="p.descricao"
+        [capaUrl]="p.capaUrl || null"
+        [template]="p.template || tpl()"
+        [perguntas]="visiveis()"
+        [secoes]="!!p.secoes"
+        [respostas]="respostasGuest()"
+        [enviando]="enviando()"
+        (valorChange)="onGuestValor($event)"
+        (enviar)="enviar()"
+      />
+    } @else if (meta(); as m) {
+      <div
+        class="guest-wrap"
+        [style.--tpl-primary]="tpl().corPrimaria"
+        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+        [style.--tpl-radius.px]="tpl().raioPx"
+      >
+        <div class="guest-photo">
+          @if (m.capaUrl) {
+            <img [src]="m.capaUrl" alt="" />
+          } @else {
+            <div class="guest-photo-placeholder"><span>Sem imagem</span></div>
+          }
+        </div>
+        <div class="guest-banner">
+          <div class="guest-wordmark"><span class="wm-dot"></span>{{ tpl().wordmark }}</div>
+          <h3 class="guest-title">{{ m.titulo }}</h3>
+          <p class="guest-sub">{{ m.descricao || 'Confirme sua identidade para responder.' }}</p>
+        </div>
+        <div class="guest-body">
+          <div class="field" style="margin-top: 0">
+            <label>CPF</label>
+            <input
+              class="guest-input"
+              type="text"
+              inputmode="numeric"
+              [ngModel]="cpf()"
+              (ngModelChange)="formatCpfInput($event)"
+              placeholder="000.000.000-00"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field" style="margin-top: 12px">
+            <label>E-mail</label>
+            <input
+              class="guest-input"
+              type="email"
+              [ngModel]="email()"
+              (ngModelChange)="email.set($event)"
+              placeholder="email@exemplo.com"
+              autocomplete="off"
+            />
+          </div>
+          <button
+            type="button"
+            class="guest-submit"
+            [disabled]="verificando()"
+            (click)="verificar()"
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
+    } @else {
+      <div class="form-card" style="max-width: 520px; margin: 48px auto">
+        <h1 class="page-title" style="font-size: 22px">Formulário não encontrado</h1>
+        <p class="page-sub">Este link é inválido ou o formulário não está mais disponível.</p>
+      </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,99 @@
+<div class="breadcrumb-row">
+  <button type="button" class="btn-back" (click)="voltar()">
+    <app-pesq-icon name="arrow-left" [size]="14" />
+    Voltar
+  </button>
+  @if (rec(); as r) {
+    <span class="crumb-path">Formulários &amp; Requisições / <b>{{ r.titulo }}</b></span>
+  }
+</div>
+
+@if (loading()) {
+  <p class="page-sub">Carregando…</p>
+} @else if (rec(); as r) {
+  <div class="builder-head">
+    <div class="builder-title-wrap">
+      <div>
+        <h1 class="page-title" style="font-size: 22px; margin: 0 0 8px">{{ r.titulo }}</h1>
+        <div class="badge-row">
+          <span class="badge typepill">{{ tipoLabel[r.tipo] }}</span>
+          <span
+            class="badge"
+            [class.pending]="r.status === 'pendente'"
+            [class.review]="r.status === 'em_andamento'"
+            [class.done]="r.status === 'concluida'"
+            [class.draft]="r.status === 'rascunho'"
+            [class.recusada]="r.status === 'rejeitada'"
+          >
+            {{ statusLabel[r.status] }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--review-bg); color: var(--review-fg)">
+        <app-pesq-icon name="list-checks" />
+      </div>
+      <div>
+        <div class="stat-num">{{ statusLabel[r.status] }}</div>
+        <div class="stat-label">Status</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--pending-bg); color: var(--pending-fg)">
+        <app-pesq-icon name="alert" />
+      </div>
+      <div>
+        <div class="stat-num">{{ prioLabel[r.prioridade] }}</div>
+        <div class="stat-label">Prioridade</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--draft-bg); color: var(--draft-fg)">
+        <app-pesq-icon name="clock" />
+      </div>
+      <div>
+        <div class="stat-num">{{ r.prazo || '—' }}</div>
+        <div class="stat-label">Prazo desejado</div>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-icon" style="background: var(--done-bg); color: var(--done-fg)">
+        <app-pesq-icon name="user" />
+      </div>
+      <div>
+        <div class="stat-num" style="font-size: 15px">{{ r.aprovadorNome || r.aprovadorRotulo || '—' }}</div>
+        <div class="stat-label">Aprovador</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <h3><app-pesq-icon name="file-text" [size]="17" /> Detalhes</h3>
+    <div class="review-row"><span class="k">Solicitante</span><span class="v">{{ r.criadorNome || '—' }}</span></div>
+    <div class="review-row"><span class="k">Aprovador</span><span class="v">{{ r.aprovadorNome || r.aprovadorRotulo || '—' }}</span></div>
+    <div class="review-row"><span class="k">Prazo desejado</span><span class="v">{{ r.prazo || '—' }}</span></div>
+    <div class="review-row"><span class="k">Descrição</span><span class="v">{{ r.descricao || '—' }}</span></div>
+    @if (r.observacoes) {
+      <div class="review-row"><span class="k">Observações</span><span class="v">{{ r.observacoes }}</span></div>
+    }
+    @if (r.temAnexo) {
+      <div class="review-row">
+        <span class="k">Anexo</span>
+        <span class="v">
+          <button type="button" class="btn-secondary" (click)="abrirAnexo()">{{ r.anexoNome || 'Baixar anexo' }}</button>
+        </span>
+      </div>
+    }
+  </div>
+
+  @if (podeDecidir()) {
+    <div class="wizard-nav">
+      <button type="button" class="btn-ghost" [disabled]="agindo()" (click)="decidir('rejeitar')">Rejeitar</button>
+      <button type="button" class="btn-primary" [disabled]="agindo()" (click)="decidir('aprovar')">Aprovar</button>
+    </div>
+  }
+}

@@ -1,0 +1,147 @@
+<div class="breadcrumb-row">
+  <button type="button" class="btn-back" (click)="voltarHome()">
+    <app-pesq-icon name="arrow-left" [size]="14" />
+    Voltar
+  </button>
+  <span class="crumb-path">Requisições / <b>Nova requisição</b></span>
+</div>
+
+@if (!success()) {
+  <div class="stepper">
+    @for (label of stepLabels; track label; let i = $index) {
+      @if (i > 0) {
+        <div class="step-line" [class.filled]="step() > i"></div>
+      }
+      <div class="step-item">
+        <div class="step-dot" [class.active]="step() === i + 1" [class.complete]="step() > i + 1">
+          @if (step() > i + 1) {
+            <app-pesq-icon name="check" [size]="15" />
+          } @else {
+            {{ i + 1 }}
+          }
+        </div>
+        <div class="step-label">{{ label }}</div>
+      </div>
+    }
+  </div>
+}
+
+<div class="wizard-card">
+  @if (success()) {
+    <div class="success-wrap">
+      <div class="success-check"><app-pesq-icon name="check" [size]="30" /></div>
+      <h3>Requisição enviada com sucesso</h3>
+      <p class="page-sub">Seu pedido foi encaminhado para aprovação e já aparece no painel. Você pode acompanhar o status a qualquer momento.</p>
+      <div class="success-actions">
+        <button type="button" class="btn-secondary" (click)="reset()">
+          <app-pesq-icon name="plus" [size]="15" />
+          Criar outra
+        </button>
+        <button type="button" class="btn-primary" (click)="verLista()">
+          <app-pesq-icon name="list-checks" [size]="16" />
+          Ver requisições
+        </button>
+      </div>
+    </div>
+  } @else if (step() === 1) {
+    <h3 class="wizard-step-title">Tipo de requisição</h3>
+    <p class="wizard-step-sub">Selecione a categoria que melhor descreve o seu pedido.</p>
+    <div class="type-grid">
+      @for (t of tipos; track t.key) {
+        <button type="button" class="type-card" [class.selected]="tipo() === t.key" (click)="tipo.set(t.key)">
+          <div class="icon-wrap"><app-pesq-icon [name]="t.icon" /></div>
+          <span>{{ t.label }}</span>
+        </button>
+      }
+    </div>
+  } @else if (step() === 2) {
+    <h3 class="wizard-step-title">Detalhes do pedido</h3>
+    <p class="wizard-step-sub">Descreva o que você precisa com o máximo de clareza.</p>
+    <div class="field-grid full" style="margin-bottom: 14px">
+      <div class="field">
+        <label>Título</label>
+        <input type="text" [ngModel]="titulo()" (ngModelChange)="titulo.set($event)" placeholder="Ex: Troca de notebook com defeito" />
+      </div>
+    </div>
+    <div class="field-grid full" style="margin-bottom: 14px">
+      <div class="field">
+        <label>Descrição</label>
+        <textarea [ngModel]="descricao()" (ngModelChange)="descricao.set($event)"></textarea>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom: 10px"><label>Prioridade</label></div>
+    <div class="priority-row">
+      <button type="button" class="priority-chip baixa" [class.selected]="prioridade() === 'baixa'" (click)="prioridade.set('baixa')">Baixa</button>
+      <button type="button" class="priority-chip media" [class.selected]="prioridade() === 'media'" (click)="prioridade.set('media')">Média</button>
+      <button type="button" class="priority-chip alta" [class.selected]="prioridade() === 'alta'" (click)="prioridade.set('alta')">Alta</button>
+    </div>
+    <div class="field-grid" style="margin-top: 16px">
+      <div class="field">
+        <label>Prazo desejado</label>
+        <input type="date" [ngModel]="prazo()" (ngModelChange)="prazo.set($event)" />
+      </div>
+    </div>
+  } @else if (step() === 3) {
+    <h3 class="wizard-step-title">Aprovação &amp; anexos</h3>
+    <p class="wizard-step-sub">Indique quem deve aprovar e anexe arquivos de apoio, se houver.</p>
+    <div class="field-grid" style="margin-bottom: 16px">
+      <div class="field">
+        <label>Papel do aprovador</label>
+        <select [ngModel]="aprovadorRotulo()" (ngModelChange)="aprovadorRotulo.set($event)">
+          @for (r of rotulos; track r) {
+            <option [value]="r">{{ r }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label>Observações</label>
+        <input type="text" [ngModel]="observacoes()" (ngModelChange)="observacoes.set($event)" placeholder="Opcional" />
+      </div>
+    </div>
+    <div class="field" style="margin-bottom: 16px">
+      <label>Aprovador (colaborador)</label>
+      <input
+        type="text"
+        [ngModel]="aprovadorBusca()"
+        (ngModelChange)="onBuscaAprovador($event)"
+        placeholder="Buscar por nome ou e-mail"
+      />
+      @if (sugestoes().length) {
+        <div class="suggest-list">
+          @for (a of sugestoes(); track a.id) {
+            <button type="button" class="suggest-item" (click)="escolherAprovador(a)">
+              {{ a.nome }}
+              <small>{{ a.email }}@if (a.departamento) { · {{ a.departamento }} }</small>
+            </button>
+          }
+        </div>
+      }
+    </div>
+    <label class="dropzone">
+      <input #fileInput type="file" hidden (change)="onFile($event)" />
+      <app-pesq-icon name="upload" [size]="26" />
+      <div><strong>Clique para anexar</strong> ou arraste um arquivo aqui</div>
+      @if (arquivo()) {
+        <div class="fname" style="margin-top: 10px; font-weight: 700; color: var(--navy-900)">{{ arquivo()!.name }}</div>
+      }
+    </label>
+  } @else {
+    <h3 class="wizard-step-title">Revisão e envio</h3>
+    <p class="wizard-step-sub">Confira as informações antes de enviar a requisição.</p>
+    <div class="review-row"><span class="k">Tipo</span><span class="v">{{ tipoLabel() }}</span></div>
+    <div class="review-row"><span class="k">Título</span><span class="v">{{ titulo() || '—' }}</span></div>
+    <div class="review-row"><span class="k">Prioridade</span><span class="v">{{ prioridadeLabel() }}</span></div>
+    <div class="review-row"><span class="k">Prazo desejado</span><span class="v">{{ prazo() || '—' }}</span></div>
+    <div class="review-row"><span class="k">Aprovador</span><span class="v">{{ aprovadorNome() || '—' }}</span></div>
+    <div class="review-row"><span class="k">Anexo</span><span class="v">{{ arquivo()?.name || 'Nenhum' }}</span></div>
+  }
+</div>
+
+@if (!success()) {
+  <div class="wizard-nav">
+    <button type="button" class="btn-ghost" [disabled]="step() === 1" (click)="back()">Voltar</button>
+    <button type="button" class="btn-primary" [disabled]="enviando()" (click)="next()">
+      {{ step() === 4 ? 'Enviar requisição' : 'Próximo' }}
+    </button>
+  </div>
+}

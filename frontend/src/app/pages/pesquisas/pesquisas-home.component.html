@@ -1,0 +1,195 @@
+<div class="page-head">
+  <div>
+    <div class="eyebrow">
+      <span class="eyebrow-dot"></span>
+      <span class="eyebrow-text">Administração</span>
+    </div>
+    <h1 class="page-title">Formulários</h1>
+    <p class="page-sub">
+      Crie, publique e acompanhe os resultados de cada formulário em um só lugar.
+    </p>
+  </div>
+  <button type="button" class="btn-primary" (click)="criarFormulario()">
+    <app-pesq-icon name="plus" [size]="16" />
+    Criar formulário
+  </button>
+</div>
+
+<div class="info-banner">
+  <app-pesq-icon name="megaphone" [size]="17" />
+  <span>
+    Ao publicar um formulário interno com <b>evento ativo</b>, o item vai para
+    <b>Comunicados</b> na intranet — é lá que os colaboradores respondem. Formulário
+    desativado não aparece no mural.
+  </span>
+</div>
+
+<div class="stat-row">
+  <div class="stat-chip">
+    <div class="stat-icon" style="background: var(--review-bg); color: var(--review-fg)">
+      <app-pesq-icon name="edit" />
+    </div>
+    <div>
+      <div class="stat-num">{{ loading() ? '—' : resumo().formCreated }}</div>
+      <div class="stat-label">Itens criados</div>
+    </div>
+  </div>
+  <div class="stat-chip">
+    <div class="stat-icon" style="background: var(--done-bg); color: var(--done-fg)">
+      <app-pesq-icon name="megaphone" />
+    </div>
+    <div>
+      <div class="stat-num">{{ loading() ? '—' : resumo().publicados }}</div>
+      <div class="stat-label">Publicados</div>
+    </div>
+  </div>
+  <div class="stat-chip">
+    <div class="stat-icon" style="background: var(--draft-bg); color: var(--draft-fg)">
+      <app-pesq-icon name="clock" />
+    </div>
+    <div>
+      <div class="stat-num">{{ loading() ? '—' : resumo().rascunhos }}</div>
+      <div class="stat-label">Rascunhos</div>
+    </div>
+  </div>
+  <div class="stat-chip">
+    <div class="stat-icon" style="background: var(--pending-bg); color: var(--pending-fg)">
+      <app-pesq-icon name="check" />
+    </div>
+    <div>
+      <div class="stat-num">{{ loading() ? '—' : resumo().respostasRecebidas }}</div>
+      <div class="stat-label">Respostas recebidas</div>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button type="button" class="tab-btn" [class.active]="tab() === 'created'" (click)="setTab('created')">
+    Criados por mim
+  </button>
+  <button type="button" class="tab-btn" [class.active]="tab() === 'mine'" (click)="setTab('mine')">
+    Respondidos por mim
+  </button>
+</div>
+
+@if (tab() === 'created') {
+  <div class="toolbar">
+    <div class="search-box">
+      <app-pesq-icon name="search" [size]="16" />
+      <input
+        type="search"
+        placeholder="Buscar por título ou categoria..."
+        [value]="busca()"
+        (input)="onBusca($any($event.target).value)"
+      />
+    </div>
+  </div>
+  <div class="list-card">
+    @if (loadingLista()) {
+      <div class="empty-state"><p>Carregando…</p></div>
+    } @else if (!criadosFiltrados().length) {
+      <div class="empty-state">
+        <app-pesq-icon name="search" [size]="30" />
+        <p>Nenhum formulário encontrado para este filtro.</p>
+      </div>
+    } @else {
+      @for (item of criadosFiltrados(); track item.id) {
+        <button type="button" class="list-row" (click)="abrirDashboard(item)">
+          <div class="row-icon">
+            <app-pesq-icon name="file-text" />
+          </div>
+          <div class="row-main">
+            <p class="row-title">{{ item.title }}</p>
+            <div class="row-meta">
+              <span>Formulário</span>
+              <span>·</span>
+              <span>{{ item.category }}</span>
+              @if (item.createdDate) {
+                <span>·</span>
+                <span>Criado em {{ item.createdDate }}</span>
+              }
+              @if (item.publicoAlvo === 'externos') {
+                <span class="badge exec">Externo (sem Comunicados)</span>
+              }
+              @if (item.eventoAtivo === false) {
+                <span class="badge recusada">Evento desativado</span>
+              }
+              @if (item.formStatus === 'publicado' && item.janela === 'antes') {
+                <span class="badge pending">Aguardando abertura</span>
+              }
+            </div>
+          </div>
+          <div class="row-metric">
+            <div class="rm-num">{{ item.totalRespostas || 0 }} respostas</div>
+            <div class="progress-track">
+              <div class="progress-fill" [style.width.%]="formPct(item)"></div>
+            </div>
+          </div>
+          <span class="badge" [class]="statusBadgeClass(item)">{{ statusBadgeText(item) }}</span>
+          <span class="chev-right"><app-pesq-icon name="chevron-right" [size]="15" /></span>
+        </button>
+      }
+    }
+  </div>
+} @else {
+  <p class="page-sub" style="margin-bottom: 16px; max-width: none">
+    Formulários que <b>você</b> já respondeu como colaborador — inclusive os que outras
+    áreas publicaram em Comunicados.
+  </p>
+  <div class="list-card">
+    @if (loadingLista()) {
+      <div class="empty-state"><p>Carregando…</p></div>
+    } @else if (!respondidos().length) {
+      <div class="empty-state">
+        <app-pesq-icon name="inbox" [size]="30" />
+        <p>Você ainda não respondeu nenhum formulário.</p>
+      </div>
+    } @else {
+      @for (item of respondidos(); track item.id) {
+        <div class="list-row">
+          <div class="row-icon">
+            <app-pesq-icon name="file-text" />
+          </div>
+          <div class="row-main">
+            <p class="row-title">{{ item.title }}</p>
+            <div class="row-meta">
+              <span>Formulário</span>
+              <span>·</span>
+              <span>{{ item.date }}</span>
+            </div>
+          </div>
+          <button type="button" class="row-action" (click)="verMinhasRespostas(item); $event.stopPropagation()">
+            <app-pesq-icon name="eye" [size]="13" />
+            Ver minhas respostas
+          </button>
+        </div>
+      }
+    }
+  </div>
+}
+
+@if (answerModal(); as modal) {
+  <div class="modal-overlay" (click)="fecharRespostas()">
+    <div class="modal-card" style="max-width: 520px" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title">{{ modal.title }}</h3>
+          <p class="modal-sub">{{ modal.sub }}</p>
+        </div>
+        <button type="button" class="btn-close" (click)="fecharRespostas()" aria-label="Fechar">
+          <app-pesq-icon name="x" [size]="15" />
+        </button>
+      </div>
+      @if (modal.loading) {
+        <p class="page-sub">Carregando…</p>
+      } @else {
+        @for (row of modal.answers; track $index) {
+          <div class="review-row">
+            <span class="k">{{ row.q }}</span>
+            <span class="v">{{ row.a }}</span>
+          </div>
+        }
+      }
+    </div>
+  </div>
+}

@@ -1,0 +1,114 @@
+<div
+  class="guest-wrap"
+  [style.--tpl-primary]="tpl().corPrimaria"
+  [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+  [style.--tpl-radius.px]="tpl().raioPx"
+>
+  <div class="guest-photo">
+    @if (capaUrl()) {
+      <img [src]="capaUrl()!" alt="" />
+    } @else {
+      <div class="guest-photo-placeholder">
+        <app-pesq-icon name="image" [size]="22" />
+        <span>Sem imagem</span>
+      </div>
+    }
+  </div>
+  <div class="guest-banner">
+    <div class="guest-wordmark">
+      <span class="wm-dot"></span>{{ tpl().wordmark }}
+    </div>
+    <h3 class="guest-title">{{ titulo().trim() || 'Título do formulário' }}</h3>
+    <p class="guest-sub">{{ descricao().trim() || 'A descrição do formulário aparece aqui.' }}</p>
+  </div>
+  <div class="guest-body">
+    @if (!perguntas().length) {
+      <div class="guest-empty">Adicione perguntas para ver como ficam aqui.</div>
+    } @else {
+      @for (q of perguntas(); track keyOf(q, $index); let i = $index) {
+        @if (secoes() && q.secaoTitulo) {
+          <div class="guest-q-text" style="opacity: 0.7; font-size: 12px; margin-bottom: 6px">
+            {{ q.secaoTitulo }}
+          </div>
+        }
+        <div class="guest-q">
+          <div class="guest-q-text">{{ q.texto || 'Pergunta sem título' }}</div>
+          @switch (q.tipo) {
+            @case ('texto_longo') {
+              <textarea
+                class="guest-input"
+                rows="3"
+                placeholder="Digite sua resposta..."
+                [ngModel]="respostas()[keyOf(q, i)]"
+                (ngModelChange)="setValor(keyOf(q, i), $event)"
+              ></textarea>
+            }
+            @case ('multipla_escolha') {
+              <div class="guest-options">
+                @for (op of q.opcoes || []; track op) {
+                  <button
+                    type="button"
+                    class="guest-option"
+                    [class.selected]="respostas()[keyOf(q, i)] === op"
+                    (click)="setValor(keyOf(q, i), op)"
+                  >
+                    <span class="dot"></span>{{ op }}
+                  </button>
+                } @empty {
+                  <p class="guest-empty" style="padding: 8px 0">Inclua opções nesta pergunta.</p>
+                }
+              </div>
+            }
+            @case ('escala') {
+              <div class="guest-scale">
+                @for (n of escala; track n) {
+                  <button
+                    type="button"
+                    [class.selected]="respostas()[keyOf(q, i)] === '' + n"
+                    (click)="setValor(keyOf(q, i), '' + n)"
+                  >
+                    {{ n }}
+                  </button>
+                }
+              </div>
+            }
+            @case ('sim_nao') {
+              <div class="guest-yn">
+                <button
+                  type="button"
+                  [class.selected]="respostas()[keyOf(q, i)] === 'Sim'"
+                  (click)="setValor(keyOf(q, i), 'Sim')"
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  [class.selected]="respostas()[keyOf(q, i)] === 'Não'"
+                  (click)="setValor(keyOf(q, i), 'Não')"
+                >
+                  Não
+                </button>
+              </div>
+            }
+            @default {
+              <input
+                class="guest-input"
+                placeholder="Digite sua resposta..."
+                [ngModel]="respostas()[keyOf(q, i)]"
+                (ngModelChange)="setValor(keyOf(q, i), $event)"
+              />
+            }
+          }
+        </div>
+      }
+      <button
+        type="button"
+        class="guest-submit"
+        [disabled]="mode() === 'answer' && enviando()"
+        (click)="onSubmit()"
+      >
+        {{ submitLabel() }}
+      </button>
+    }
+  </div>
+</div>

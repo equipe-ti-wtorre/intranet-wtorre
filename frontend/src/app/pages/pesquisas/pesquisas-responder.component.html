@@ -1,0 +1,25 @@
+<div class="breadcrumb-row">
+  <button type="button" class="btn-back" (click)="voltar()">
+    <app-pesq-icon name="arrow-left" [size]="14" />
+    Voltar
+  </button>
+  <span class="crumb-path">Formulários / <b>Responder</b></span>
+</div>
+
+@if (loading()) {
+  <p class="page-sub">Carregando…</p>
+} @else if (payload(); as p) {
+  <app-pesquisas-guest-form
+    mode="answer"
+    [titulo]="p.titulo"
+    [descricao]="p.descricao"
+    [capaUrl]="p.capaUrl || null"
+    [template]="p.template || null"
+    [perguntas]="visiveis()"
+    [secoes]="!!p.secoes"
+    [respostas]="respostasGuest()"
+    [enviando]="enviando()"
+    (valorChange)="onGuestValor($event)"
+    (enviar)="enviar()"
+  />
+}
