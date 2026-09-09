@@ -1,0 +1,231 @@
+<section class="card layout-card admin-page">
+  <div class="pane-head">
+    <div>
+      <h2>Layout</h2>
+      <p class="hint">Marca, textos do hero e e-mails de teste usados nos envios.</p>
+    </div>
+  </div>
+
+  @if (carregando()) {
+    <p class="loading-hint">Carregando...</p>
+  } @else {
+    <div class="card-body">
+      <fieldset class="form-section">
+        <legend>Marca</legend>
+        <div class="fields-row">
+          <div class="field">
+            <label for="msg-brand-nome">Nome da marca</label>
+            <input id="msg-brand-nome" type="text" [(ngModel)]="layout.brandNome" />
+          </div>
+          <div class="field">
+            <label>Ícone</label>
+            <div class="menu-icone-compact">
+              <span class="menu-icone-compact__preview" aria-hidden="true">
+                <app-doc-cat-icone [nome]="layout.brandIcone" [size]="28" />
+              </span>
+              <button type="button" class="menu-icone-compact__toggle" (click)="abrirModalIconeBrand()">
+                Trocar ícone
+              </button>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-section">
+        <legend>Hero</legend>
+        <div class="field">
+          <label for="msg-hero-eyebrow">Eyebrow</label>
+          <input id="msg-hero-eyebrow" type="text" [(ngModel)]="layout.home.eyebrow" />
+        </div>
+        <div class="fields-row">
+          <div class="field">
+            <label for="msg-hero-titulo">Título</label>
+            <input id="msg-hero-titulo" type="text" [(ngModel)]="layout.home.titulo" />
+          </div>
+          <div class="field">
+            <label for="msg-hero-comp">Complemento</label>
+            <input id="msg-hero-comp" type="text" [(ngModel)]="layout.home.tituloComplemento" />
+          </div>
+          <div class="field">
+            <label for="msg-hero-dest">Destaque</label>
+            <input id="msg-hero-dest" type="text" [(ngModel)]="layout.home.tituloDestaque" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="msg-hero-sub">Subtítulo</label>
+          <textarea id="msg-hero-sub" rows="3" [(ngModel)]="layout.home.subtitulo"></textarea>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-section">
+        <legend class="legend-row">
+          <span>Chips do hero</span>
+          <button type="button" class="btn-add" (click)="addChip()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+            </svg>
+            Adicionar chip
+          </button>
+        </legend>
+
+        <div class="chips-list">
+          @for (chip of layout.home.chips; track trackChip($index, chip); let i = $index) {
+            <div class="chip-row">
+              <div class="chip-row-head">
+                <span class="chip-title">
+                  <span class="chip-badge">{{ i + 1 }}</span>
+                  Chip {{ i + 1 }}
+                </span>
+                <div class="chip-row-actions">
+                  <button
+                    type="button"
+                    class="btn-icon"
+                    title="Mover para cima"
+                    [disabled]="i === 0"
+                    (click)="moverChip(i, -1)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M12 19V5M5 12l7-7 7 7"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-icon"
+                    title="Mover para baixo"
+                    [disabled]="i === layout.home.chips.length - 1"
+                    (click)="moverChip(i, 1)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M12 5v14M5 12l7 7 7-7"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-icon danger"
+                    title="Remover chip"
+                    (click)="removeChip(i)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M6 6l12 12M18 6L6 18"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="chip-row-body">
+                <div class="field chip-icon-field">
+                  <label>Ícone</label>
+                  <div class="menu-icone-compact">
+                    <span class="menu-icone-compact__preview" aria-hidden="true">
+                      <app-doc-cat-icone [nome]="chip.icone" [size]="28" />
+                    </span>
+                    <button type="button" class="menu-icone-compact__toggle" (click)="abrirModalIconeChip(i)">
+                      Trocar ícone
+                    </button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label [for]="'msg-chip-texto-' + i">Texto</label>
+                  <input
+                    [id]="'msg-chip-texto-' + i"
+                    type="text"
+                    [(ngModel)]="chip.texto"
+                    placeholder="Texto do chip"
+                  />
+                </div>
+              </div>
+            </div>
+          } @empty {
+            <p class="empty-hint">Nenhum chip cadastrado.</p>
+          }
+        </div>
+      </fieldset>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" [disabled]="salvando()" (click)="salvarLayout()">
+          {{ salvando() ? 'Salvando...' : 'Salvar layout' }}
+        </button>
+      </div>
+
+      <fieldset class="form-section">
+        <legend>E-mails de teste</legend>
+        <p class="field-hint">
+          A lista de Disparo é só o convite da nova sessão. Confirmação, cancelamento, fila, lembrete e
+          falta vão para o e-mail da pessoa. Se houver e-mails aqui, todos os envios de massagem vão só
+          para eles.
+        </p>
+        <div class="email-chips" role="list">
+          @for (email of emailsTeste(); track email) {
+            <span class="email-chip" role="listitem">
+              {{ email }}
+              <button
+                type="button"
+                class="email-chip-remove"
+                (click)="removerEmailTeste(email)"
+                aria-label="Remover {{ email }}"
+              >
+                ×
+              </button>
+            </span>
+          } @empty {
+            <span class="email-empty">Nenhum e-mail na lista.</span>
+          }
+        </div>
+        <div class="email-add-row">
+          <div class="field email-add-fld">
+            <label for="msg-email-add">Adicionar e-mail</label>
+            <input
+              id="msg-email-add"
+              type="email"
+              [(ngModel)]="emailTesteInput"
+              (keydown.enter)="$event.preventDefault(); adicionarEmailTeste()"
+              placeholder="nome@empresa.com"
+            />
+          </div>
+          <button type="button" class="btn-add" (click)="adicionarEmailTeste()">Adicionar</button>
+        </div>
+        <div class="form-actions form-actions--section">
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="salvandoConfig()"
+            (click)="salvarConfigEmails()"
+          >
+            {{ salvandoConfig() ? 'Salvando...' : 'Salvar e-mails de teste' }}
+          </button>
+        </div>
+      </fieldset>
+    </div>
+  }
+</section>
+
+<app-admin-modal
+  [open]="modalIconeAberto()"
+  [size]="'xlarge'"
+  title="Escolher ícone"
+  subtitle="Busque em todos os tipos ou envie um SVG personalizado"
+  [headerIcon]="iconTemp()"
+  saveLabel="Confirmar"
+  (save)="confirmarIcone()"
+  (cancel)="fecharModalIcone()"
+>
+  <div class="icone-modal-body">
+    <app-doc-cat-icone-picker [value]="iconTemp()" (valueChange)="selecionarIconTemp($event)" />
+  </div>
+</app-admin-modal>

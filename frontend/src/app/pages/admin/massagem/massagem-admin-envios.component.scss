@@ -1,0 +1,91 @@
+@use './massagem-admin.component.scss';
+
+:host {
+  display: block;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.busca-fld {
+  min-width: 200px;
+  margin-bottom: 0;
+}
+
+.filtro-fld {
+  min-width: 160px;
+  margin-bottom: 0;
+}
+
+.fld select {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line, #e2e6ee);
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+
+.cell-sub {
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-dim, #8a93a8);
+  font-weight: 500;
+}
+
+.td-destinos {
+  min-width: 220px;
+}
+
+.destinos-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.destinos-lista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.destino-email {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.dest-badge {
+  font-size: 0.65rem !important;
+  padding: 0.12rem 0.4rem !important;
+}
+
+.destino-erro {
+  font-size: 0.72rem;
+  color: var(--danger, #d8456e);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-mais {
+  margin-top: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--accent, #1d54e6);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.badge-status.warn {
+  background: rgba(224, 165, 46, 0.16);
+  color: var(--warn, #c48a12);
+}

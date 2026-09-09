@@ -1,0 +1,147 @@
+<div class="minhas">
+  <div class="min-band">
+    <div class="min-band-glow"></div>
+    <div class="cn min-band-inner">
+      <div>
+        <div class="min-eyebrow"><app-msg-icon name="star" /> Suas sessões</div>
+        <h1 class="min-title">Minhas Reservas</h1>
+        <p class="min-sub">Gerencie suas sessões confirmadas e o histórico de presença.</p>
+      </div>
+      <div class="min-stat-row">
+        <div class="min-stat-chip">
+          <div class="min-stat-num">{{ proximas().length }}</div>
+          <div class="min-stat-lbl">próximas</div>
+        </div>
+        <div class="min-stat-divider"></div>
+        <div class="min-stat-chip">
+          <div class="min-stat-num">{{ historico().length }}</div>
+          <div class="min-stat-lbl">realizadas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <app-massagem-subnav />
+
+  <div class="cn min-body">
+    @if (loading()) {
+      <div class="skeletons">
+        <div class="skeleton" style="height: 160px"></div>
+        <div class="skeleton" style="height: 160px"></div>
+      </div>
+    } @else {
+      <div class="min-section-hd">
+        <div class="min-section-icon min-section-icon--prox">
+          <app-msg-icon name="calendar-check" />
+        </div>
+        <div>
+          <div class="min-section-title">Próximas sessões</div>
+          <div class="min-section-sub">Reservas confirmadas aguardando sua presença</div>
+        </div>
+      </div>
+
+      <div class="min-grid">
+        @if (proximas().length === 0) {
+          <div class="min-empty">
+            <app-msg-icon name="calendar-check" />
+            <div class="min-empty-title">Nenhuma sessão agendada</div>
+            <div class="min-empty-sub">Vá em <a routerLink="/massagem">Início</a> e reserve seu horário no próximo evento</div>
+          </div>
+        } @else {
+          @for (r of proximas(); track r.chave) {
+            <article class="min-card">
+              <div class="min-card-strip"></div>
+              <div class="min-card-body">
+                <div class="min-card-date-box">
+                  <div>
+                    <div class="min-card-month">{{ mesAbrev(r.data) }} {{ ano(r.data) }}</div>
+                    <div class="min-card-day">{{ dia(r.data) }}</div>
+                  </div>
+                  <div class="min-card-dow">{{ diaSemana(r.data) }}</div>
+                </div>
+                <div class="min-card-nm">{{ r.evento?.nm || 'Massagem' }}</div>
+                <div class="min-card-time">
+                  <app-msg-icon name="clock" />
+                  <span class="min-card-time-val">{{ r.hora }}</span>
+                  <span class="min-card-time-dur">→ {{ horaFim(r.hora) }} &nbsp;·&nbsp; 50 min</span>
+                </div>
+                <div class="min-card-infos">
+                  @if (r.evento?.masso) {
+                    <div class="min-card-row"><app-msg-icon name="user" />{{ r.evento?.masso }}</div>
+                  }
+                  @if (r.evento?.local) {
+                    <div class="min-card-row"><app-msg-icon name="map-pin" />{{ r.evento?.local }}</div>
+                  }
+                </div>
+              </div>
+              <div class="min-card-ft">
+                <div class="min-actions">
+                  <button class="min-btn-cancel" type="button" (click)="cancelar(r)">
+                    <app-msg-icon name="calendar-minus" />Cancelar sessão
+                  </button>
+                </div>
+                <div class="min-status ms-conf">
+                  <app-msg-icon name="check-circle" />Confirmado
+                </div>
+              </div>
+            </article>
+          }
+        }
+      </div>
+
+      <div class="min-section-hd min-section-hd--hist">
+        <div class="min-section-icon min-section-icon--hist">
+          <app-msg-icon name="clock-counter-clockwise" />
+        </div>
+        <div>
+          <div class="min-section-title">Histórico</div>
+          <div class="min-section-sub">Sessões já realizadas e registros de presença</div>
+        </div>
+      </div>
+
+      <div class="min-grid">
+        @if (historico().length === 0) {
+          <div class="min-empty">
+            <app-msg-icon name="clock-counter-clockwise" />
+            <div class="min-empty-title">Sem histórico ainda</div>
+            <div class="min-empty-sub">Suas sessões realizadas aparecerão aqui</div>
+          </div>
+        } @else {
+          @for (r of historico(); track r.chave) {
+            <article class="min-card">
+              <div class="min-card-strip" [class.past]="r.status !== 'falta'" [class.falta]="r.status === 'falta'"></div>
+              <div class="min-card-body">
+                <div class="min-card-date-box past">
+                  <div>
+                    <div class="min-card-month">{{ mesAbrev(r.data) }} {{ ano(r.data) }}</div>
+                    <div class="min-card-day">{{ dia(r.data) }}</div>
+                  </div>
+                  <div class="min-card-dow">{{ diaSemana(r.data) }}</div>
+                </div>
+                <div class="min-card-nm">{{ r.evento?.nm || 'Massagem' }}</div>
+                <div class="min-card-time">
+                  <app-msg-icon name="clock" />
+                  <span class="min-card-time-val">{{ r.hora }}</span>
+                  <span class="min-card-time-dur">→ {{ horaFim(r.hora) }} &nbsp;·&nbsp; 50 min</span>
+                </div>
+                <div class="min-card-infos">
+                  @if (r.evento?.masso) {
+                    <div class="min-card-row"><app-msg-icon name="user" />{{ r.evento?.masso }}</div>
+                  }
+                  @if (r.evento?.local) {
+                    <div class="min-card-row"><app-msg-icon name="map-pin" />{{ r.evento?.local }}</div>
+                  }
+                </div>
+              </div>
+              <div class="min-card-ft no-action">
+                <div class="min-status {{ statusClass(r.status) }}">
+                  <app-msg-icon [name]="statusIcon(r.status)" />{{ statusText(r.status) }}
+                </div>
+              </div>
+            </article>
+          }
+        }
+      </div>
+    }
+  </div>
+</div>

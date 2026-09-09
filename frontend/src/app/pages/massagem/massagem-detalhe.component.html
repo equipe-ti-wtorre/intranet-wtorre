@@ -1,0 +1,393 @@
+@if (pageLoading()) {
+  <div class="cn" style="padding: 40px 0">
+    <div class="skeleton" style="height: 200px; margin-bottom: 20px"></div>
+    <div class="skeleton" style="height: 280px"></div>
+  </div>
+} @else if (notFound()) {
+  <div class="cn" style="padding: 60px 0">
+    <div class="empty-state">
+      <app-msg-icon name="calendar-x" />
+      <h1 class="title">Evento não encontrado</h1>
+      <p>Este evento não está disponível ou o link é inválido.</p>
+      <a routerLink="/massagem" class="btn btn-primary">Voltar ao início</a>
+    </div>
+  </div>
+} @else if (evento(); as ev) {
+  <div class="det-band">
+    <div class="det-band-glow"></div>
+    <div class="cn det-band-inner">
+      <div class="det-band-left">
+        <a routerLink="/massagem" class="det-back-btn">
+          <app-msg-icon name="arrow-left" /> Voltar
+        </a>
+        <div class="det-ev-name">{{ ev.nm }}</div>
+        <div class="det-ev-meta">
+          <span><app-msg-icon name="user" /> {{ ev.masso }}</span>
+          <span class="det-sep">·</span>
+          <span><app-msg-icon name="map-pin" /> {{ ev.local }}</span>
+          <span class="det-sep">·</span>
+          <span><app-msg-icon name="clock" /> {{ ev.duracaoMin || 50 }} min por sessão</span>
+        </div>
+      </div>
+      <div class="det-band-right">
+        <div class="det-mini-stat">
+          <svg width="52" height="52" viewBox="0 0 52 52" style="transform:rotate(-90deg)">
+            <circle cx="26" cy="26" r="21" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="5"/>
+            <circle
+              cx="26" cy="26" r="21" fill="none" stroke="#5EFFA8" stroke-width="5"
+              stroke-linecap="round"
+              [attr.stroke-dasharray]="detRing"
+              [attr.stroke-dashoffset]="ringOffset()"
+              style="transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1)"
+            />
+          </svg>
+          <div class="det-mini-pct">{{ pct() }}%</div>
+        </div>
+        <div class="det-mini-label">ocupado hoje</div>
+        <div class="det-avail-chip">
+          {{ disponiveis() }} vaga{{ disponiveis() !== 1 ? 's' : '' }} livre{{ disponiveis() !== 1 ? 's' : '' }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <app-massagem-subnav />
+
+  <div class="cn det-body">
+    <div id="det-top-notif">
+      @if (reservaEmOutroEvento()) {
+        <div class="fila-card-unif reserva-unica-card">
+          <div class="fila-card-top">
+            <div class="fila-card-badge reserva-unica-badge">Reserva única</div>
+            <div class="fila-card-heading">
+              {{ sessaoDoDiaJaUsada() ? 'Você já utilizou sua sessão neste dia' : 'Você já possui uma reserva' }}
+            </div>
+            <p class="fila-card-sub">
+              @if (sessaoDoDiaJaUsada()) {
+                Só é permitido <strong>um horário por dia</strong>.
+                Sua sessão foi em
+                <strong>{{ slotsData()?.minhaReserva?.unidade || slotsData()?.minhaReserva?.eventoNm }}</strong>
+                às {{ slotsData()?.minhaReserva?.hora }}.
+              } @else {
+                Só é permitido <strong>um horário por dia</strong>.
+                Sua reserva está em
+                <strong>{{ slotsData()?.minhaReserva?.unidade || slotsData()?.minhaReserva?.eventoNm }}</strong>
+                em {{ formatDataCurta(slotsData()?.minhaReserva?.data || '') }}
+                às {{ slotsData()?.minhaReserva?.hora }}.
+                Cancele-a em Minhas reservas se quiser marcar outro horário.
+              }
+            </p>
+          </div>
+          <div class="fila-card-bottom">
+            <div class="fila-card-meta">
+              <span class="fila-card-dot"></span>
+              <span>Um horário por dia</span>
+            </div>
+            <a routerLink="/massagem/minhas-reservas" class="fila-card-btn">
+              Ver minha reserva <span class="fila-card-arrow">→</span>
+            </a>
+          </div>
+        </div>
+      } @else if (showFilaEnter()) {
+        <div class="fila-card-unif">
+          <div class="fila-card-top">
+            <div class="fila-card-badge">Lotado</div>
+            <div class="fila-card-heading">Que pena... todos os horários foram preenchidos</div>
+            <p class="fila-card-sub">
+              Mas não fique de fora! Entre na fila e assim que qualquer vaga abrir, você recebe um
+              <strong>e-mail na hora</strong>. Quem confirmar primeiro garante a sessão.
+            </p>
+          </div>
+          <div class="fila-card-bottom">
+            <div class="fila-card-meta">
+              <span class="fila-card-dot"></span>
+              <span>
+                @if ((slotsData()?.filaTotal || 0) > 0) {
+                  {{ slotsData()?.filaTotal }} pessoa{{ (slotsData()?.filaTotal || 0) > 1 ? 's' : '' }} já na fila
+                } @else {
+                  Seja o primeiro a entrar na fila
+                }
+              </span>
+            </div>
+            <button class="fila-card-btn" type="button" (click)="abrirFila()" [disabled]="loading()">
+              Entrar na fila <span class="fila-card-arrow">→</span>
+            </button>
+          </div>
+        </div>
+      } @else if (showFilaActive()) {
+        <div class="fila-card-unif fila-card-unif-active">
+          <div class="fila-card-top">
+            <div class="fila-card-badge fila-card-badge-active">Na fila</div>
+            <div class="fila-card-heading">Você está na fila de espera</div>
+            <p class="fila-card-sub">
+              Assim que uma vaga abrir, você receberá um <strong>e-mail de alerta</strong>
+              @if (((slotsData()?.filaTotal || 1) - 1) > 0) {
+                junto com as demais {{ (slotsData()?.filaTotal || 1) - 1 }} pessoa{{ ((slotsData()?.filaTotal || 1) - 1) !== 1 ? 's' : '' }} na fila.
+              } @else {
+                — você é o único na fila no momento.
+              }
+            </p>
+          </div>
+          <div class="fila-card-bottom">
+            <div class="fila-card-meta">
+              <span class="fila-card-dot fila-card-dot-active"></span>
+              <span>
+                {{ slotsData()?.filaTotal }} pessoa{{ (slotsData()?.filaTotal || 0) > 1 ? 's' : '' }} na fila (incluindo você)
+              </span>
+            </div>
+            <button class="fila-card-btn fila-card-btn-exit" type="button" (click)="sairDaFila()" [disabled]="loading()">
+              Sair da fila
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="det-legend-bar">
+      <div class="det-leg-item"><div class="det-leg-dot av"></div><span>Disponível</span></div>
+      <div class="det-leg-item"><div class="det-leg-dot mn"></div><span>Minha reserva</span></div>
+      <div class="det-leg-item"><div class="det-leg-dot fq"></div><span>Na fila</span></div>
+      <div class="det-leg-item"><div class="det-leg-dot tk"></div><span>Indisponível</span></div>
+      <div class="det-leg-item"><div class="det-leg-dot ps"></div><span>Encerrado</span></div>
+      @if (temPausa()) {
+        <div class="det-leg-item"><div class="det-leg-dot pa"></div><span>Pausa</span></div>
+      }
+    </div>
+
+    <div class="periods">
+      @if (manha().length) {
+        <div class="periodo">
+          <div class="period-hd">
+            <span class="period-nm">Manhã</span>
+            <span class="period-rg">08:00 - 12:00</span>
+            <span class="period-line"></span>
+          </div>
+          <div class="sgrid">
+            @for (s of manha(); track s.chave) {
+              <button
+                type="button"
+                class="slot {{ slotClass(s) }}"
+                [class.cl]="isClickable(s)"
+                [disabled]="isSlotDisabled(s)"
+                (click)="clickSlot(s)"
+              >
+                <div class="st">{{ slotHora(s) }}</div>
+                <div class="sd">
+                  @if (slotStatusIcon(s); as icon) {
+                    <app-msg-icon [name]="icon" [size]="10" />
+                  }
+                  {{ slotLabel(s) }}
+                </div>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      @if (tarde().length) {
+        <div class="periodo">
+          <div class="period-hd">
+            <span class="period-nm">Tarde</span>
+            <span class="period-rg">13:00 - 18:00</span>
+            <span class="period-line"></span>
+          </div>
+          <div class="sgrid">
+            @for (s of tarde(); track s.chave) {
+              <button
+                type="button"
+                class="slot {{ slotClass(s) }}"
+                [class.cl]="isClickable(s)"
+                [disabled]="isSlotDisabled(s)"
+                (click)="clickSlot(s)"
+              >
+                <div class="st">{{ slotHora(s) }}</div>
+                <div class="sd">
+                  @if (slotStatusIcon(s); as icon) {
+                    <app-msg-icon [name]="icon" [size]="10" />
+                  }
+                  {{ slotLabel(s) }}
+                </div>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+@if (modal() === 'reserva' && selected(); as slot) {
+  <div class="modal-backdrop" (click)="closeModal()" role="presentation">
+    <div class="modal modal-reserva" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <div class="mres-hd">
+        <div class="mres-hd-left">
+          <div class="mres-hd-icon">
+            <app-msg-icon name="leaf" [size]="18" />
+          </div>
+          <div>
+            <h2>Confirmar reserva</h2>
+            <p>Verifique os detalhes antes de confirmar</p>
+          </div>
+        </div>
+        <button class="mcl" type="button" (click)="closeModal()" aria-label="Fechar">&times;</button>
+      </div>
+
+      <div class="mres-card-wrap">
+        <div class="mres-card">
+          <div class="mres-card-lbl">Sessão selecionada</div>
+          <div class="mres-card-nm">{{ evento()?.nm }}</div>
+          <div class="mres-card-grid">
+            <div class="mres-hora">
+              <div class="mres-hora-lbl">Horário</div>
+              <div class="mres-hora-val">{{ slot.hora }}</div>
+            </div>
+            <div class="mres-meta">
+              <div class="mres-meta-row">
+                <div class="mres-meta-icon"><app-msg-icon name="user" [size]="12" /></div>
+                <span>{{ evento()?.masso }}</span>
+              </div>
+              <div class="mres-meta-row">
+                <div class="mres-meta-icon"><app-msg-icon name="map-pin" [size]="12" /></div>
+                <span>{{ evento()?.local }}</span>
+              </div>
+              <div class="mres-meta-row">
+                <div class="mres-meta-icon"><app-msg-icon name="calendar" [size]="12" /></div>
+                <span>{{ formatData(data()) }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="mres-badge">
+            <span class="mres-avail"><span class="mres-avail-dot"></span> Disponível</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mres-form">
+        <div class="mres-form-lbl">Seus dados</div>
+        <div class="mres-fields">
+          <div>
+            <label class="fl">Nome completo</label>
+            <input class="fi mres-input" type="text" [value]="userNome()" readonly />
+          </div>
+          <div>
+            <label class="fl">E-mail corporativo</label>
+            <input class="fi mres-input mres-input-muted" type="email" [value]="userEmail()" readonly />
+          </div>
+        </div>
+      </div>
+
+      <div class="mres-ft">
+        <button class="btn btn-out" type="button" (click)="closeModal()" [disabled]="loading()">Cancelar</button>
+        <button class="btn btn-primary" type="button" (click)="confirmarReserva()" [disabled]="loading()">
+          <app-msg-icon name="check" /> {{ loading() ? 'Confirmando…' : 'Confirmar reserva' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (modal() === 'opcoes' && selected(); as slot) {
+  <div class="modal-backdrop" (click)="closeModal()" role="presentation">
+    <div class="modal modal-opcoes" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <div class="mhd">
+        <div>
+          <h2>O que deseja fazer?</h2>
+          <p>Horário <strong>{{ slot.hora }}</strong> · {{ formatData(data()) }}</p>
+        </div>
+        <button class="mcl" type="button" (click)="closeModal()" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="opcoes-body">
+        <button class="opt-btn" type="button" (click)="abrirTroca()" [disabled]="loading()">
+          <span class="opt-icon mn"><app-msg-icon name="arrows-left-right" /></span>
+          <div>
+            <strong>Trocar horário</strong>
+            <span>Escolha outro horário disponível no mesmo dia</span>
+          </div>
+        </button>
+        <button class="opt-btn" type="button" (click)="cancelarReserva()" [disabled]="loading()">
+          <span class="opt-icon rd"><app-msg-icon name="calendar-minus" /></span>
+          <div>
+            <strong class="rd-tx">{{ loading() ? 'Cancelando…' : 'Cancelar sem reservar outro' }}</strong>
+            <span>Libera a vaga e notifica a fila de espera</span>
+          </div>
+        </button>
+      </div>
+      <div class="mft">
+        <button class="btn btn-out" type="button" (click)="closeModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (modal() === 'troca' && selected(); as slot) {
+  <div class="modal-backdrop" (click)="closeModal()" role="presentation">
+    <div class="modal modal-troca" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <div class="mhd">
+        <div>
+          <h2>Trocar horário</h2>
+          <p>Atual: <strong>{{ slot.hora }}</strong></p>
+        </div>
+        <button class="mcl" type="button" (click)="closeModal()" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="troca-body">
+        <div class="sgrid compact">
+          @for (s of disponiveisTroca(); track s.chave) {
+            <button type="button" class="slot av cl" (click)="confirmarTroca(s)" [disabled]="loading()">
+              <div class="st">{{ s.hora }}</div>
+              <div class="sd">{{ loading() ? 'Trocando…' : 'Disponível' }}</div>
+            </button>
+          }
+        </div>
+        @if (disponiveisTroca().length === 0) {
+          <p class="muted">Nenhum horário disponível para troca.</p>
+        }
+      </div>
+      <div class="mft">
+        <button class="btn btn-out" type="button" (click)="modal.set('opcoes')">Voltar</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (modal() === 'fila') {
+  <div class="modal-backdrop" (click)="closeModal()" role="presentation">
+    <div class="modal modal-fila" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <div class="mhd">
+        <div>
+          <h2>Entrar na fila de espera</h2>
+          <p>Seja avisado por e-mail quando uma vaga abrir</p>
+        </div>
+        <button class="mcl" type="button" (click)="closeModal()" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="fila-body">
+        <div class="fila-how">
+          <div class="fila-how-label"><app-msg-icon name="info" /> Como funciona</div>
+          <div class="fila-how-steps">
+            <div class="fila-how-step">
+              <div class="fila-how-num">1</div>
+              <span>Você entra na fila geral do evento — <strong>não vinculado a nenhum horário específico</strong></span>
+            </div>
+            <div class="fila-how-step">
+              <div class="fila-how-num">2</div>
+              <span>Quando qualquer vaga abrir, <strong>todos na fila recebem um e-mail ao mesmo tempo</strong></span>
+            </div>
+            <div class="fila-how-step">
+              <div class="fila-how-num">3</div>
+              <span>Você acessa o link do e-mail e <strong>quem confirmar o horário primeiro garante a sessão</strong></span>
+            </div>
+          </div>
+        </div>
+        <div class="fila-count-box">
+          <app-msg-icon name="users" />
+          <span>Pessoas já na fila deste evento: <strong>{{ slotsData()?.filaTotal || 0 }}</strong></span>
+        </div>
+      </div>
+      <div class="mft">
+        <button class="btn btn-out" type="button" (click)="closeModal()">Cancelar</button>
+        <button class="btn btn-primary fila-confirm-btn" type="button" (click)="entrarFila()" [disabled]="loading() || !!slotsData()?.naFila">
+          <app-msg-icon name="bell" /> {{ loading() ? 'Entrando…' : 'Entrar na fila' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,51 @@
+@use './massagem-admin.component.scss';
+
+:host {
+  display: block;
+}
+
+.filtro-fld {
+  min-width: 220px;
+  margin-bottom: 0;
+  align-self: center;
+}
+
+.fld select {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line, #e2e6ee);
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+
+.ev-row-actions {
+  opacity: 1;
+}
+
+.destino {
+  margin-top: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line, #e2e6ee);
+  border-radius: 12px;
+  background: #f7f8fb;
+}
+
+.destino.warn {
+  border-color: #f0c9d5;
+  background: #fdf4f7;
+}
+
+.destino-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-dim, #8a93a8);
+  margin-bottom: 0.25rem;
+}
+
+.destino p {
+  margin: 0.25rem 0 0;
+  color: var(--ink-soft, #48536a);
+  font-size: 0.85rem;
+  font-weight: 500;
+}

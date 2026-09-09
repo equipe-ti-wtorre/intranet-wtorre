@@ -1,0 +1,117 @@
+<div class="massagem-tab-panel">
+  <div class="pane-head">
+    <div>
+      <h2>Envios</h2>
+      <p class="hint">
+        Histórico de disparos e e-mails automáticos (confirmação, cancelamento, fila, lembrete e
+        falta).
+      </p>
+    </div>
+    <div class="toolbar">
+      <label class="fld busca-fld">
+        Buscar e-mail
+        <input
+          type="search"
+          [ngModel]="buscaInput"
+          (ngModelChange)="onBusca($event)"
+          placeholder="destinatário…"
+        />
+      </label>
+      <label class="fld filtro-fld">
+        Tipo
+        <select [ngModel]="tipoFiltro" (ngModelChange)="onTipo($event)">
+          @for (t of tiposFiltro; track t.codigo) {
+            <option [value]="t.codigo">{{ t.nome }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" class="btn btn-primary btn-sm" [disabled]="loading()" (click)="carregar()">
+        Atualizar
+      </button>
+    </div>
+  </div>
+
+  <div class="pane-body">
+    @if (loading()) {
+      <p class="muted">Carregando…</p>
+    } @else if (!envios().length) {
+      <div class="empty">Nenhum envio registrado ainda.</div>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Quando</th>
+              <th>Tipo</th>
+              <th>Evento</th>
+              <th>Modo</th>
+              <th>Status</th>
+              <th>Destinatários</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (envio of envios(); track envio.id) {
+              <tr>
+                <td>{{ formatQuando(envio.criadoEm) }}</td>
+                <td>
+                  <span class="badge-status">{{ labelTipo(envio.tipo) }}</span>
+                </td>
+                <td>
+                  <strong>{{ eventoLabel(envio) }}</strong>
+                  @if (envio.assunto) {
+                    <div class="cell-sub">{{ envio.assunto }}</div>
+                  }
+                </td>
+                <td>{{ labelModo(envio.modo) }}</td>
+                <td>
+                  <span
+                    class="badge-status"
+                    [class.warn]="statusClass(envio.status) === 'warn'"
+                    [class.off]="statusClass(envio.status) === 'off'"
+                  >
+                    {{ labelStatus(envio.status) }}
+                  </span>
+                  <div class="cell-sub">{{ resumo(envio) }}</div>
+                </td>
+                <td class="td-destinos">
+                  @if (!envio.destinos.length) {
+                    <span class="muted">—</span>
+                  } @else {
+                    <ul class="destinos-lista">
+                      @for (
+                        d of expandido()[envio.id] ? envio.destinos : envio.destinos.slice(0, 4);
+                        track d.id
+                      ) {
+                        <li>
+                          <span class="destino-email">{{ d.email }}</span>
+                          <span
+                            class="badge-status dest-badge"
+                            [class.off]="d.status === 'falha'"
+                          >
+                            {{ d.status === 'falha' ? 'Falha' : 'Enviado' }}
+                          </span>
+                          @if (d.erro) {
+                            <span class="destino-erro" [title]="d.erro">{{ d.erro }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                    @if (envio.destinos.length > 4) {
+                      <button type="button" class="btn-mais" (click)="toggleDestinos(envio.id)">
+                        {{
+                          expandido()[envio.id]
+                            ? 'Ocultar'
+                            : 'Ver todos (' + envio.destinos.length + ')'
+                        }}
+                      </button>
+                    }
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

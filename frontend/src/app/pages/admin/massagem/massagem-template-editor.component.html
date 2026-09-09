@@ -1,0 +1,116 @@
+<div class="tpl-editor">
+  <header class="tpl-top">
+    <div class="tpl-top-left">
+      <a routerLink="/admin/massagem" [queryParams]="{ aba: 'email', sub: 'templates' }" class="back">← Voltar</a>
+      <h1>{{ pageTitle() }}</h1>
+    </div>
+    <div class="tpl-top-actions">
+      <button type="button" class="btn-ghost" (click)="visualizar()" [disabled]="loading()">Visualizar</button>
+      <button type="button" class="btn-ghost" (click)="cancelar()">Cancelar</button>
+      <button
+        type="button"
+        class="btn-primary"
+        (click)="salvar()"
+        [disabled]="saving() || loading() || !podeSalvar()"
+      >
+        {{ saving() ? 'Salvando…' : isNovo() ? 'Criar' : 'Atualizar' }}
+      </button>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <p class="muted pad">Carregando…</p>
+  } @else {
+    <div class="tpl-grid">
+      <aside class="tpl-side">
+        <label class="fld">
+          Nome do template
+          <input [(ngModel)]="form.nome" placeholder="Ex: Reserva confirmada" />
+        </label>
+
+        <label class="fld">
+          Tipo de disparo
+          @if (isNovo()) {
+            <select [ngModel]="form.codigo" (ngModelChange)="onCodigoChange($event)">
+              <option value="">Selecione o tipo</option>
+              @for (c of codigosDisponiveis(); track c.codigo) {
+                <option [ngValue]="c.codigo">{{ c.nome }} ({{ c.codigo }})</option>
+              }
+            </select>
+          } @else {
+            <input [ngModel]="form.codigo" disabled />
+          }
+        </label>
+
+        <label class="fld">
+          Assunto do e-mail
+          <input
+            [(ngModel)]="form.assunto"
+            (focus)="focusAlvo.set('assunto')"
+            placeholder="Assunto do e-mail"
+          />
+        </label>
+
+        <div class="toggle-field">
+          <div>
+            <div class="tt">Ativo</div>
+            <div class="ts">Inativo usa o HTML padrão do sistema.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [(ngModel)]="form.ativo" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="keys-block">
+          <h2>Corpo do e-mail (chaves)</h2>
+          <p class="hint">
+            Clique em uma chave para inserir no assunto (se o foco estiver nele) ou no editor visual.
+          </p>
+          <div class="keys">
+            @for (k of placeholders(); track k) {
+              <button type="button" class="key-chip" (click)="inserirChave(k)">
+                {{ '{{' + k + '}}' }}
+              </button>
+            } @empty {
+              <span class="muted">Selecione o tipo de disparo.</span>
+            }
+          </div>
+        </div>
+
+        <label class="fld">
+          Texto plano (opcional)
+          <textarea rows="3" [(ngModel)]="form.texto" (focus)="focusAlvo.set('assunto')"></textarea>
+        </label>
+      </aside>
+
+      <section class="tpl-main" (focusin)="focusAlvo.set('html')">
+        <h2 class="editor-label">Corpo do e-mail (editor visual)</h2>
+        <app-tinymce-editor
+          [value]="form.html"
+          (valueChange)="onHtmlChange($event)"
+        />
+      </section>
+    </div>
+  }
+</div>
+
+@if (previewAberto()) {
+  <div class="preview-backdrop" (click)="fecharPreview()"></div>
+  <aside class="preview-panel">
+    <header>
+      <div>
+        <h3>Pré-visualização do e-mail</h3>
+        @if (previewAssunto()) {
+          <p class="preview-assunto">{{ previewAssunto() }}</p>
+        }
+      </div>
+      <button type="button" class="x" (click)="fecharPreview()" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+    </header>
+    <div class="preview-frame" [innerHTML]="previewHtml()"></div>
+  </aside>
+}

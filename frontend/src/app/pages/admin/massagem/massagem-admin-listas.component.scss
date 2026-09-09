@@ -1,0 +1,90 @@
+@use './massagem-admin.component.scss';
+
+:host {
+  display: block;
+}
+
+.busca-fld {
+  flex: 1;
+  margin-bottom: 1rem;
+  max-width: none;
+}
+
+.btn-emails {
+  background: #e8efff !important;
+  border-color: #c9d7fb !important;
+  color: var(--accent, #1d54e6) !important;
+}
+
+.fld select {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line, #e2e6ee);
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+
+.add-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.85rem;
+}
+
+.add-row .fld {
+  margin-bottom: 0;
+}
+
+.btn-add {
+  border: 0;
+  background: var(--ok, #1c9e62);
+  color: #fff;
+  border-radius: 12px;
+  padding: 0.55rem 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  height: 42px;
+}
+
+.btn-add:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+
+.itens-list {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line, #e2e6ee);
+  border-radius: 10px;
+}
+
+.item-email {
+  font-weight: 600;
+}
+
+.btn-remove {
+  border: 0;
+  background: transparent;
+  color: var(--danger, #d8456e);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+}
+
+@media (max-width: 720px) {
+  .add-row {
+    grid-template-columns: 1fr;
+  }
+}

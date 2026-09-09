@@ -1,0 +1,151 @@
+<div class="massagem-tab-panel">
+  <div class="pane-head">
+    <div>
+      <h2>Listas de e-mail</h2>
+      <p class="hint">Crie listas de destinatários para disparos.</p>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" (click)="abrirNova()">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      Nova lista
+    </button>
+  </div>
+
+  <div class="pane-body">
+    <label class="fld busca-fld">
+      <input
+        type="search"
+        [ngModel]="buscaInput"
+        (ngModelChange)="onBusca($event)"
+        placeholder="Buscar lista por nome ou descrição…"
+      />
+    </label>
+
+    @if (loading()) {
+      <p class="muted">Carregando…</p>
+    } @else if (!listasFiltradas().length) {
+      <div class="empty">
+        @if (listas().length) {
+          Nenhuma lista encontrada para a busca.
+        } @else {
+          Nenhuma lista cadastrada. Clique em <strong>Nova lista</strong> para começar.
+        }
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Descrição</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (l of listasFiltradas(); track l.id) {
+              <tr>
+                <td><strong>{{ l.nome }}</strong></td>
+                <td>{{ l.descricao || '—' }}</td>
+                <td class="actions">
+                  <button type="button" class="btn-emails" (click)="abrirItens(l)">E-mails</button>
+                  <button type="button" (click)="abrirEditar(l)">Editar</button>
+                  <button type="button" class="danger" (click)="excluirLista(l)">Excluir</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>
+
+<app-admin-modal
+  [open]="modalListaAberto()"
+  [title]="editListaId() ? 'Editar lista' : 'Nova lista de e-mail'"
+  [saveLabel]="editListaId() ? 'Salvar' : 'Criar'"
+  [salvando]="saving()"
+  [saveDisabled]="!formLista.nome.trim() || (!editListaId() && !formLista.empresaId)"
+  (save)="salvarLista()"
+  (cancel)="modalListaAberto.set(false)"
+>
+  <label class="fld">
+    Nome *
+    <input [(ngModel)]="formLista.nome" placeholder="Ex: Colaboradores Geral" />
+  </label>
+  <label class="fld">
+    Descrição (opcional)
+    <input [(ngModel)]="formLista.descricao" />
+  </label>
+  <label class="fld">
+    Empresa *
+    <select
+      [ngModel]="formLista.empresaId"
+      (ngModelChange)="onEmpresaChange($event)"
+      [disabled]="!!editListaId()"
+    >
+      @if (editListaId()) {
+        <option [value]="formLista.empresaId">
+          {{ listas().find((l) => l.id === editListaId())?.empresaNm || 'Empresa' }}
+        </option>
+      } @else {
+        <option value="">Selecione a empresa</option>
+        @for (e of empresas(); track e.id) {
+          <option [value]="e.id">{{ e.nm }}</option>
+        }
+      }
+    </select>
+  </label>
+</app-admin-modal>
+
+<app-admin-modal
+  [open]="modalItensAberto()"
+  [title]="'E-mails: ' + (listaItens()?.nome || '')"
+  size="wide"
+  [showSave]="false"
+  cancelLabel="Fechar"
+  (cancel)="fecharItens()"
+>
+  <div class="add-row">
+    <label class="fld">
+      E-mail
+      <input type="email" [(ngModel)]="formItem.email" placeholder="E-mail" />
+    </label>
+    <label class="fld">
+      Nome (opcional)
+      <input [(ngModel)]="formItem.nome" placeholder="Nome (opcional)" />
+    </label>
+    <button type="button" class="btn-add" [disabled]="adding()" (click)="adicionarItem()">
+      {{ adding() ? 'Adicionando…' : 'Adicionar' }}
+    </button>
+  </div>
+
+  <label class="fld busca-fld">
+    Buscar
+    <input
+      type="search"
+      [ngModel]="buscaItensInput"
+      (ngModelChange)="onBuscaItens($event)"
+      placeholder="Buscar por nome ou e-mail…"
+    />
+  </label>
+
+  @if (!itensFiltrados().length) {
+    <div class="empty">Nenhum e-mail nesta lista.</div>
+  } @else {
+    <div class="itens-list">
+      @for (i of itensFiltrados(); track i.id) {
+        <div class="item-row">
+          <div>
+            <div class="item-email">{{ i.email }}</div>
+            @if (i.nome) {
+              <div class="cell-sub">{{ i.nome }}</div>
+            }
+          </div>
+          <button type="button" class="btn-remove" (click)="removerItem(i)">Remover</button>
+        </div>
+      }
+    </div>
+  }
+</app-admin-modal>

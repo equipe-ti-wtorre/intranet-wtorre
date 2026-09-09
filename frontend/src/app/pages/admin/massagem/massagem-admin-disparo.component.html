@@ -1,0 +1,127 @@
+<div class="massagem-tab-panel">
+  <div class="pane-head">
+    <div>
+      <h2>Disparo de e-mail</h2>
+      <p class="hint">
+        O convite da nova sessão vai para a lista da empresa (e-mail geral). Sem lista, usa os e-mails de teste.
+      </p>
+    </div>
+    <label class="fld filtro-fld">
+      Empresa
+      <select [ngModel]="filtroEmpresa()" (ngModelChange)="filtroEmpresa.set($event)">
+        <option value="">Todas</option>
+        @for (e of empresas(); track e.id) {
+          <option [value]="e.nm">{{ e.nm }}</option>
+        }
+      </select>
+    </label>
+  </div>
+
+  <div class="pane-body">
+    <div class="eventos-subtabs" role="tablist" aria-label="Filtro de eventos">
+      <button
+        type="button"
+        role="tab"
+        class="eventos-subtab"
+        [class.active]="eventosSubAba() === 'ativos'"
+        [attr.aria-selected]="eventosSubAba() === 'ativos'"
+        (click)="selecionarSubAba('ativos')"
+      >
+        Ativos
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="eventos-subtab"
+        [class.active]="eventosSubAba() === 'inativos'"
+        [attr.aria-selected]="eventosSubAba() === 'inativos'"
+        (click)="selecionarSubAba('inativos')"
+      >
+        Inativos
+      </button>
+    </div>
+
+    @if (loading()) {
+      <p class="muted">Carregando…</p>
+    } @else if (!gruposDaSubAba().length) {
+      <div class="empty">{{ emptyListaEventos() }}</div>
+    } @else {
+      <div class="ev-groups">
+        @for (g of gruposDaSubAba(); track g.chave) {
+          <section class="ev-group" [class.collapsed]="!grupoExpandido(g.chave)">
+            <button
+              type="button"
+              class="ev-group-head"
+              (click)="toggleGrupo(g.chave)"
+              [attr.aria-expanded]="grupoExpandido(g.chave)"
+            >
+              <span class="ev-group-dot" [style.background]="g.cor" aria-hidden="true"></span>
+              <span class="ev-group-title">{{ g.nome }}</span>
+              <span class="ev-group-count">
+                {{ g.eventos.length }}
+                {{ g.eventos.length === 1 ? 'evento' : 'eventos' }}
+              </span>
+              <svg class="ev-group-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M6 9l6 6 6-6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            @if (grupoExpandido(g.chave)) {
+              <ul class="ev-group-list">
+                @for (ev of g.eventos; track ev.id) {
+                  <li class="ev-row">
+                    <div class="ev-row-main">
+                      <strong class="ev-row-name">{{ ev.nm }}</strong>
+                      <div class="ev-row-meta">{{ metaEvento(ev) }}</div>
+                    </div>
+                    <span class="badge-status" [class.off]="ev.status !== 'ativo'">
+                      {{ ev.status === 'ativo' ? 'Ativo' : 'Inativo' }}
+                    </span>
+                    <div class="actions ev-row-actions">
+                      <button type="button" (click)="abrirEnvio(ev)">Enviar e-mail</button>
+                    </div>
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+        }
+      </div>
+    }
+  </div>
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  title="Enviar e-mail"
+  [subtitle]="eventoEnvio()?.nm || ''"
+  saveLabel="Enviar"
+  [salvando]="enviando()"
+  [saveDisabled]="destinoResumo()?.tipo === 'vazio' || !codigoTemplate"
+  (save)="confirmarEnvio()"
+  (cancel)="fecharEnvio()"
+>
+  <label class="fld">
+    Template *
+    <select [(ngModel)]="codigoTemplate">
+      @if (!templatesAtivos().length) {
+        <option value="disparo_evento">Disparo novo evento</option>
+      }
+      @for (t of templatesAtivos(); track t.id) {
+        <option [value]="t.codigo">{{ rotuloTemplate(t) }}</option>
+      }
+    </select>
+  </label>
+  @if (destinoResumo(); as dest) {
+    <div class="destino" [class.warn]="dest.tipo === 'vazio'">
+      <div class="destino-label">Destino</div>
+      <strong>{{ dest.titulo }}</strong>
+      <p>{{ dest.detalhe }}</p>
+    </div>
+  }
+</app-admin-modal>

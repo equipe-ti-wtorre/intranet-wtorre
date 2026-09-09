@@ -1,0 +1,161 @@
+<div class="home">
+  <div class="hero-band">
+    <canvas #particleCanvas class="hero-particle-canvas" aria-hidden="true"></canvas>
+    <div class="hero-content cn">
+      <div class="hero-eyebrow">
+        <span class="pulse-dot"></span>
+        {{ layout().home.eyebrow }}
+      </div>
+      <h1 class="hero-title">
+        {{ layout().home.titulo }}<br />
+        @if (layout().home.tituloComplemento) {
+          {{ layout().home.tituloComplemento }}{{ layout().home.tituloDestaque ? ' ' : '' }}
+        }
+        @if (layout().home.tituloDestaque) {
+          <em>{{ layout().home.tituloDestaque }}</em>
+        }
+      </h1>
+      <p class="hero-sub">{{ layout().home.subtitulo }}</p>
+      <div class="hero-chips">
+        @for (chip of layout().home.chips; track chip.texto) {
+          <div class="hero-chip">
+            <app-doc-cat-icone [nome]="chip.icone" [size]="16" />{{ chip.texto }}
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <app-massagem-subnav />
+
+  <div class="cn home-body">
+    <div class="home-section-label">
+      <span class="home-section-line"></span>
+      <span>Eventos disponíveis</span>
+      <span class="home-section-line"></span>
+    </div>
+
+    @if (unidadesTabs().length) {
+      <div class="home-unit-bar" role="tablist" aria-label="Filtrar por unidade">
+        @for (u of unidadesTabs(); track u) {
+          <button
+            type="button"
+            class="home-unit-pill"
+            role="tab"
+            [class.active]="unidadeSel() === u"
+            [attr.aria-selected]="unidadeSel() === u"
+            [style.color]="unidadeSel() === u ? corEmpresa(u).accent : null"
+            (click)="selecionarUnidade(u)"
+          >
+            <span class="home-unit-dot" [style.background]="corEmpresa(u).accent" aria-hidden="true"></span>
+            {{ u }}
+          </button>
+        }
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="skeletons">
+        <div class="skeleton" style="height: 180px"></div>
+        <div class="skeleton" style="height: 180px"></div>
+      </div>
+    } @else if (eventos().length === 0) {
+      <div class="empty-state-premium">
+        <div class="empty-icon-wrap"><app-msg-icon name="leaf" [size]="28" /></div>
+        <h3>Nenhum evento ativo no momento</h3>
+        <p>Quando o RH criar uma nova sessão de massagem,<br />você receberá um e-mail com o link de acesso.</p>
+      </div>
+    } @else if (eventosFiltrados().length === 0) {
+      <div class="empty-state-premium">
+        <div class="empty-icon-wrap"><app-msg-icon name="buildings" [size]="28" /></div>
+        <h3>Nenhum evento nesta unidade</h3>
+        <p>Selecione outra unidade ou aguarde o RH criar<br />uma sessão para {{ unidadeSel() }}.</p>
+      </div>
+    } @else {
+      <div class="ev-premium-grid">
+        @for (ev of eventosFiltrados(); track ev.id; let first = $first) {
+          <a class="ev-card-premium" [routerLink]="['/massagem/evento', ev.id]">
+            <div class="ev-card-left">
+              <div class="ev-badge-row">
+                @if (first) {
+                  <span class="ev-badge-next"><app-msg-icon name="leaf" [size]="14" />Próximo evento</span>
+                }
+                <span class="badge {{ badgeClass(ev.ocupacao?.pct || 0) }}">
+                  {{ ev.ocupacao?.pct || 0 }}% ocupado
+                </span>
+              </div>
+              <div class="ev-card-name">{{ ev.nm }}</div>
+              <div class="ev-card-date">
+                <app-msg-icon name="calendar" weight="regular" [size]="16" />
+                {{ formatData(ev.data) }}
+              </div>
+              <div class="ev-card-infos">
+                <div class="ev-info-item">
+                  <app-msg-icon name="buildings" [size]="16" />
+                  <span>{{ ev.unidade }}</span>
+                </div>
+                <div class="ev-info-item">
+                  <app-msg-icon name="user" [size]="16" />
+                  <span><strong>{{ ev.masso }}</strong></span>
+                </div>
+                <div class="ev-info-item">
+                  <app-msg-icon name="map-pin" [size]="16" />
+                  <span>{{ ev.local }}</span>
+                </div>
+                <div class="ev-info-item">
+                  <app-msg-icon name="clock" weight="regular" [size]="16" />
+                  <span>
+                    @if (faixaHorario(ev); as faixa) {
+                      {{ faixa }} ·
+                    }
+                    {{ ev.ocupacao?.total || ev.horarios.length || 0 }} horários ·
+                    {{ ev.duracaoMin || 50 }} min cada
+                  </span>
+                </div>
+              </div>
+              <span class="ev-btn">
+                Reservar horário <app-msg-icon name="arrow-right" [size]="14" />
+              </span>
+              @if (ev.euNaFila) {
+                <div class="ev-fila-chip">
+                  <app-msg-icon name="bell" [size]="14" />Na fila de alertas
+                </div>
+              }
+            </div>
+            <div class="ev-card-right">
+              <div class="ev-ocup-ring-wrap">
+                <svg class="ev-ocup-ring" viewBox="0 0 80 80">
+                  <circle
+                    class="ring-bg"
+                    cx="40"
+                    cy="40"
+                    r="34"
+                    [attr.stroke-dasharray]="ringC"
+                    stroke-dashoffset="0"
+                  />
+                  <circle
+                    class="ring-fg"
+                    cx="40"
+                    cy="40"
+                    r="34"
+                    [attr.stroke]="ringColor(ev.ocupacao?.pct || 0)"
+                    [attr.stroke-dasharray]="ringC"
+                    [attr.stroke-dashoffset]="ringOffset(ev.ocupacao?.pct || 0)"
+                  />
+                </svg>
+                <div class="ev-ocup-pct">{{ ev.ocupacao?.pct || 0 }}%</div>
+              </div>
+              <div class="ev-ocup-label">ocupado</div>
+              <div class="ev-slots-avail">
+                <app-msg-icon name="check-circle" [size]="14" />
+                {{ ev.ocupacao?.disponiveis || 0 }}
+                vaga{{ (ev.ocupacao?.disponiveis || 0) !== 1 ? 's' : '' }}
+                livre{{ (ev.ocupacao?.disponiveis || 0) !== 1 ? 's' : '' }}
+              </div>
+            </div>
+          </a>
+        }
+      </div>
+    }
+  </div>
+</div>

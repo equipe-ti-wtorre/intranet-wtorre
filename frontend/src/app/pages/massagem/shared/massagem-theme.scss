@@ -1,0 +1,364 @@
+/* Tokens do protótipo Bem-estar · Massagem — escopados em .msg-app */
+.msg-app {
+  --pr: #0f6e56;
+  --pr-l: rgba(15, 110, 86, 0.1);
+  --pr-b: rgba(15, 110, 86, 0.28);
+  --pr-d: #085041;
+
+  --bg: #f7faf8;
+  --sur: #ffffff;
+  --sec: #f3f4f6;
+  --bor: #e5e7eb;
+  --bor2: #d1d5db;
+  --tx: #111827;
+  --mu: #6b7280;
+  --mu2: #9ca3af;
+
+  --gr: #3b6d11;
+  --gr-bg: #eaf3de;
+  --gr-br: #97c459;
+  --gr-tx: #27500a;
+
+  --am-bg: #faeeda;
+  --am-br: #ef9f27;
+  --am-tx: #633806;
+
+  --rd-bg: #fee2e2;
+  --rd-br: #fca5a5;
+  --rd-tx: #b91c1c;
+  --bl-bg: #dbeafe;
+  --bl-br: #93c5fd;
+  --bl-tx: #1e40af;
+
+  --radius: 0.65rem;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --font-body: 'Hanken Grotesk', Inter, system-ui, sans-serif;
+  --font-display: 'Archivo', 'Poppins', sans-serif;
+  --accent-mint: #5effa8;
+
+  color: var(--tx);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  min-height: 60vh;
+  margin: -0.5rem -1.25rem 0;
+  padding-bottom: 2.5rem;
+}
+
+.msg-app *,
+.msg-app *::before,
+.msg-app *::after {
+  box-sizing: border-box;
+}
+
+.msg-app h1,
+.msg-app h2,
+.msg-app h3,
+.msg-app .title,
+.msg-app .fd {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0;
+}
+
+.msg-app a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.msg-app .cn {
+  width: min(1160px, calc(100% - 48px));
+  margin: 0 auto;
+}
+
+.msg-app .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  transition: opacity 0.15s, background 0.15s;
+  border: none;
+  cursor: pointer;
+  background: none;
+}
+
+.msg-app .btn:hover {
+  opacity: 0.88;
+}
+
+.msg-app .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.msg-app .btn-primary,
+.msg-app .btn-pr {
+  background: var(--pr);
+  color: #fff;
+}
+
+.msg-app .btn-primary:hover,
+.msg-app .btn-pr:hover {
+  background: var(--pr-d);
+  opacity: 1;
+}
+
+.msg-app .btn-ghost {
+  background: var(--sec);
+  color: var(--tx);
+}
+
+.msg-app .btn-outline,
+.msg-app .btn-out {
+  background: var(--sur);
+  color: var(--tx);
+  border: 1px solid var(--bor2);
+}
+
+.msg-app .btn-sm {
+  padding: 5px 14px;
+  font-size: 12px;
+}
+
+.msg-app .btn-presente {
+  background: #0f6e56;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.msg-app .btn-falta {
+  background: #a32d2d;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.msg-app .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.msg-app .badge-ok,
+.msg-app .badge-gr {
+  background: var(--gr-bg);
+  color: var(--gr-tx);
+  border-color: var(--gr-br);
+}
+
+.msg-app .badge-warn,
+.msg-app .badge-am {
+  background: var(--am-bg);
+  color: var(--am-tx);
+  border-color: var(--am-br);
+}
+
+.msg-app .badge-danger,
+.msg-app .badge-rd {
+  background: var(--rd-bg);
+  color: var(--rd-tx);
+  border-color: var(--rd-br);
+}
+
+.msg-app .badge-info,
+.msg-app .badge-bl {
+  background: var(--bl-bg);
+  color: var(--bl-tx);
+  border-color: var(--bl-br);
+}
+
+.msg-app .badge-mine,
+.msg-app .badge-pr {
+  background: var(--pr-l);
+  color: var(--pr);
+  border-color: var(--pr-b);
+}
+
+.msg-app .badge-mu {
+  background: var(--sec);
+  color: var(--mu);
+  border-color: var(--bor);
+}
+
+.msg-app .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.msg-app .field label,
+.msg-app .fl {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mu);
+}
+
+.msg-app .field input,
+.msg-app .field textarea,
+.msg-app .field select,
+.msg-app .fi {
+  width: 100%;
+  height: 38px;
+  border: 1px solid var(--bor2);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  background: var(--sur);
+  color: var(--tx);
+  outline: none;
+}
+
+.msg-app .field textarea {
+  height: auto;
+  padding: 10px 12px;
+}
+
+.msg-app .field input:focus,
+.msg-app .field textarea:focus,
+.msg-app .field select:focus,
+.msg-app .fi:focus {
+  border-color: var(--pr);
+  box-shadow: 0 0 0 3px var(--pr-l);
+}
+
+.msg-app .skeleton {
+  background: linear-gradient(90deg, var(--sec) 25%, #fff 50%, var(--sec) 75%);
+  background-size: 200% 100%;
+  animation: msg-shimmer 1.2s ease infinite;
+  border-radius: 12px;
+}
+
+@keyframes msg-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.msg-app .msg-subnav {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.85rem 24px;
+  margin: 0 auto 0;
+  width: min(1160px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--bor);
+  background: var(--sur);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  overflow-x: auto;
+}
+
+.msg-app .msg-subnav a {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--mu);
+  white-space: nowrap;
+}
+
+.msg-app .msg-subnav a:hover {
+  background: var(--sec);
+  color: var(--tx);
+}
+
+.msg-app .msg-subnav a.on {
+  color: var(--pr);
+  background: var(--pr-l);
+}
+
+.msg-app app-msg-icon {
+  display: inline-flex;
+  vertical-align: -0.125em;
+}
+
+.msg-app .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 900;
+  animation: msg-fade-in 0.2s ease;
+}
+
+.msg-app .modal {
+  background: var(--sur);
+  border-radius: 14px;
+  width: min(640px, 100%);
+  max-height: min(90vh, 800px);
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  animation: msg-rise-in 0.2s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+@keyframes msg-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes msg-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 768px) {
+  .msg-app {
+    margin: -0.25rem -0.75rem 0;
+  }
+  .msg-app .cn {
+    width: calc(100% - 32px);
+  }
+  .msg-app .msg-subnav {
+    padding-inline: 16px;
+    width: 100%;
+  }
+}
