@@ -1,0 +1,48 @@
+<div class="rml-login">
+  <div class="rml-login-card">
+    <div class="brand">
+      <span class="brand-mark">WT</span>
+      <div>
+        <h1>Ramais</h1>
+        <p>Acesso local à lista de ramais</p>
+      </div>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="entrar()">
+      @if (mensagemErro()) {
+        <div class="erro" role="alert">{{ mensagemErro() }}</div>
+      }
+
+      <div class="field">
+        <label for="rml-user">Usuário</label>
+        <input
+          id="rml-user"
+          formControlName="username"
+          type="text"
+          autocomplete="username"
+          placeholder="admin"
+        />
+      </div>
+
+      <div class="field">
+        <label for="rml-pass">Senha</label>
+        <div class="pass-wrap">
+          <input
+            id="rml-pass"
+            formControlName="senha"
+            [type]="mostrarSenha ? 'text' : 'password'"
+            autocomplete="current-password"
+            placeholder="••••••••"
+          />
+          <button type="button" class="eye" (click)="mostrarSenha = !mostrarSenha">
+            {{ mostrarSenha ? 'Ocultar' : 'Mostrar' }}
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-enter" [disabled]="form.invalid || autenticando()">
+        {{ autenticando() ? 'Entrando…' : 'Entrar' }}
+      </button>
+    </form>
+  </div>
+</div>

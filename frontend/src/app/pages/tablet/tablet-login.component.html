@@ -1,0 +1,98 @@
+<div class="tbl-login">
+  <div class="bg" aria-hidden="true"></div>
+  <div class="particles" aria-hidden="true">
+    @for (p of particulas; track $index) {
+      <span
+        class="p"
+        [style.width.px]="p.size"
+        [style.height.px]="p.size"
+        [style.left.%]="p.left"
+        [style.animation-duration.s]="p.duration"
+        [style.animation-delay.s]="p.delay"
+      ></span>
+    }
+  </div>
+
+  <div class="chrome">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">🌿</div>
+      <div class="brand-nm">Bem-estar · Massagem</div>
+    </div>
+    <div class="clock">
+      <div class="clock-time">{{ hora() }}</div>
+      <div class="clock-date">{{ data() }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-top">
+      <div class="logo-icon" aria-hidden="true">💆</div>
+      <h1 class="card-title">Tablet · Massagem</h1>
+      <p class="card-sub">Acesso exclusivo para check-in do dia</p>
+      <div class="empresa-badge">
+        <span class="empresa-dot" aria-hidden="true"></span>
+        Pronto para check-in
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form [formGroup]="form" (ngSubmit)="entrar()">
+        @if (mensagemErro()) {
+          <div class="erro" role="alert">
+            <span aria-hidden="true">⚠️</span>
+            {{ mensagemErro() }}
+          </div>
+        }
+
+        <div class="field">
+          <label class="field-label" for="tbl-user">Usuário</label>
+          <div class="field-input-wrap">
+            <input
+              class="field-input"
+              id="tbl-user"
+              formControlName="username"
+              type="text"
+              autocomplete="username"
+              placeholder="usuário do tablet"
+            />
+            <span class="field-icon" aria-hidden="true">👤</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="tbl-pass">Senha</label>
+          <div class="field-input-wrap">
+            <input
+              class="field-input field-input-pass"
+              id="tbl-pass"
+              formControlName="senha"
+              [type]="mostrarSenha ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="••••••••"
+            />
+            <button type="button" class="toggle-pass" (click)="mostrarSenha = !mostrarSenha">
+              {{ mostrarSenha ? 'Ocultar' : 'Mostrar' }}
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          class="btn-entrar"
+          [class.is-loading]="autenticando()"
+          [disabled]="form.invalid || autenticando()"
+        >
+          @if (autenticando()) {
+            <span>✓ Entrando...</span>
+          } @else {
+            Entrar <span class="btn-arrow" aria-hidden="true">→</span>
+          }
+        </button>
+      </form>
+
+      <p class="footer-tip">
+        <strong>Acesso restrito</strong> · Somente massoterapeuta autorizado
+      </p>
+    </div>
+  </div>
+</div>

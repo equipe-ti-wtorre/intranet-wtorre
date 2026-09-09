@@ -1,0 +1,127 @@
+.rml-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(29, 84, 230, 0.22), transparent 45%),
+    linear-gradient(160deg, #0d1424 0%, #1a2744 55%, #152038 100%);
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.rml-login-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 20px;
+  padding: 32px 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.brand {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #1d54e6, #1340b8);
+  color: #fff;
+  font-family: 'Archivo Expanded', 'Archivo', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-family: 'Archivo', sans-serif;
+  font-size: 22px;
+  color: #10151f;
+}
+
+.brand p {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #48536a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field input {
+  border: 1px solid #e2e6ee;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+  outline: none;
+}
+
+.field input:focus {
+  border-color: #1d54e6;
+  box-shadow: 0 0 0 3px rgba(29, 84, 230, 0.15);
+}
+
+.pass-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pass-wrap input {
+  flex: 1;
+}
+
+.eye {
+  border: 0;
+  background: transparent;
+  color: #1d54e6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-enter {
+  width: 100%;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(145deg, #1d54e6, #1340b8);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-enter:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.erro {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}

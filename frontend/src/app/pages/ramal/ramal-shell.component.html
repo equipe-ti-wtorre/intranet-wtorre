@@ -1,0 +1,25 @@
+<div class="ramal-portal">
+  <header class="ramal-topnav">
+    <div class="topnav-inner">
+      <div class="topnav-brand">
+        <span class="mark">WT</span>
+        <div>
+          <strong>Ramais</strong>
+          <small>{{ nome() }}</small>
+        </div>
+      </div>
+      <nav class="topnav-links" aria-label="Ramal">
+        <a routerLink="/ramal" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">
+          Lista
+        </a>
+        @if (isAdmin()) {
+          <a routerLink="/ramal/config/usuarios" routerLinkActive="on">Configuração</a>
+        }
+      </nav>
+      <button type="button" class="btn-sair" (click)="sair()">Sair</button>
+    </div>
+  </header>
+  <main class="ramal-main">
+    <router-outlet />
+  </main>
+</div>

@@ -1,0 +1,96 @@
+.ramal-portal {
+  min-height: 100vh;
+  margin: 0;
+  background: #f4f5f8;
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.ramal-topnav {
+  background: #0d1424;
+  color: #e8edf6;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topnav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.topnav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 160px;
+}
+
+.topnav-brand .mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #1d54e6, #1340b8);
+  color: #fff;
+  font-family: 'Archivo Expanded', 'Archivo', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.topnav-brand strong {
+  display: block;
+  font-size: 14px;
+  font-family: 'Archivo', sans-serif;
+}
+
+.topnav-brand small {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.topnav-links {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.topnav-links a {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #c7d2d0;
+  text-decoration: none;
+}
+
+.topnav-links a.on,
+.topnav-links a:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn-sair {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #e8edf6;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-sair:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ramal-main {
+  min-height: calc(100vh - 64px);
+}

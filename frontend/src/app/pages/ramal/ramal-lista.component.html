@@ -1,0 +1,128 @@
+<div class="ramal-lista">
+  <header class="page-head">
+    <div class="ph-row">
+      <div>
+        <h1>Ramais &amp; Contatos</h1>
+        <p>Lista sincronizada da intranet</p>
+      </div>
+      <span class="sync">Sincronizado há {{ tempoDesdeSync() }}</span>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <label class="search">
+      <span class="sr-only">Buscar</span>
+      <input
+        type="search"
+        placeholder="Buscar por nome, cargo, ramal, e-mail…"
+        [ngModel]="busca()"
+        (ngModelChange)="busca.set($event)"
+      />
+    </label>
+    <select class="flt" [ngModel]="departamentoFiltro()" (ngModelChange)="departamentoFiltro.set($event)">
+      <option value="">Todos os departamentos</option>
+      @for (d of departamentos(); track d) {
+        <option [value]="d">{{ d }}</option>
+      }
+    </select>
+  </div>
+
+  <nav class="switcher" aria-label="Filtrar por empresa">
+    <button
+      type="button"
+      class="ent-tab"
+      [class.active]="!empresaFiltro()"
+      (click)="limparEmpresa()"
+    >
+      Todas
+    </button>
+    @for (emp of empresas(); track emp) {
+      <button
+        type="button"
+        class="ent-tab"
+        [class.active]="empresaFiltro() === emp"
+        [style.--ent-cor]="corMarcaEmpresa(emp)"
+        (click)="toggleEmpresa(emp)"
+      >
+        @if (logoUrlEmpresa(emp); as src) {
+          <img [src]="src" [alt]="emp" class="ent-logo" />
+        } @else {
+          <span>{{ emp }}</span>
+        }
+      </button>
+    }
+    @if (temOutros()) {
+      <button
+        type="button"
+        class="ent-tab"
+        [class.active]="empresaFiltro() === OUTROS_EMPRESA"
+        (click)="toggleOutros()"
+      >
+        Outros
+      </button>
+    }
+  </nav>
+
+  @if (erro()) {
+    <div class="alert">{{ erro() }}</div>
+  }
+
+  @if (carregando()) {
+    <p class="empty">Carregando diretório…</p>
+  } @else {
+    <div class="resline">
+      <b>{{ colaboradoresFiltrados().length }}</b>
+      {{
+        colaboradoresFiltrados().length === 1
+          ? 'colaborador encontrado'
+          : 'colaboradores encontrados'
+      }}
+    </div>
+
+    @if (!colaboradoresFiltrados().length) {
+      <p class="empty">Nenhum colaborador encontrado para esses filtros.</p>
+    } @else {
+      <div class="grid">
+        @for (c of colaboradoresFiltrados(); track c.id) {
+          <article class="card">
+            <div
+              class="avatar"
+              [style.background]="corAvatar(c.nome)"
+              aria-hidden="true"
+            >
+              {{ iniciais(c.nome) }}
+            </div>
+            <div class="body">
+              <h2>{{ c.nome }}</h2>
+              @if (c.cargo) {
+                <p class="cargo">{{ c.cargo }}</p>
+              }
+              @if (c.departamento || c.empresa) {
+                <p class="meta">
+                  {{ metaLinha(c) }}
+                </p>
+              }
+              <div class="contacts">
+                @if (c.ramal) {
+                  <button type="button" class="chip ramal" (click)="copiar(c.ramal)" title="Copiar ramal">
+                    Ramal <strong>{{ c.ramal }}</strong>
+                  </button>
+                }
+                @if (c.celular) {
+                  <button type="button" class="chip" (click)="copiar(c.celular)" title="Copiar celular">
+                    {{ c.celular }}
+                  </button>
+                }
+                @if (c.email) {
+                  <button type="button" class="chip" (click)="copiar(c.email)" title="Copiar e-mail">
+                    {{ c.email }}
+                  </button>
+                }
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  }
+</div>

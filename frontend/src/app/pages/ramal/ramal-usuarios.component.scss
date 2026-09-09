@@ -1,0 +1,223 @@
+.ramal-config {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+
+.ramal-config .page-head h1 {
+  margin: 0;
+  font-family: 'Archivo Expanded', 'Archivo', sans-serif;
+  font-size: 28px;
+  color: #10151f;
+}
+
+.ramal-config .page-head p {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.ramal-config .toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 14px;
+  flex-wrap: wrap;
+}
+
+.ramal-config .search input {
+  border: 1px solid #e2e6ee;
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 240px;
+  font-size: 14px;
+}
+
+.ramal-config .btn-primary {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  background: #1d54e6;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ramal-config .card {
+  background: #fff;
+  border: 1px solid #e2e6ee;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.ramal-config .card-body {
+  padding: 0;
+}
+
+.ramal-config table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ramal-config th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a93a8;
+  padding: 12px 16px;
+  background: #f4f5f8;
+  border-bottom: 1px solid #e2e6ee;
+}
+
+.ramal-config td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef1f6;
+  font-size: 14px;
+  color: #10151f;
+}
+
+.ramal-config tr:hover .row-actions {
+  opacity: 1;
+}
+
+.ramal-config .row-actions {
+  opacity: 0.35;
+  text-align: right;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+
+.ramal-config .iconbtn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.ramal-config .iconbtn:hover {
+  background: #f4f5f8;
+}
+
+.ramal-config .iconbtn.del:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.ramal-config .iconbtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.ramal-config .status-badge,
+.ramal-config .perfil-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ramal-config .status-badge.on {
+  background: rgba(28, 158, 98, 0.12);
+  color: #1c9e62;
+}
+
+.ramal-config .status-badge.off {
+  background: rgba(216, 69, 110, 0.12);
+  color: #d8456e;
+}
+
+.ramal-config .perfil-badge {
+  background: rgba(138, 147, 168, 0.15);
+  color: #48536a;
+}
+
+.ramal-config .perfil-badge.admin {
+  background: rgba(29, 84, 230, 0.12);
+  color: #1d54e6;
+}
+
+.ramal-config .empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: #8a93a8;
+}
+
+.ramal-config .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.ramal-config .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.ramal-config .field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #48536a;
+}
+
+.ramal-config .field input,
+.ramal-config .field select {
+  border: 1px solid #e2e6ee;
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-size: 14px;
+}
+
+.ramal-config .field-switch {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ramal-config .switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.ramal-config .switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ramal-config .slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #cfd5e3;
+  border-radius: 999px;
+  transition: 0.2s;
+}
+
+.ramal-config .slider::before {
+  content: '';
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.ramal-config .switch input:checked + .slider {
+  background: #1d54e6;
+}
+
+.ramal-config .switch input:checked + .slider::before {
+  transform: translateX(20px);
+}

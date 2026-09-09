@@ -1,0 +1,159 @@
+<div class="tablet-config admin-page">
+  <header class="page-head">
+    <h1>Usuários do Tablet</h1>
+    <p>Gerencie acessos locais do portal (sem Microsoft).</p>
+  </header>
+
+  <div class="toolbar">
+    <label class="search">
+      <span class="sr-only">Buscar</span>
+      <input type="search" placeholder="Buscar usuário…" (input)="onBusca($event)" [value]="busca()" />
+    </label>
+    <button type="button" class="btn-primary" (click)="novo()">Novo usuário</button>
+  </div>
+
+  <section class="card">
+    <div class="card-body">
+      @if (carregando()) {
+        <p class="empty">Carregando…</p>
+      } @else if (!filtrados().length) {
+        <p class="empty">Nenhum usuário encontrado.</p>
+      } @else {
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Nome</th>
+                <th>Empresa</th>
+                <th>Perfil</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (u of filtrados(); track u.id) {
+                <tr>
+                  <td><strong>{{ u.username }}</strong></td>
+                  <td>{{ u.nome }}</td>
+                  <td>{{ u.empresaNm || '—' }}</td>
+                  <td>
+                    <span class="perfil-badge" [class.admin]="u.perfil === 'ADMIN'">
+                      {{ u.perfil }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="status-badge" [class.on]="u.ativo" [class.off]="!u.ativo">
+                      {{ u.ativo ? 'ATIVO' : 'INATIVO' }}
+                    </span>
+                  </td>
+                  <td class="row-actions">
+                    <button type="button" class="iconbtn" title="Editar" (click)="editar(u)">✎</button>
+                    <button type="button" class="iconbtn" title="Alterar senha" (click)="alterarSenha(u)">
+                      🔑
+                    </button>
+                    <button
+                      type="button"
+                      class="iconbtn del"
+                      title="Excluir"
+                      [disabled]="u.id === meId()"
+                      (click)="excluir(u)"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  </section>
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  [title]="tituloModal()"
+  [subtitle]="subtituloModal()"
+  icon="folder"
+  [salvando]="salvando()"
+  [saveDisabled]="saveDisabled()"
+  [saveLabel]="saveLabel()"
+  (save)="salvar()"
+  (cancel)="fecharModal()"
+>
+  @if (modalMode() === 'criar') {
+    <form [formGroup]="formCriar" (ngSubmit)="salvar()">
+      <div class="field">
+        <label for="tbl-username">Usuário *</label>
+        <input id="tbl-username" formControlName="username" type="text" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="tbl-nome">Nome *</label>
+        <input id="tbl-nome" formControlName="nome" type="text" />
+      </div>
+      <div class="field">
+        <label for="tbl-senha">Senha *</label>
+        <input id="tbl-senha" formControlName="senha" type="password" autocomplete="new-password" />
+      </div>
+      <div class="field">
+        <label for="tbl-empresa">Empresa @if (!formCriar.controls.admin.value) { * }</label>
+        <select id="tbl-empresa" formControlName="empresaId">
+          <option value="">Selecione a empresa</option>
+          @for (e of empresas(); track e.id) {
+            <option [value]="e.id">{{ e.nm }}</option>
+          }
+        </select>
+      </div>
+      <div class="field field-switch">
+        <label for="tbl-admin">Administrador</label>
+        <label class="switch">
+          <input id="tbl-admin" type="checkbox" formControlName="admin" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </form>
+  } @else if (modalMode() === 'editar') {
+    <form [formGroup]="formEditar" (ngSubmit)="salvar()">
+      <div class="field">
+        <label for="tbl-edit-username">Usuário *</label>
+        <input id="tbl-edit-username" formControlName="username" type="text" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="tbl-edit-nome">Nome *</label>
+        <input id="tbl-edit-nome" formControlName="nome" type="text" />
+      </div>
+      <div class="field">
+        <label for="tbl-edit-empresa">Empresa @if (!formEditar.controls.admin.value) { * }</label>
+        <select id="tbl-edit-empresa" formControlName="empresaId">
+          <option value="">Selecione a empresa</option>
+          @for (e of empresas(); track e.id) {
+            <option [value]="e.id">{{ e.nm }}</option>
+          }
+        </select>
+      </div>
+      <div class="field field-switch">
+        <label for="tbl-edit-admin">Administrador</label>
+        <label class="switch">
+          <input id="tbl-edit-admin" type="checkbox" formControlName="admin" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="field field-switch">
+        <label for="tbl-edit-ativo">Ativo</label>
+        <label class="switch">
+          <input id="tbl-edit-ativo" type="checkbox" formControlName="ativo" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </form>
+  } @else {
+    <form [formGroup]="formSenha" (ngSubmit)="salvar()">
+      <div class="field">
+        <label for="tbl-nova-senha">Nova senha *</label>
+        <input id="tbl-nova-senha" formControlName="senha" type="password" autocomplete="new-password" />
+      </div>
+    </form>
+  }
+</app-admin-modal>

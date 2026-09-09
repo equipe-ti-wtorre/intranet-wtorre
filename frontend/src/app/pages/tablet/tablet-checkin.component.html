@@ -1,0 +1,186 @@
+<div class="tablet">
+  <header class="tablet-head">
+    <div class="head-inner">
+      <div class="head-top">
+        <div class="head-left">
+          <div class="eyebrow">
+            <app-msg-icon name="list" />
+            <span>Lista do dia</span>
+          </div>
+          <h1 class="head-title">{{ tituloEvento() }}</h1>
+          <p class="head-sub">
+            @if (day()?.evento?.masso) {
+              <span>{{ day()!.evento.masso }}</span>
+              <span class="dot" aria-hidden="true">·</span>
+            }
+            <span>{{ dataLonga() }}</span>
+            @if (day()?.evento?.local) {
+              <span class="dot" aria-hidden="true">·</span>
+              <span>{{ day()!.evento.local }}</span>
+            }
+          </p>
+        </div>
+
+        <div class="head-tools">
+          <label class="date-pill">
+            <app-msg-icon name="calendar" />
+            <span>{{ dataCurta() }}</span>
+            <input
+              type="date"
+              [value]="data()"
+              (change)="onDateChange($event)"
+              aria-label="Selecionar data"
+            />
+          </label>
+        </div>
+      </div>
+
+      @if (day(); as d) {
+        <div class="stats-row">
+          <button
+            type="button"
+            class="hero-stat"
+            [class.active]="filtro() === 'aguardando'"
+            (click)="setFiltro('aguardando')"
+          >
+            <strong>{{ d.stats.confirmados }}</strong>
+            <span>Aguardando</span>
+          </button>
+          <button
+            type="button"
+            class="hero-stat presentes"
+            [class.active]="filtro() === 'presente'"
+            (click)="setFiltro('presente')"
+          >
+            <strong>{{ d.stats.presentes }}</strong>
+            <span>Presentes</span>
+          </button>
+          <button
+            type="button"
+            class="hero-stat faltas"
+            [class.active]="filtro() === 'falta'"
+            (click)="setFiltro('falta')"
+          >
+            <strong>{{ d.stats.faltas }}</strong>
+            <span>Faltas</span>
+          </button>
+        </div>
+      }
+    </div>
+  </header>
+
+  <div class="tablet-body">
+    @if (bootError()) {
+      <p class="empty-boot">Nenhum evento ativo para esta empresa.</p>
+    }
+    @if (day(); as d) {
+      <div class="progress-card">
+        <div class="progress-head">
+          <span class="progress-label">Progresso do dia</span>
+          <span class="progress-pct">{{ progressoPct() }}%</span>
+        </div>
+        <div class="progress-track" role="progressbar" [attr.aria-valuenow]="progressoPct()" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" [style.width.%]="progressoPct()"></div>
+        </div>
+      </div>
+
+      <div class="lista-head">
+        <div class="lista-title">
+          <h2>{{ tituloSecao() }}</h2>
+          <span class="count-badge">{{ contagemFiltro() }}</span>
+        </div>
+        <div class="filter-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            [class.active]="filtro() === 'aguardando'"
+            [attr.aria-selected]="filtro() === 'aguardando'"
+            (click)="setFiltro('aguardando')"
+          >
+            Aguardando
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab-pres"
+            [class.active]="filtro() === 'presente'"
+            [attr.aria-selected]="filtro() === 'presente'"
+            (click)="setFiltro('presente')"
+          >
+            <app-msg-icon name="check" />
+            Presentes
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab-falta"
+            [class.active]="filtro() === 'falta'"
+            [attr.aria-selected]="filtro() === 'falta'"
+            (click)="setFiltro('falta')"
+          >
+            <app-msg-icon name="x" />
+            Faltas
+          </button>
+        </div>
+      </div>
+
+      @if (itensFiltrados().length === 0) {
+        <div class="empty-state">
+          @if (filtro() === 'aguardando') {
+            <app-msg-icon name="check" />
+          }
+          <span>{{ emptyMsg() }}</span>
+        </div>
+      } @else {
+        <div class="lista">
+          @for (item of itensFiltrados(); track item.chave) {
+            <article class="row" [class.done]="item.status === 'presente' || item.status === 'falta'">
+              <div class="row-top">
+                <div class="hora-block">
+                  <div class="hora">{{ item.hora }}</div>
+                  <div class="hora-fim">até {{ horaFim(item.hora) }}</div>
+                </div>
+                <div class="divider" aria-hidden="true"></div>
+                <div class="info">
+                  <strong>{{ item.nome }}</strong>
+                  <span>{{ item.email }}</span>
+                </div>
+                @if (item.status === 'ok') {
+                  <div class="actions">
+                    <button
+                      class="btn-presente"
+                      type="button"
+                      [disabled]="!noHorario(item.hora)"
+                      (click)="marcar(item.chave, 'presente', item.hora)"
+                    >
+                      <app-msg-icon name="check" />
+                      Presente
+                    </button>
+                    <button
+                      class="btn-falta"
+                      type="button"
+                      [disabled]="!podeFalta(item.hora)"
+                      (click)="marcar(item.chave, 'falta', item.hora)"
+                    >
+                      <app-msg-icon name="x" />
+                      Falta
+                    </button>
+                    @if (!noHorario(item.hora)) {
+                      <span class="fora-horario">Fora do horário</span>
+                    } @else if (!podeFalta(item.hora)) {
+                      <span class="fora-horario">Falta após 5 min</span>
+                    }
+                  </div>
+                } @else if (item.status === 'presente') {
+                  <span class="badge badge-ok">Presente</span>
+                } @else if (item.status === 'falta') {
+                  <span class="badge badge-danger">Falta</span>
+                }
+              </div>
+            </article>
+          }
+        </div>
+      }
+    }
+  </div>
+</div>

@@ -1,0 +1,28 @@
+<div class="msg-app tablet-portal">
+  <header class="tablet-topnav">
+    <div class="topnav-inner">
+      <div class="topnav-brand">
+        <span class="mark">WT</span>
+        <div>
+          <strong>Tablet · Massagem</strong>
+          <small>{{ nome() }}</small>
+        </div>
+      </div>
+      <nav class="topnav-links" aria-label="Tablet">
+        @if (isAdmin()) {
+          <a routerLink="/tablet" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">
+            Configuração
+          </a>
+        } @else {
+          <a routerLink="/tablet" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">
+            Lista do dia
+          </a>
+        }
+      </nav>
+      <button type="button" class="btn-sair" (click)="sair()">Sair</button>
+    </div>
+  </header>
+  <main class="tablet-main">
+    <router-outlet />
+  </main>
+</div>

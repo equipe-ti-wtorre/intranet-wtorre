@@ -1,0 +1,227 @@
+.tablet-config {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+
+.tablet-config .page-head h1 {
+  margin: 0;
+  font-family: 'Archivo Expanded', 'Archivo', sans-serif;
+  font-size: 28px;
+  color: #10151f;
+}
+
+.tablet-config .page-head p {
+  margin: 6px 0 0;
+  color: #6b7280;
+}
+
+.tablet-config .toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 14px;
+  flex-wrap: wrap;
+}
+
+.tablet-config .search input {
+  border: 1px solid #e2e6ee;
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 240px;
+  font-size: 14px;
+}
+
+.tablet-config .btn-primary {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  background: #0f6e56;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tablet-config .card {
+  background: #fff;
+  border: 1px solid #e2e6ee;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.tablet-config .card-body {
+  padding: 0;
+}
+
+.tablet-config table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tablet-config th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a93a8;
+  padding: 12px 16px;
+  background: #f4f5f8;
+  border-bottom: 1px solid #e2e6ee;
+}
+
+.tablet-config td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef1f6;
+  font-size: 14px;
+  color: #10151f;
+}
+
+.tablet-config tr:hover .row-actions {
+  opacity: 1;
+}
+
+.tablet-config .row-actions {
+  opacity: 0.35;
+  text-align: right;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+
+.tablet-config .iconbtn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.tablet-config .iconbtn:hover {
+  background: #f4f5f8;
+}
+
+.tablet-config .iconbtn.del:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tablet-config .iconbtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.tablet-config .status-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tablet-config .status-badge.on {
+  background: rgba(28, 158, 98, 0.12);
+  color: #1c9e62;
+}
+
+.tablet-config .status-badge.off {
+  background: rgba(216, 69, 110, 0.12);
+  color: #d8456e;
+}
+
+.tablet-config .empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: #8a93a8;
+}
+
+.tablet-config .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.tablet-config .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.tablet-config .field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #48536a;
+}
+
+.tablet-config .field input,
+.tablet-config .field select {
+  border: 1px solid #e2e6ee;
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-size: 14px;
+}
+
+.tablet-config .field-switch {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tablet-config .switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.tablet-config .switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.tablet-config .slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #cfd5e3;
+  border-radius: 999px;
+  transition: 0.2s;
+}
+
+.tablet-config .slider::before {
+  content: '';
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.tablet-config .switch input:checked + .slider {
+  background: #0f6e56;
+}
+
+.tablet-config .switch input:checked + .slider::before {
+  transform: translateX(20px);
+}
+
+.tablet-config .perfil-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(138, 147, 168, 0.15);
+  color: #48536a;
+}
+
+.tablet-config .perfil-badge.admin {
+  background: rgba(15, 110, 86, 0.12);
+  color: #0f6e56;
+}
