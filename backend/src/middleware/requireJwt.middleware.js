@@ -11,6 +11,9 @@ async function requireJwt(req, res, next) {
   const token = header.slice(7);
   try {
     const payload = jwtService.verifyAccess(token);
+    if (payload.typ === 'tablet' || payload.typ === 'pesquisas_guest') {
+      return res.status(401).json({ mensagem: 'Token inválido para a intranet.' });
+    }
     const user = await usersRepo.findById(payload.sub);
     if (!user || !user.ativo) {
       return res.status(401).json({ mensagem: 'Usuário inválido ou inativo.' });

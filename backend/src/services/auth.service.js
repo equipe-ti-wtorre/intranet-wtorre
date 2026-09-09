@@ -215,6 +215,12 @@ async function refresh(refreshToken) {
     throw err;
   }
 
+  if (payload.typ === 'tablet') {
+    const err = new Error('Refresh token inválido para a intranet.');
+    err.status = 401;
+    throw err;
+  }
+
   const stored = await refreshRepo.findValid(refreshToken);
   if (!stored) {
     const err = new Error('Refresh token revogado ou expirado.');

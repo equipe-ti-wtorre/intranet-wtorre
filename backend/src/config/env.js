@@ -98,6 +98,9 @@ const env = {
   solicitacaoColaboradorArquivoMaxMb: Number(process.env.SOLICITACAO_ARQUIVO_MAX_MB) || 10,
   solicitacaoColaboradorSmtpAnexoMaxMb:
     Number(process.env.SOLICITACAO_SMTP_ANEXO_MAX_MB) || 25,
+  pesquisasContainer: process.env.PESQUISAS_CONTAINER || 'pesquisas',
+  pesquisasTmpDir: process.env.PESQUISAS_TMP_DIR || os.tmpdir(),
+  pesquisasAnexoMaxMb: Number(process.env.PESQUISAS_ANEXO_MAX_MB) || 10,
   emailProvider: process.env.EMAIL_PROVIDER === 'acs' ? 'acs' : 'smtp',
   emailOcultarPara: process.env.EMAIL_OCULTAR_PARA === '1' || process.env.EMAIL_OCULTAR_PARA === 'true',
   eventGridWebhookSecret: process.env.EVENT_GRID_WEBHOOK_SECRET || '',

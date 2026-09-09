@@ -18,6 +18,8 @@ export const ADMIN_MODULO_ROTAS: { codigo: string; rota: string }[] = [
   { codigo: 'camarotes', rota: 'camarotes' },
   { codigo: 'solicitacao-colaborador', rota: 'solicitacao-colaborador' },
   { codigo: 'followup-suprimentos', rota: 'followup-suprimentos' },
+  { codigo: 'massagem', rota: 'massagem' },
+  { codigo: 'pesquisas', rota: 'pesquisas' },
 ];
 
 export function rotaParaModulo(path: string): string | null {

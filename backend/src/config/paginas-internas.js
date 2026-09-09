@@ -9,6 +9,8 @@ const PAGINAS_INTERNAS = [
   { path: '/ferramentas/pdf', label: 'Ferramentas de PDF' },
   { path: '/salas', label: 'Reservar sala' },
   { path: '/followup-suprimentos', label: 'Follow-up de Suprimentos' },
+  { path: '/massagem', label: 'Massagem' },
+  { path: '/pesquisas', label: 'Central de Pesquisas' },
 ];
 
 const DOCUMENTOS_PATH_REGEX = /^\/documentos(\/[a-z0-9-]+)?$/;

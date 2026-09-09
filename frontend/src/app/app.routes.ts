@@ -1,13 +1,21 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Routes, Router } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 import { adminGuard } from './guards/admin.guard';
 import { guestGuard } from './guards/guest.guard';
-import { moduloGuardFromRoute } from './guards/modulo.guard';
+import { moduloGuard, moduloGuardFromRoute } from './guards/modulo.guard';
 import { menuHubGuard } from './guards/menu-hub.guard';
 import { documentosHubGuard } from './guards/documentos-hub.guard';
 import { superAdminGuard } from './guards/super-admin.guard';
 import { camarotesViewerGuard } from './guards/camarotes-viewer.guard';
 import { solicitacaoViewerGuard } from './guards/solicitacao-viewer.guard';
+import {
+  tabletAuthGuard,
+  tabletGuestGuard,
+  tabletAdminCanMatch,
+  tabletUserCanMatch,
+} from './guards/tablet.guard';
+import { ramalAuthGuard, ramalGuestGuard, ramalAdminGuard } from './guards/ramal.guard';
 
 export const routes: Routes = [
   {
@@ -113,6 +121,156 @@ export const routes: Routes = [
       import('./pages/followup-suprimentos/followup-suprimentos.component').then(
         (m) => m.FollowupSuprimentosComponent
       ),
+  },
+  {
+    path: 'massagem',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/massagem/massagem-shell.component').then((m) => m.MassagemShellComponent),
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./pages/massagem/massagem-home.component').then((m) => m.MassagemHomeComponent),
+      },
+      {
+        path: 'evento/:id',
+        loadComponent: () =>
+          import('./pages/massagem/massagem-detalhe.component').then((m) => m.MassagemDetalheComponent),
+      },
+      {
+        path: 'minhas-reservas',
+        loadComponent: () =>
+          import('./pages/massagem/massagem-minhas.component').then((m) => m.MassagemMinhasComponent),
+      },
+      {
+        path: 'admin',
+        pathMatch: 'full',
+        redirectTo: () =>
+          inject(Router).createUrlTree(['/admin/massagem'], { queryParams: { aba: 'eventos' } }),
+      },
+    ],
+  },
+  {
+    path: 'pesquisas/e/:slug',
+    loadComponent: () =>
+      import('./pages/pesquisas/pesquisas-publico.component').then(
+        (m) => m.PesquisasPublicoComponent
+      ),
+  },
+  {
+    path: 'pesquisas',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/pesquisas/pesquisas-shell.component').then((m) => m.PesquisasShellComponent),
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./pages/pesquisas/pesquisas-home.component').then((m) => m.PesquisasHomeComponent),
+      },
+      {
+        path: 'lista/:tipo',
+        loadComponent: () =>
+          import('./pages/pesquisas/pesquisas-lista.component').then((m) => m.PesquisasListaComponent),
+      },
+      {
+        path: 'formulario/novo',
+        loadComponent: () =>
+          import('./pages/pesquisas/pesquisas-builder.component').then(
+            (m) => m.PesquisasBuilderComponent
+          ),
+      },
+      {
+        path: 'formulario/:id/editar',
+        loadComponent: () =>
+          import('./pages/pesquisas/pesquisas-builder.component').then(
+            (m) => m.PesquisasBuilderComponent
+          ),
+      },
+      {
+        path: 'formulario/:id/responder',
+        loadComponent: () =>
+          import('./pages/pesquisas/pesquisas-responder.component').then(
+            (m) => m.PesquisasResponderComponent
+          ),
+      },
+      {
+        path: 'formulario/:id/resultados',
+        loadComponent: () =>
+          import('./pages/pesquisas/pesquisas-resultados.component').then(
+            (m) => m.PesquisasResultadosComponent
+          ),
+      },
+      {
+        path: 'requisicao/nova',
+        pathMatch: 'full',
+        redirectTo: '',
+      },
+      {
+        path: 'requisicao/:id',
+        redirectTo: '',
+      },
+      {
+        path: 'admin',
+        pathMatch: 'full',
+        redirectTo: () => inject(Router).createUrlTree(['/admin/pesquisas']),
+      },
+    ],
+  },
+  {
+    path: 'tablet/login',
+    canActivate: [tabletGuestGuard],
+    loadComponent: () =>
+      import('./pages/tablet/tablet-login.component').then((m) => m.TabletLoginComponent),
+  },
+  {
+    path: 'tablet',
+    canActivate: [tabletAuthGuard],
+    loadComponent: () =>
+      import('./pages/tablet/tablet-shell.component').then((m) => m.TabletShellComponent),
+    children: [
+      {
+        path: '',
+        canMatch: [tabletAdminCanMatch],
+        loadComponent: () =>
+          import('./pages/tablet/tablet-usuarios.component').then((m) => m.TabletUsuariosComponent),
+      },
+      {
+        path: '',
+        canMatch: [tabletUserCanMatch],
+        loadComponent: () =>
+          import('./pages/tablet/tablet-checkin.component').then((m) => m.TabletCheckinComponent),
+      },
+      { path: 'config/usuarios', pathMatch: 'full', redirectTo: '' },
+      { path: 'config', pathMatch: 'full', redirectTo: '' },
+    ],
+  },
+  {
+    path: 'ramal/login',
+    canActivate: [ramalGuestGuard],
+    loadComponent: () =>
+      import('./pages/ramal/ramal-login.component').then((m) => m.RamalLoginComponent),
+  },
+  {
+    path: 'ramal',
+    canActivate: [ramalAuthGuard],
+    loadComponent: () =>
+      import('./pages/ramal/ramal-shell.component').then((m) => m.RamalShellComponent),
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./pages/ramal/ramal-lista.component').then((m) => m.RamalListaComponent),
+      },
+      {
+        path: 'config/usuarios',
+        canActivate: [ramalAdminGuard],
+        loadComponent: () =>
+          import('./pages/ramal/ramal-usuarios.component').then((m) => m.RamalUsuariosComponent),
+      },
+      { path: 'config', pathMatch: 'full', redirectTo: 'config/usuarios' },
+    ],
   },
   {
     path: 'dashboards',
@@ -290,6 +448,42 @@ export const routes: Routes = [
             (m) => m.FollowupAdminComponent
           ),
         data: { adminTitle: 'Follow-up de Suprimentos' },
+      },
+      {
+        path: 'massagem',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/massagem/massagem-admin.component').then(
+            (m) => m.MassagemAdminComponent
+          ),
+        data: { adminTitle: 'Configurações de Massagem' },
+      },
+      {
+        path: 'pesquisas',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/pesquisas/pesquisas-admin.component').then(
+            (m) => m.PesquisasAdminComponent
+          ),
+        data: { adminTitle: 'Central de Pesquisas' },
+      },
+      {
+        path: 'massagem/templates/novo',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/massagem/massagem-template-editor.component').then(
+            (m) => m.MassagemTemplateEditorComponent
+          ),
+        data: { adminTitle: 'Novo template', adminModulo: 'massagem' },
+      },
+      {
+        path: 'massagem/templates/:id',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/massagem/massagem-template-editor.component').then(
+            (m) => m.MassagemTemplateEditorComponent
+          ),
+        data: { adminTitle: 'Editar template', adminModulo: 'massagem' },
       },
       {
         path: 'solicitacao-colaborador',

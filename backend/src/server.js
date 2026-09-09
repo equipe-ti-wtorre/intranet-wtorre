@@ -32,11 +32,16 @@ const bidRoutes = require('./routes/bid.routes');
 const powerbiRoutes = require('./routes/powerbi.routes');
 const salasRoutes = require('./routes/salas.routes');
 const followupRoutes = require('./routes/followup.routes');
+const massagemRoutes = require('./routes/massagem.routes');
+const pesquisasRoutes = require('./routes/pesquisas.routes');
+const tabletRoutes = require('./routes/tablet.routes');
+const ramalRoutes = require('./routes/ramal.routes');
 const assinaturasController = require('./controllers/assinaturas.controller');
 const { agendarSincronizacaoColaboradores } = require('./services/colaboradores.sync');
 const { agendarJobsCamarotes } = require('./services/camarotes-cron.service');
 const { agendarJobsBid } = require('./services/bid-cron.service');
 const { agendarJobsFollowup } = require('./services/followup-cron.service');
+const { agendarLembretesMassagem } = require('./services/massagem-lembrete.service');
 const { reconcileAll } = require('./services/doc-pagina-menu.sync');
 const { ensureFotosDir } = require('./controllers/colaboradores.controller');
 const { ensureGrupoLogosDir } = require('./config/grupo-logos-upload');
@@ -97,6 +102,10 @@ app.use('/api/v1/bid', bidRoutes);
 app.use('/api/v1/powerbi', powerbiRoutes);
 app.use('/api/v1/salas', salasRoutes);
 app.use('/api/v1/followup', followupRoutes);
+app.use('/api/v1/massagem', massagemRoutes);
+app.use('/api/v1/pesquisas', pesquisasRoutes);
+app.use('/api/v1/tablet', tabletRoutes);
+app.use('/api/v1/ramal', ramalRoutes);
 
 // Rotas públicas de assinaturas (sem JWT — usadas pelo instalador antes de qualquer login)
 app.get('/api/v1/assinaturas/script/instalar', assinaturasController.obterScriptBase);
@@ -150,4 +159,5 @@ app.listen(env.port, () => {
   agendarJobsCamarotes();
   agendarJobsBid();
   agendarJobsFollowup();
+  agendarLembretesMassagem();
 });

@@ -27,4 +27,8 @@ function verifyRefresh(token) {
   return payload;
 }
 
-module.exports = { signAccess, signRefresh, verifyAccess, verifyRefresh };
+function signPesquisasGuest(payload) {
+  return jwt.sign({ ...payload, typ: 'pesquisas_guest' }, env.jwtSecret, { expiresIn: '8h' });
+}
+
+module.exports = { signAccess, signRefresh, verifyAccess, verifyRefresh, signPesquisasGuest };

@@ -164,6 +164,37 @@
         }
       </nav>
     }
+
+    @if (auth.hasModulo('massagem')) {
+      <div class="nav-group-label">Massagem</div>
+      <nav class="sidebar-nav">
+        <a routerLink="/admin/massagem" routerLinkActive="active" (click)="closeSidebar()">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 3c2.5 2.2 4 4.7 4 7.2A4 4 0 0112 14.2 4 4 0 018 10.2C8 7.7 9.5 5.2 12 3z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linejoin="round"
+            />
+            <path d="M8 17h8M9.5 20h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          Configurações
+        </a>
+      </nav>
+    }
+
+    @if (auth.hasModulo('pesquisas')) {
+      <div class="nav-group-label">Pesquisas</div>
+      <nav class="sidebar-nav">
+        <a routerLink="/admin/pesquisas" routerLinkActive="active" (click)="closeSidebar()">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6.5 3h8l3.5 3.5V21h-11.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+            <path d="M9 10h6M9 13.5h6M9 17h3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          Formulários
+        </a>
+      </nav>
+    }
     </div>
 
     <div class="sidebar-foot">
