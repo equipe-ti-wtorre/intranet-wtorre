@@ -152,11 +152,15 @@ export const routes: Routes = [
     ],
   },
   {
-    path: 'pesquisas/e/:slug',
+    path: 'f/:token',
     loadComponent: () =>
       import('./pages/pesquisas/pesquisas-publico.component').then(
         (m) => m.PesquisasPublicoComponent
       ),
+  },
+  {
+    path: 'pesquisas/e/:slug',
+    redirectTo: ({ params }) => `/f/${params['slug']}`,
   },
   {
     path: 'pesquisas',

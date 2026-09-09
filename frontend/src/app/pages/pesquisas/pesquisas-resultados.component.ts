@@ -9,6 +9,7 @@ import {
   PesquisasSerieDia,
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
+import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 
 @Component({
   selector: 'app-pesquisas-resultados',
@@ -229,9 +230,7 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   linkPublico(): string {
-    const slug = this.data()?.formulario.slug;
-    if (!slug || typeof window === 'undefined') return '';
-    return `${window.location.origin}/pesquisas/e/${slug}`;
+    return pesquisasLinkPublico(this.data()?.formulario.slug);
   }
 
   async copiarLink(): Promise<void> {

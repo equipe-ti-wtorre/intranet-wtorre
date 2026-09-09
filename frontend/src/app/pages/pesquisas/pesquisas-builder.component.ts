@@ -16,6 +16,7 @@ import {
   PublicoAlvo,
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
+import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
 
 const TPL_WTORRE: PesquisasTemplateVisual = {
@@ -242,9 +243,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   linkPublico(): string {
-    const slug = this.slug();
-    if (!slug || typeof window === 'undefined') return '';
-    return `${window.location.origin}/pesquisas/e/${slug}`;
+    return pesquisasLinkPublico(this.slug());
   }
 
   addPergunta(): void {

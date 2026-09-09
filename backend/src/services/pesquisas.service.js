@@ -244,30 +244,12 @@ function normalizeFormBody(body, { criadorId } = {}) {
   };
 }
 
-function slugifyTitulo(titulo) {
-  const base = String(titulo || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
-  return base || 'formulario';
-}
-
-async function uniqueSlug(base) {
-  let slug = base;
-  let n = 0;
-  while (await repo.slugExists(slug)) {
-    n += 1;
-    const suffix = n === 1 ? crypto.randomBytes(2).toString('hex') : String(n);
-    slug = `${base.slice(0, 70)}-${suffix}`.slice(0, 80);
-    if (n > 20) {
-      slug = `${base.slice(0, 60)}-${Date.now().toString(36)}`.slice(0, 80);
-      break;
-    }
+async function uniquePublicToken() {
+  for (let i = 0; i < 24; i += 1) {
+    const token = crypto.randomBytes(16).toString('base64url');
+    if (!(await repo.slugExists(token))) return token;
   }
-  return slug;
+  throw httpError(500, 'Não foi possível gerar o link público.');
 }
 
 function digitsCpf(raw) {
@@ -681,7 +663,7 @@ async function salvarFormulario(req, { publicar }) {
       await repo.replaceConvidados(idParam, []);
     }
     if (!existing.slug) {
-      await repo.setFormularioSlug(idParam, await uniqueSlug(slugifyTitulo(body.titulo)));
+      await repo.setFormularioSlug(idParam, await uniquePublicToken());
     }
     if (publicar && body.publicoAlvo === 'externos') {
       const n = guests ? guests.length : await repo.countConvidados(idParam);
@@ -695,7 +677,7 @@ async function salvarFormulario(req, { publicar }) {
     return getFormularioPorId(idParam, { includeConvidados: true });
   }
 
-  const slug = await uniqueSlug(slugifyTitulo(body.titulo));
+  const slug = await uniquePublicToken();
   const id = await repo.insertFormulario({ ...body, status, slug });
   await repo.replacePerguntas(id, body.perguntas);
   if (guests && guests.length) {
@@ -726,7 +708,7 @@ async function publicarFormulario(req) {
       }
     }
     if (!existing.slug) {
-      await repo.setFormularioSlug(idParam, await uniqueSlug(slugifyTitulo(existing.titulo)));
+      await repo.setFormularioSlug(idParam, await uniquePublicToken());
     }
     await repo.setFormularioStatus(idParam, 'publicado');
     form = await getFormularioPorId(idParam, { includeConvidados: true });
@@ -1150,7 +1132,7 @@ async function departamentos() {
 
 function parseSlug(raw) {
   const slug = str(raw, 80);
-  if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+  if (!slug || !/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/.test(slug)) {
     throw httpError(400, 'Link inválido.');
   }
   return slug;

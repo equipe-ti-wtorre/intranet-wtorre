@@ -60,7 +60,7 @@ export class PesquisasPublicoComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    const slug = this.route.snapshot.paramMap.get('slug') || '';
+    const slug = this.route.snapshot.paramMap.get('token') || this.route.snapshot.paramMap.get('slug') || '';
     this.api.publicoMeta(slug).subscribe({
       next: (m) => {
         this.meta.set(m);
