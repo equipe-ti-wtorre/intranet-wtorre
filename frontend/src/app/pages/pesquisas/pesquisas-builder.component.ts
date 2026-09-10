@@ -6,6 +6,8 @@ import { switchMap, of } from 'rxjs';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
 import {
+  BlocoTipo,
+  CapaLayout,
   EventoTipo,
   LogicaCondicao,
   PerguntaTipo,
@@ -14,10 +16,14 @@ import {
   PesquisasPergunta,
   PesquisasTemplateVisual,
   PublicoAlvo,
+  TextoEstilo,
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
-import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
+import {
+  GuestReorderEvent,
+  PesquisasGuestFormComponent,
+} from './shared/pesquisas-guest-form.component';
 
 const TPL_WTORRE: PesquisasTemplateVisual = {
   codigo: 'wtorre',
@@ -30,12 +36,16 @@ const TPL_WTORRE: PesquisasTemplateVisual = {
 
 interface QDraft {
   key: number;
+  blocoTipo: BlocoTipo;
   texto: string;
   tipo: PerguntaTipo;
   obrigatoria: boolean;
-  opcoesTxt: string;
+  opcoes: string[];
   secaoTitulo: string;
   logicaCondicao: LogicaCondicao;
+  ajuda: string;
+  novaLinha: boolean;
+  textoEstilo: TextoEstilo;
 }
 
 interface GuestDraft {
@@ -94,8 +104,29 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly templateCodigo = signal('wtorre');
   readonly capaUrl = signal<string | null>(null);
   readonly capaLocalUrl = signal<string | null>(null);
+  readonly capaLayout = signal<CapaLayout>('left');
+  readonly passo = signal<'layout' | 'builder'>('layout');
+  readonly menuAddOpen = signal(false);
+  readonly previewExpandido = signal(false);
   readonly previewRespostas = signal<Record<string, string>>({});
   private capaPendente: File | null = null;
+  private listDragKey: number | null = null;
+  readonly listDrop = signal<{ targetKey: number; insertBefore: boolean } | null>(null);
+  readonly layouts: { id: CapaLayout; title: string; sub: string }[] = [
+    { id: 'top', title: 'Imagem no topo', sub: 'Faixa superior, com o painel de campos abaixo.' },
+    { id: 'bottom', title: 'Imagem embaixo', sub: 'Painel de campos acima, com a faixa da imagem no rodapé.' },
+    { id: 'left', title: 'Imagem à esquerda', sub: 'Barra lateral fixa; os campos ficam à direita.' },
+    { id: 'right', title: 'Imagem à direita', sub: 'Barra lateral fixa; os campos ficam à esquerda.' },
+  ];
+  readonly zoneHint = computed(() => {
+    const map: Record<CapaLayout, string> = {
+      top: 'Vai aparecer no topo do formulário.',
+      bottom: 'Vai aparecer no rodapé do formulário.',
+      left: 'Vai aparecer na lateral esquerda do formulário.',
+      right: 'Vai aparecer na lateral direita do formulário.',
+    };
+    return map[this.capaLayout()];
+  });
 
   readonly templateAtual = computed(
     () => this.templates().find((t) => t.codigo === this.templateCodigo()) || this.templates()[0] || TPL_WTORRE
@@ -109,13 +140,16 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       tipo: p.tipo,
       obrigatoria: p.obrigatoria,
       opcoes:
-        p.tipo === 'multipla_escolha'
-          ? p.opcoesTxt
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [],
+        p.blocoTipo === 'texto'
+          ? [p.textoEstilo]
+          : p.tipo === 'multipla_escolha'
+            ? p.opcoes.map((s) => s.trim()).filter(Boolean)
+            : [],
       secaoTitulo: p.secaoTitulo || null,
+      blocoTipo: p.blocoTipo,
+      ajuda: p.ajuda || null,
+      novaLinha: p.novaLinha,
+      textoEstilo: p.textoEstilo,
     }))
   );
   readonly janelaDica = computed(() => {
@@ -154,7 +188,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
             this.formId.set(Number(id));
             return this.api.getFormulario(Number(id));
           }
-          this.perguntas.set([this.novaPergunta(), this.novaPergunta()]);
+          this.perguntas.set([]);
+          this.passo.set('layout');
           this.carregando.set(false);
           return of(null);
         })
@@ -180,9 +215,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.perguntas.set((form.perguntas || []).map((p) => this.fromApi(p)));
           this.templateCodigo.set(form.template?.codigo || form.templateCodigo || 'wtorre');
           this.capaUrl.set(form.capaUrl || null);
-          if (!this.perguntas().length) {
-            this.perguntas.set([this.novaPergunta(), this.novaPergunta()]);
-          }
+          this.capaLayout.set(form.capaLayout || 'top');
+          this.passo.set('builder');
           this.carregando.set(false);
         },
         error: (err: HttpErrorResponse) => {
@@ -240,6 +274,192 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   onPreviewEnviar(): void {
     this.alertas.sucesso('Isto é só uma prévia — nada foi enviado.');
+  }
+
+  onPreviewArquivo(ev: { key: string; file: File | null }): void {
+    this.previewRespostas.update((r) => ({ ...r, [ev.key]: ev.file?.name || '' }));
+  }
+
+  onPreviewReorder(ev: GuestReorderEvent): void {
+    const byKey = new Map(this.perguntas().map((p) => [p.key, p]));
+    const seen = new Set<number>();
+    const next: QDraft[] = [];
+    for (const key of ev.keys) {
+      if (seen.has(key)) continue;
+      const card = byKey.get(key);
+      if (!card) continue;
+      seen.add(key);
+      next.push({ ...card, novaLinha: ev.novaLinha[key] !== false });
+    }
+    for (const p of this.perguntas()) {
+      if (seen.has(p.key)) continue;
+      seen.add(p.key);
+      next.push(p);
+    }
+    this.perguntas.set(next);
+    this.previewRespostas.set({});
+  }
+
+  escolherLayout(layout: CapaLayout): void {
+    this.capaLayout.set(layout);
+    this.passo.set('builder');
+  }
+
+  abrirGaleria(): void {
+    this.passo.set('layout');
+    this.previewExpandido.set(false);
+  }
+
+  togglePreview(): void {
+    this.previewExpandido.update((v) => !v);
+  }
+
+  addBloco(tipo: BlocoTipo): void {
+    this.menuAddOpen.set(false);
+    this.perguntas.update((list) => [...list, this.novoBloco(tipo)]);
+  }
+
+  addOpcao(key: number): void {
+    this.perguntas.update((list) =>
+      list.map((p) => {
+        if (p.key !== key) return p;
+        const letter = String.fromCharCode(65 + p.opcoes.length);
+        return { ...p, opcoes: [...p.opcoes, `Opção ${letter}`] };
+      })
+    );
+  }
+
+  removeOpcao(key: number, idx: number): void {
+    const card = this.perguntas().find((p) => p.key === key);
+    if (!card || card.opcoes.length <= 2) {
+      this.alertas.erro('Precisa de pelo menos 2 opções.');
+      return;
+    }
+    this.perguntas.update((list) =>
+      list.map((p) => (p.key === key ? { ...p, opcoes: p.opcoes.filter((_, i) => i !== idx) } : p))
+    );
+  }
+
+  setOpcao(key: number, idx: number, valor: string): void {
+    this.perguntas.update((list) =>
+      list.map((p) => {
+        if (p.key !== key) return p;
+        const opcoes = p.opcoes.slice();
+        opcoes[idx] = valor;
+        return { ...p, opcoes };
+      })
+    );
+  }
+
+  async onExcel(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+      if (!rows.length) {
+        this.alertas.erro('A planilha está vazia.');
+        return;
+      }
+      this.importRowIntoForm(rows[0]);
+    } catch {
+      this.alertas.erro('Não consegui ler essa planilha.');
+    }
+  }
+
+  onListMouseDown(ev: MouseEvent): void {
+    const handle = (ev.target as HTMLElement).closest('.block-drag');
+    if (!handle) return;
+    handle.closest('.block-card')?.setAttribute('draggable', 'true');
+  }
+
+  onListDragStart(ev: DragEvent): void {
+    const card = (ev.target as HTMLElement).closest('.block-card');
+    if (!card) return;
+    card.classList.add('dragging');
+    this.listDragKey = Number(card.getAttribute('data-key'));
+    this.listDrop.set(null);
+    if (ev.dataTransfer) {
+      ev.dataTransfer.effectAllowed = 'move';
+      try {
+        ev.dataTransfer.setData('text/plain', '');
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  onListDragOver(ev: DragEvent): void {
+    ev.preventDefault();
+    const wrap = ev.currentTarget as HTMLElement;
+    const cards = Array.from(wrap.querySelectorAll('.block-card:not(.dragging)'));
+    let after: Element | null = null;
+    let closest = -Infinity;
+    for (const card of cards) {
+      const box = card.getBoundingClientRect();
+      const offset = ev.clientY - box.top - box.height / 2;
+      if (offset < 0 && offset > closest) {
+        closest = offset;
+        after = card;
+      }
+    }
+    const target = (after || cards[cards.length - 1]) as HTMLElement | undefined;
+    if (!target) return;
+    this.listDrop.set({
+      targetKey: Number(target.getAttribute('data-key')),
+      insertBefore: !!after,
+    });
+  }
+
+  onListDragLeave(ev: DragEvent): void {
+    const wrap = ev.currentTarget as HTMLElement;
+    const next = ev.relatedTarget as Node | null;
+    if (next && wrap.contains(next)) return;
+    this.listDrop.set(null);
+  }
+
+  onListDragEnd(ev: DragEvent): void {
+    const card = (ev.target as HTMLElement).closest('.block-card');
+    card?.classList.remove('dragging');
+    card?.setAttribute('draggable', 'false');
+    const dragKey = this.listDragKey ?? Number(card?.getAttribute('data-key'));
+    this.listDragKey = null;
+    const drop = this.listDrop();
+    this.listDrop.set(null);
+    if (!Number.isFinite(dragKey) || !dragKey) return;
+    const seen = new Set<number>();
+    const keys = this.perguntas()
+      .map((p) => p.key)
+      .filter((k) => {
+        if (seen.has(k) || k === dragKey) return false;
+        seen.add(k);
+        return true;
+      });
+    if (drop && keys.includes(drop.targetKey)) {
+      const idx = keys.indexOf(drop.targetKey);
+      keys.splice(drop.insertBefore ? idx : idx + 1, 0, dragKey);
+    } else {
+      keys.push(dragKey);
+    }
+    const byKey = new Map(this.perguntas().map((p) => [p.key, p]));
+    const next: QDraft[] = [];
+    const used = new Set<number>();
+    for (const k of keys) {
+      const item = byKey.get(k);
+      if (!item || used.has(k)) continue;
+      used.add(k);
+      next.push(item);
+    }
+    for (const p of this.perguntas()) {
+      if (used.has(p.key)) continue;
+      used.add(p.key);
+      next.push(p);
+    }
+    this.perguntas.set(next);
   }
 
   linkPublico(): string {
@@ -362,12 +582,25 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   voltar(): void {
+    if (this.passo() === 'builder' && !this.formId()) {
+      this.passo.set('layout');
+      this.previewExpandido.set(false);
+      return;
+    }
+    if (this.passo() === 'layout' && this.formId()) {
+      this.passo.set('builder');
+      return;
+    }
     void this.router.navigate(['/pesquisas']);
   }
 
   salvar(publicar: boolean): void {
     if (publicar && !this.titulo().trim()) {
       this.alertas.erro('Dê um título ao formulário antes de publicar.');
+      return;
+    }
+    if (publicar && !this.perguntas().some((p) => p.blocoTipo === 'pergunta')) {
+      this.alertas.erro('Inclua ao menos uma pergunta antes de publicar.');
       return;
     }
     if (publicar && this.publicoAlvo() === 'externos' && !this.convidados().length) {
@@ -431,29 +664,102 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   private novaPergunta(): QDraft {
+    return this.novoBloco('pergunta');
+  }
+
+  private novoBloco(tipo: BlocoTipo): QDraft {
     qKey += 1;
+    if (tipo === 'texto') {
+      return {
+        key: qKey,
+        blocoTipo: 'texto',
+        texto: '',
+        tipo: 'texto_curto',
+        obrigatoria: false,
+        opcoes: [],
+        secaoTitulo: '',
+        logicaCondicao: 'qualquer',
+        ajuda: '',
+        novaLinha: true,
+        textoEstilo: 'paragrafo',
+      };
+    }
+    if (tipo === 'anexo') {
+      return {
+        key: qKey,
+        blocoTipo: 'anexo',
+        texto: 'Anexar arquivo',
+        tipo: 'texto_curto',
+        obrigatoria: true,
+        opcoes: [],
+        secaoTitulo: '',
+        logicaCondicao: 'qualquer',
+        ajuda: '',
+        novaLinha: true,
+        textoEstilo: 'paragrafo',
+      };
+    }
     return {
       key: qKey,
-      texto: `Pergunta ${this.perguntas().length + 1}`,
+      blocoTipo: 'pergunta',
+      texto: 'Pergunta',
       tipo: 'texto_curto',
       obrigatoria: true,
-      opcoesTxt: '',
+      opcoes: ['Opção A', 'Opção B'],
       secaoTitulo: '',
       logicaCondicao: 'qualquer',
+      ajuda: '',
+      novaLinha: true,
+      textoEstilo: 'paragrafo',
     };
   }
 
   private fromApi(p: PesquisasPergunta): QDraft {
     qKey += 1;
+    const blocoTipo = p.blocoTipo || 'pergunta';
+    const textoEstilo: TextoEstilo =
+      p.textoEstilo === 'titulo' || (p.opcoes || [])[0] === 'titulo' ? 'titulo' : 'paragrafo';
     return {
       key: qKey,
+      blocoTipo,
       texto: p.texto,
       tipo: p.tipo,
       obrigatoria: p.obrigatoria,
-      opcoesTxt: (p.opcoes || []).join('\n'),
+      opcoes:
+        blocoTipo === 'pergunta' && p.tipo === 'multipla_escolha'
+          ? p.opcoes?.length
+            ? [...p.opcoes]
+            : ['Opção A', 'Opção B']
+          : ['Opção A', 'Opção B'],
       secaoTitulo: p.secaoTitulo || '',
       logicaCondicao: p.logica?.condicao || 'qualquer',
+      ajuda: p.ajuda || '',
+      novaLinha: p.novaLinha !== false,
+      textoEstilo,
     };
+  }
+
+  private importRowIntoForm(row: Record<string, unknown>): void {
+    const titleFields = ['titulo', 'título', 'nome do evento', 'evento', 'nome'];
+    let created = 0;
+    for (const header of Object.keys(row)) {
+      const norm = header.trim().toLowerCase();
+      if (titleFields.includes(norm)) {
+        this.titulo.set(String(row[header] ?? '').trim());
+        continue;
+      }
+      const exists = this.perguntas().some(
+        (p) => p.blocoTipo === 'pergunta' && p.texto.trim().toLowerCase() === norm
+      );
+      if (exists) continue;
+      const card = this.novoBloco('pergunta');
+      card.texto = header;
+      this.perguntas.update((list) => [...list, card]);
+      created += 1;
+    }
+    this.alertas.sucesso(
+      created === 1 ? '1 pergunta criada a partir das colunas da planilha.' : `${created} pergunta(s) criada(s) a partir das colunas da planilha.`
+    );
   }
 
   private fromGuestApi(g: PesquisasConvidado): GuestDraft {
@@ -551,6 +857,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       eventoAtivo: this.eventoAtivo(),
       exigirIdentidade: this.exigirIdentidade(),
       templateCodigo: this.templateCodigo(),
+      capaLayout: this.capaLayout(),
       convidados: this.convidados().map((g) => ({
         id: g.id,
         nome: g.nome,
@@ -558,19 +865,22 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         cpf: this.digits(g.cpf) || undefined,
       })),
       perguntas: this.perguntas().map((p, idx) => ({
+        blocoTipo: p.blocoTipo,
         texto: p.texto,
         tipo: p.tipo,
         obrigatoria: p.obrigatoria,
         opcoes:
-          p.tipo === 'multipla_escolha'
-            ? p.opcoesTxt
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean)
-            : [],
+          p.blocoTipo === 'texto'
+            ? [p.textoEstilo]
+            : p.tipo === 'multipla_escolha'
+              ? p.opcoes.map((s) => s.trim()).filter(Boolean)
+              : [],
+        textoEstilo: p.textoEstilo,
+        ajuda: p.ajuda,
+        novaLinha: p.novaLinha,
         secaoTitulo: p.secaoTitulo,
         logica:
-          this.logica() && idx > 0
+          this.logica() && idx > 0 && p.blocoTipo === 'pergunta'
             ? { perguntaOrdem: idx, condicao: p.logicaCondicao }
             : null,
       })),

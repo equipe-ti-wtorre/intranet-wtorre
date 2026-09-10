@@ -76,6 +76,7 @@ function mapFormulario(row) {
     eventoAtivo: row.evento_ativo == null ? true : !!row.evento_ativo,
     exigirIdentidade: row.exigir_identidade == null ? true : !!row.exigir_identidade,
     templateCodigo: row.template_codigo || 'wtorre',
+    capaLayout: row.capa_layout || 'top',
     capaContainer: row.capa_container || null,
     capaBlob: row.capa_blob || null,
     capaNome: row.capa_nome || null,
@@ -99,6 +100,9 @@ function mapPergunta(row) {
     opcoes: Array.isArray(parseJson(row.opcoes, [])) ? parseJson(row.opcoes, []) : [],
     secaoTitulo: row.secao_titulo || null,
     logica: parseJson(row.logica, null),
+    blocoTipo: row.bloco_tipo || 'pergunta',
+    ajuda: row.ajuda || null,
+    novaLinha: row.nova_linha == null ? true : !!row.nova_linha,
   };
 }
 
@@ -332,8 +336,8 @@ async function insertFormulario(data) {
       (criador_id, titulo, descricao, categoria, prazo, prazo_inicio, prazo_fim,
        publico_alvo, publico_departamento,
        tipo, status, secoes, logica_condicional, anonimo,
-       slug, evento_tipo, evento_tipo_outro, evento_ativo, exigir_identidade, template_codigo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       slug, evento_tipo, evento_tipo_outro, evento_ativo, exigir_identidade, template_codigo, capa_layout)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.criadorId,
       data.titulo,
@@ -355,6 +359,7 @@ async function insertFormulario(data) {
       data.eventoAtivo === false ? 0 : 1,
       data.exigirIdentidade === false ? 0 : 1,
       data.templateCodigo || 'wtorre',
+      data.capaLayout || 'top',
     ]
   );
   return result.insertId;
@@ -368,7 +373,7 @@ async function updateFormularioMeta(id, data) {
        publico_alvo = ?, publico_departamento = ?, tipo = ?, status = ?,
        secoes = ?, logica_condicional = ?, anonimo = ?,
        evento_tipo = ?, evento_tipo_outro = ?, evento_ativo = ?, exigir_identidade = ?,
-       template_codigo = ?
+       template_codigo = ?, capa_layout = ?
      WHERE id = ?`,
     [
       data.titulo,
@@ -389,6 +394,7 @@ async function updateFormularioMeta(id, data) {
       data.eventoAtivo === false ? 0 : 1,
       data.exigirIdentidade === false ? 0 : 1,
       data.templateCodigo || 'wtorre',
+      data.capaLayout || 'top',
       id,
     ]
   );
@@ -403,8 +409,9 @@ async function replacePerguntas(formularioId, perguntas) {
     for (const p of perguntas) {
       await conn.execute(
         `INSERT INTO pesquisas_perguntas
-          (formulario_id, ordem, texto, tipo, obrigatoria, opcoes, secao_titulo, logica)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (formulario_id, ordem, texto, tipo, obrigatoria, opcoes, secao_titulo, logica,
+           bloco_tipo, ajuda, nova_linha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           formularioId,
           p.ordem,
@@ -414,6 +421,9 @@ async function replacePerguntas(formularioId, perguntas) {
           p.opcoes ? JSON.stringify(p.opcoes) : null,
           p.secaoTitulo || null,
           p.logica ? JSON.stringify(p.logica) : null,
+          p.blocoTipo || 'pergunta',
+          p.ajuda || null,
+          p.novaLinha === false ? 0 : 1,
         ]
       );
     }

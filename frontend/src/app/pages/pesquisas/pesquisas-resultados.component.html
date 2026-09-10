@@ -182,6 +182,20 @@
               <span class="bar-pct">{{ bar.pct }}%</span>
             </div>
           }
+        } @else if (q.blocoTipo === 'anexo') {
+          @if (!q.respostas.length) {
+            <p class="page-sub">Ainda sem arquivos.</p>
+          } @else {
+            @for (r of q.respostas; track $index) {
+              <div class="sample-quote">
+                @if (r.anexoUrl) {
+                  <a [href]="r.anexoUrl" target="_blank" rel="noopener">{{ r.valor }}</a>
+                } @else {
+                  {{ r.valor }}
+                }
+              </div>
+            }
+          }
         } @else {
           @if (!samples(q).length) {
             <p class="page-sub">Ainda sem respostas.</p>

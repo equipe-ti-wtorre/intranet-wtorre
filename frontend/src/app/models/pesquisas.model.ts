@@ -7,6 +7,9 @@ export type PerguntaTipo =
   | 'multipla_escolha'
   | 'escala'
   | 'sim_nao';
+export type BlocoTipo = 'pergunta' | 'texto' | 'anexo';
+export type CapaLayout = 'top' | 'bottom' | 'left' | 'right';
+export type TextoEstilo = 'paragrafo' | 'titulo';
 export type LogicaCondicao = 'qualquer' | 'sim' | 'nao' | 'escala_gte_4';
 export type RequisicaoTipo = 'compra' | 'ti' | 'rh' | 'manutencao' | 'outro';
 export type RequisicaoPrioridade = 'baixa' | 'media' | 'alta';
@@ -80,6 +83,10 @@ export interface PesquisasPergunta {
   opcoes: string[];
   secaoTitulo?: string | null;
   logica?: PesquisasLogica | null;
+  blocoTipo?: BlocoTipo;
+  ajuda?: string | null;
+  novaLinha?: boolean;
+  textoEstilo?: TextoEstilo;
 }
 
 export interface PesquisasConvidado {
@@ -121,6 +128,7 @@ export interface PesquisasFormulario {
   templateCodigo?: string;
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
+  capaLayout?: CapaLayout;
   temCapa?: boolean;
 }
 
@@ -151,10 +159,12 @@ export interface PesquisasResponderPayload {
   perguntas: PesquisasPergunta[];
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
+  capaLayout?: CapaLayout;
 }
 
 export interface PesquisasResultadoItem {
   valor: string;
+  anexoUrl?: string | null;
   respondente: { nome: string; email: string } | null;
   enviadoEm: string | null;
 }
@@ -233,6 +243,7 @@ export interface PesquisasPublicoMeta {
   prazoFim?: string | null;
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
+  capaLayout?: CapaLayout;
 }
 
 export const PESQUISAS_CATEGORIAS = [

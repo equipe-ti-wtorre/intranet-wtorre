@@ -13,6 +13,8 @@ const { env } = require('../config/env');
 const PUBLICOS = ['todos', 'departamento', 'externos'];
 const EVENTO_TIPOS = ['show', 'jogo', 'outro'];
 const PERGUNTA_TIPOS = ['texto_curto', 'texto_longo', 'multipla_escolha', 'escala', 'sim_nao'];
+const BLOCO_TIPOS = ['pergunta', 'texto', 'anexo'];
+const CAPA_LAYOUTS = ['top', 'bottom', 'left', 'right'];
 const CONDICOES = ['qualquer', 'sim', 'nao', 'escala_gte_4'];
 const REQ_TIPOS = ['compra', 'ti', 'rh', 'manutencao', 'outro'];
 const PRIORIDADES = ['baixa', 'media', 'alta'];
@@ -159,11 +161,50 @@ function formatBrDateTime(iso) {
   return d.toLocaleDateString('pt-BR');
 }
 
+function isBlocoPergunta(p) {
+  return !p.blocoTipo || p.blocoTipo === 'pergunta';
+}
+
 function normalizePerguntas(raw, { logicaOn, secoesOn }) {
   if (!Array.isArray(raw) || !raw.length) {
-    throw httpError(400, 'Inclua ao menos uma pergunta.');
+    throw httpError(400, 'Inclua ao menos um campo no formulário.');
   }
   return raw.map((p, idx) => {
+    const blocoTipo = BLOCO_TIPOS.includes(p.blocoTipo) ? p.blocoTipo : 'pergunta';
+    const ajuda = str(p.ajuda, 500) || null;
+    const novaLinha = p.novaLinha !== false;
+    if (blocoTipo === 'texto') {
+      const estilo =
+        p.textoEstilo === 'titulo' || (Array.isArray(p.opcoes) && p.opcoes[0] === 'titulo')
+          ? 'titulo'
+          : 'paragrafo';
+      return {
+        ordem: idx + 1,
+        texto: str(p.texto, 500) || 'Texto',
+        tipo: 'texto_curto',
+        obrigatoria: false,
+        opcoes: [estilo],
+        secaoTitulo: null,
+        logica: null,
+        blocoTipo,
+        ajuda,
+        novaLinha,
+      };
+    }
+    if (blocoTipo === 'anexo') {
+      return {
+        ordem: idx + 1,
+        texto: str(p.texto, 500) || 'Anexar arquivo',
+        tipo: 'texto_curto',
+        obrigatoria: p.obrigatoria !== false,
+        opcoes: null,
+        secaoTitulo: secoesOn ? str(p.secaoTitulo, 200) || null : null,
+        logica: null,
+        blocoTipo,
+        ajuda,
+        novaLinha,
+      };
+    }
     const texto = str(p.texto, 500);
     if (!texto) throw httpError(400, `Informe o texto da pergunta ${idx + 1}.`);
     const tipo = PERGUNTA_TIPOS.includes(p.tipo) ? p.tipo : 'texto_curto';
@@ -190,6 +231,9 @@ function normalizePerguntas(raw, { logicaOn, secoesOn }) {
       opcoes: tipo === 'multipla_escolha' ? opcoes : null,
       secaoTitulo: secoesOn ? str(p.secaoTitulo, 200) || null : null,
       logica,
+      blocoTipo,
+      ajuda,
+      novaLinha,
     };
   });
 }
@@ -222,6 +266,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
     exigirIdentidade = body.exigirIdentidade !== false;
   }
   const { prazoInicio, prazoFim } = parseJanela(body);
+  const capaLayout = CAPA_LAYOUTS.includes(body.capaLayout) ? body.capaLayout : 'top';
   return {
     criadorId,
     titulo,
@@ -241,6 +286,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
     eventoTipoOutro,
     eventoAtivo,
     exigirIdentidade,
+    capaLayout,
   };
 }
 
@@ -640,6 +686,9 @@ async function salvarFormulario(req, { publicar }) {
     { criadorId: req.user.id }
   );
   body.templateCodigo = await resolveTemplateCodigo(req.body?.templateCodigo);
+  if (publicar && !body.perguntas.some(isBlocoPergunta)) {
+    throw httpError(400, 'Inclua ao menos uma pergunta antes de publicar.');
+  }
   const status = publicar ? 'publicado' : 'rascunho';
   const idParam = req.params.id ? parseId(req.params.id) : null;
   const guests = Array.isArray(req.body?.convidados)
@@ -813,23 +862,109 @@ async function payloadResponder(req) {
     perguntas,
     template: visual.template,
     capaUrl: visual.capaUrl,
+    capaLayout: form.capaLayout || 'top',
   };
 }
 
-function montarItensResposta(perguntas, rawItens) {
+function parseItensBody(req) {
+  let raw = req.body?.itens;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      raw = [];
+    }
+  }
+  return Array.isArray(raw) ? raw : [];
+}
+
+function parseAnexoValor(valor) {
+  if (!valor) return null;
+  if (typeof valor === 'object' && valor.nome && valor.container && valor.blob) return valor;
+  try {
+    const o = JSON.parse(String(valor));
+    if (o && o.nome && o.container && o.blob) return o;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function rotuloAnexoValor(valor) {
+  const meta = parseAnexoValor(valor);
+  return meta ? meta.nome : valor || '';
+}
+
+async function processarAnexosResposta(req, perguntas) {
+  const files = Array.isArray(req.files) ? req.files : [];
+  const byPergunta = new Map();
+  for (const f of files) {
+    const m = String(f.fieldname || '').match(/^anexo_(\d+)$/);
+    if (!m) continue;
+    byPergunta.set(Number(m[1]), f);
+  }
+  if (!byPergunta.size) return new Map();
+
+  const container = await blobService.garantirContainer(env.pesquisasContainer);
+  const uploaded = new Map();
+  for (const [perguntaId, file] of byPergunta) {
+    const pergunta = perguntas.find((p) => p.id === perguntaId && p.blocoTipo === 'anexo');
+    if (!pergunta) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        /* ignore */
+      }
+      continue;
+    }
+    const blobName = blobService.novoBlobName(file.originalname);
+    try {
+      await blobService.enviarArquivo(container, file.path, blobName, file.mimetype);
+      uploaded.set(
+        perguntaId,
+        JSON.stringify({
+          nome: file.originalname,
+          container,
+          blob: blobName,
+        })
+      );
+    } finally {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return uploaded;
+}
+
+function montarItensResposta(perguntas, rawItens, anexosPorPergunta = new Map()) {
   const byPergunta = new Map();
   for (const item of Array.isArray(rawItens) ? rawItens : []) {
     const perguntaId = Number(item.perguntaId);
     if (!perguntaId) continue;
     byPergunta.set(perguntaId, item.valor == null ? '' : String(item.valor).trim());
   }
+  for (const [perguntaId, valor] of anexosPorPergunta) {
+    byPergunta.set(perguntaId, valor);
+  }
 
-  const visiveis = perguntas.filter((p) => perguntaVisivel(p, perguntas, byPergunta));
+  const visiveis = perguntas.filter(
+    (p) => p.blocoTipo !== 'texto' && perguntaVisivel(p, perguntas, byPergunta)
+  );
   const itens = [];
   for (const p of visiveis) {
     const valor = byPergunta.get(p.id) ?? '';
     if (p.obrigatoria && !valor) {
       throw httpError(400, `Responda a pergunta: ${p.texto}`);
+    }
+    if (p.blocoTipo === 'anexo') {
+      if (valor && !parseAnexoValor(valor)) {
+        throw httpError(400, `Anexe um arquivo em: ${p.texto}`);
+      }
+      itens.push({ perguntaId: p.id, valor });
+      continue;
     }
     if (p.tipo === 'escala' && valor) {
       const n = Number(valor);
@@ -850,7 +985,8 @@ function montarItensResposta(perguntas, rawItens) {
 
 async function enviarResposta(req) {
   const payload = await payloadResponder(req);
-  const itens = montarItensResposta(payload.perguntas, req.body?.itens);
+  const anexos = await processarAnexosResposta(req, payload.perguntas);
+  const itens = montarItensResposta(payload.perguntas, parseItensBody(req), anexos);
   try {
     await repo.insertResposta(payload.id, req.user.id, itens);
   } catch (err) {
@@ -873,13 +1009,26 @@ async function resultados(req) {
   const respostas = await repo.listRespostasDetalhadas(id);
   const convidados = form.publicoAlvo === 'externos' ? await repo.listConvidados(id) : [];
 
-  const perguntasOut = perguntas.map((p) => {
+  const perguntasOut = [];
+  for (const p of perguntas) {
+    if (p.blocoTipo === 'texto') continue;
     const valores = [];
     for (const r of respostas) {
       const item = r.itens.find((i) => i.perguntaId === p.id);
       if (!item || item.valor == null || item.valor === '') continue;
+      const anexo = p.blocoTipo === 'anexo' ? parseAnexoValor(item.valor) : null;
+      let anexoUrl = null;
+      if (anexo) {
+        try {
+          const sas = await blobService.gerarSasLeitura(anexo.container, anexo.blob);
+          anexoUrl = sas.url;
+        } catch {
+          anexoUrl = null;
+        }
+      }
       valores.push({
-        valor: item.valor,
+        valor: anexo ? anexo.nome : item.valor,
+        anexoUrl,
         respondente: form.anonimo ? null : { nome: r.nome, email: r.email },
         enviadoEm: r.enviadoEm,
       });
@@ -898,8 +1047,8 @@ async function resultados(req) {
         agregados.dist = [1, 2, 3, 4, 5].map((n) => counts[String(n)] || 0);
       }
     }
-    return { ...p, total: valores.length, agregados, respostas: valores };
-  });
+    perguntasOut.push({ ...p, total: valores.length, agregados, respostas: valores });
+  }
 
   const publicoAlvoTotal =
     form.publicoAlvo === 'externos'
@@ -955,7 +1104,7 @@ async function minhaResposta(req) {
   return {
     title: form.titulo,
     sub: resp.enviadoEm ? `Respondido em ${formatBrDateTime(resp.enviadoEm)}` : 'Respondido',
-    answers: itens.map((i) => ({ q: i.texto, a: i.valor || '—' })),
+    answers: itens.map((i) => ({ q: i.texto, a: rotuloAnexoValor(i.valor) || '—' })),
   };
 }
 
@@ -1171,6 +1320,7 @@ async function publicoMeta(req) {
     prazoFim: form.prazoFim || null,
     template: visual.template,
     capaUrl: visual.capaUrl,
+    capaLayout: form.capaLayout || 'top',
   };
 }
 
@@ -1228,6 +1378,7 @@ async function publicoFormulario(req) {
     perguntas,
     template: visual.template,
     capaUrl: visual.capaUrl,
+    capaLayout: form.capaLayout || 'top',
   };
 }
 
@@ -1245,7 +1396,8 @@ async function publicoResponder(req) {
     if (ja) throw httpError(409, 'Você já respondeu este formulário.');
   }
   const perguntas = await repo.listPerguntas(form.id);
-  const itens = montarItensResposta(perguntas, req.body?.itens);
+  const anexos = await processarAnexosResposta(req, perguntas);
+  const itens = montarItensResposta(perguntas, parseItensBody(req), anexos);
   try {
     await repo.insertResposta(form.id, null, itens, convidadoId);
   } catch (err) {

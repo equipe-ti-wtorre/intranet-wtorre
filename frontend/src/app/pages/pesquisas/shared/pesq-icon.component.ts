@@ -104,6 +104,33 @@ import { Component, Input } from '@angular/core';
           <circle cx="9" cy="10" r="1.8" stroke="currentColor" stroke-width="1.5" />
           <path d="M5 17l4.5-5 3.5 4 2.5-3 3.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         }
+        @case ('grip') {
+          <circle cx="9" cy="6" r="1.4" fill="currentColor" />
+          <circle cx="9" cy="12" r="1.4" fill="currentColor" />
+          <circle cx="9" cy="18" r="1.4" fill="currentColor" />
+          <circle cx="15" cy="6" r="1.4" fill="currentColor" />
+          <circle cx="15" cy="12" r="1.4" fill="currentColor" />
+          <circle cx="15" cy="18" r="1.4" fill="currentColor" />
+        }
+        @case ('grid') {
+          <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" stroke="currentColor" stroke-width="1.6" />
+          <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5" stroke="currentColor" stroke-width="1.6" />
+          <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5" stroke="currentColor" stroke-width="1.6" />
+          <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" stroke="currentColor" stroke-width="1.6" />
+        }
+        @case ('table') {
+          <rect x="3.3" y="4.5" width="17.4" height="15" rx="2" stroke="currentColor" stroke-width="1.6" />
+          <path d="M3.3 9.5h17.4M9 4.5v15" stroke="currentColor" stroke-width="1.5" />
+        }
+        @case ('expand') {
+          <path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        }
+        @case ('collapse') {
+          <path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        }
+        @case ('text') {
+          <path d="M4.5 5.5h15M12 5.5V19M8.5 19h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        }
         @case ('trash') {
           <path d="M5 7.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
           <path d="M9 7.5V5.4c0-.5.4-.9.9-.9h4.2c.5 0 .9.4.9.9v2.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />

@@ -14,12 +14,14 @@
     [titulo]="p.titulo"
     [descricao]="p.descricao"
     [capaUrl]="p.capaUrl || null"
+    [capaLayout]="p.capaLayout || 'top'"
     [template]="p.template || null"
     [perguntas]="visiveis()"
     [secoes]="!!p.secoes"
     [respostas]="respostasGuest()"
     [enviando]="enviando()"
     (valorChange)="onGuestValor($event)"
+    (arquivoChange)="onGuestArquivo($event)"
     (enviar)="enviar()"
   />
 }

@@ -78,8 +78,15 @@ export class PesquisasService {
     return this.http.get<PesquisasResponderPayload>(this.api(`/formularios/${id}/responder`));
   }
 
-  enviarResposta(id: number, itens: { perguntaId: number; valor: string }[]): Observable<{ ok: boolean }> {
-    return this.http.post<{ ok: boolean }>(this.api(`/formularios/${id}/respostas`), { itens });
+  enviarResposta(
+    id: number,
+    itens: { perguntaId: number; valor: string }[],
+    anexos?: Record<number, File>
+  ): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.api(`/formularios/${id}/respostas`),
+      this.respostaBody(itens, anexos)
+    );
   }
 
   resultados(id: number): Observable<PesquisasResultados> {
@@ -156,14 +163,29 @@ export class PesquisasService {
   publicoResponder(
     slug: string,
     itens: { perguntaId: number; valor: string }[],
-    token?: string
+    token?: string,
+    anexos?: Record<number, File>
   ): Observable<{ ok: boolean }> {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     return this.http.post<{ ok: boolean }>(
       this.api(`/publico/${encodeURIComponent(slug)}/respostas`),
-      { itens },
+      this.respostaBody(itens, anexos),
       { headers }
     );
+  }
+
+  private respostaBody(
+    itens: { perguntaId: number; valor: string }[],
+    anexos?: Record<number, File>
+  ): FormData | { itens: { perguntaId: number; valor: string }[] } {
+    const files = Object.entries(anexos || {}).filter(([, f]) => !!f);
+    if (!files.length) return { itens };
+    const fd = new FormData();
+    fd.append('itens', JSON.stringify(itens));
+    for (const [id, file] of files) {
+      fd.append(`anexo_${id}`, file);
+    }
+    return fd;
   }
 
   getRequisicao(id: number): Observable<PesquisasRequisicao> {

@@ -24,6 +24,7 @@ export class PesquisasResponderComponent implements OnInit {
   readonly enviando = signal(false);
   readonly payload = signal<PesquisasResponderPayload | null>(null);
   readonly respostas = signal<Record<number, string>>({});
+  readonly anexos = signal<Record<number, File>>({});
   readonly respostasGuest = computed(() => {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(this.respostas())) out[k] = v;
@@ -62,14 +63,29 @@ export class PesquisasResponderComponent implements OnInit {
     this.setValor(id, ev.valor);
   }
 
+  onGuestArquivo(ev: { key: string; file: File | null }): void {
+    const id = Number(ev.key);
+    if (!Number.isFinite(id)) return;
+    this.anexos.update((m) => {
+      const next = { ...m };
+      if (ev.file) next[id] = ev.file;
+      else delete next[id];
+      return next;
+    });
+    this.setValor(id, ev.file?.name || '');
+  }
+
   enviar(): void {
     const p = this.payload();
     if (!p) return;
     const itens = this.visiveis()
-      .filter((q) => q.id)
-      .map((q) => ({ perguntaId: q.id as number, valor: this.respostas()[q.id as number] || '' }));
+      .filter((q) => q.id && q.blocoTipo !== 'texto')
+      .map((q) => ({
+        perguntaId: q.id as number,
+        valor: q.blocoTipo === 'anexo' ? '' : this.respostas()[q.id as number] || '',
+      }));
     this.enviando.set(true);
-    this.api.enviarResposta(p.id, itens).subscribe({
+    this.api.enviarResposta(p.id, itens, this.anexos()).subscribe({
       next: () => {
         this.alertas.sucesso('Resposta enviada com sucesso.');
         this.enviando.set(false);

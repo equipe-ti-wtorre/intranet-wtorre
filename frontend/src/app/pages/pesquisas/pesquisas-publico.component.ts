@@ -30,6 +30,7 @@ export class PesquisasPublicoComponent implements OnInit {
   readonly meta = signal<PesquisasPublicoMeta | null>(null);
   readonly payload = signal<PesquisasResponderPayload | null>(null);
   readonly respostas = signal<Record<number, string>>({});
+  readonly anexos = signal<Record<number, File>>({});
   readonly cpf = signal('');
   readonly email = signal('');
   readonly enviado = signal(false);
@@ -111,15 +112,30 @@ export class PesquisasPublicoComponent implements OnInit {
     this.setValor(id, ev.valor);
   }
 
+  onGuestArquivo(ev: { key: string; file: File | null }): void {
+    const id = Number(ev.key);
+    if (!Number.isFinite(id)) return;
+    this.anexos.update((map) => {
+      const next = { ...map };
+      if (ev.file) next[id] = ev.file;
+      else delete next[id];
+      return next;
+    });
+    this.setValor(id, ev.file?.name || '');
+  }
+
   enviar(): void {
     const p = this.payload();
     const m = this.meta();
     if (!p || !m) return;
     const itens = this.visiveis()
-      .filter((q) => q.id)
-      .map((q) => ({ perguntaId: q.id as number, valor: this.respostas()[q.id as number] || '' }));
+      .filter((q) => q.id && q.blocoTipo !== 'texto')
+      .map((q) => ({
+        perguntaId: q.id as number,
+        valor: q.blocoTipo === 'anexo' ? '' : this.respostas()[q.id as number] || '',
+      }));
     this.enviando.set(true);
-    this.api.publicoResponder(m.slug, itens, this.guestToken || undefined).subscribe({
+    this.api.publicoResponder(m.slug, itens, this.guestToken || undefined, this.anexos()).subscribe({
       next: () => {
         this.enviando.set(false);
         this.enviado.set(true);

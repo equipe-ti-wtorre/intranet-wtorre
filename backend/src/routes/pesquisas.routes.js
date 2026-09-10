@@ -15,6 +15,15 @@ const {
 const router = Router();
 const adminGuard = [requireJwt, requireModulo('pesquisas')];
 
+function maybeUploadAnexosResposta(req, res, next) {
+  const ct = String(req.headers['content-type'] || '');
+  if (!ct.includes('multipart/form-data')) return next();
+  uploadPesquisas.any()(req, res, (err) => {
+    if (err) return handlePesquisasMulterError(err, req, res, next);
+    next();
+  });
+}
+
 router.get('/publico/:slug', rateLimitPesquisasPublico, controller.publicoMeta);
 router.post('/publico/:slug/verificar', rateLimitPesquisasPublico, controller.publicoVerificar);
 router.get(
@@ -27,6 +36,7 @@ router.post(
   '/publico/:slug/respostas',
   rateLimitPesquisasPublico,
   optionalPesquisasGuest,
+  maybeUploadAnexosResposta,
   controller.publicoResponder
 );
 
@@ -38,7 +48,12 @@ router.get('/templates', requireJwt, controller.listTemplates);
 router.get('/formularios', requireJwt, controller.listFormularios);
 router.post('/formularios', requireJwt, controller.criarRascunho);
 router.get('/formularios/:id/responder', requireJwt, controller.payloadResponder);
-router.post('/formularios/:id/respostas', requireJwt, controller.enviarResposta);
+router.post(
+  '/formularios/:id/respostas',
+  requireJwt,
+  maybeUploadAnexosResposta,
+  controller.enviarResposta
+);
 router.get('/formularios/:id/resultados', requireJwt, controller.resultados);
 router.get('/formularios/:id/minha-resposta', requireJwt, controller.minhaResposta);
 router.post('/formularios/:id/publicar', requireJwt, controller.publicar);

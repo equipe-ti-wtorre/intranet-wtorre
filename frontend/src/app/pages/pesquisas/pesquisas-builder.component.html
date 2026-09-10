@@ -1,409 +1,489 @@
-<div class="builder-head">
-  <div class="builder-title-wrap">
-    <button type="button" class="btn-back" (click)="voltar()">
-      <app-pesq-icon name="arrow-left" [size]="14" />
-      Voltar
-    </button>
-    <h1 class="page-title" style="font-size: 22px; margin: 0">
-      Novo formulário
-    </h1>
+<div class="flow-stepper" aria-hidden="true">
+  <div class="fs-item" [class.active]="passo() === 'layout'">
+    <div class="fs-dot" [class.active]="passo() === 'layout'" [class.complete]="passo() === 'builder'">
+      @if (passo() === 'builder') {
+        <app-pesq-icon name="check" [size]="14" />
+      } @else {
+        1
+      }
+    </div>
+    <span class="fs-label">Layout</span>
   </div>
-  <div class="builder-actions">
-    <button type="button" class="btn-secondary" [disabled]="salvando()" (click)="salvar(false)">
-      <app-pesq-icon name="edit" [size]="15" />
-      Salvar rascunho
-    </button>
-    <button type="button" class="btn-primary" [disabled]="salvando()" (click)="salvar(true)">
-      <app-pesq-icon name="megaphone" [size]="16" />
-      Publicar
-    </button>
+  <div class="fs-line" [class.filled]="passo() === 'builder'"></div>
+  <div class="fs-item" [class.active]="passo() === 'builder'">
+    <div class="fs-dot" [class.active]="passo() === 'builder'">2</div>
+    <span class="fs-label">Construção</span>
   </div>
 </div>
 
 @if (carregando()) {
   <p class="page-sub">Carregando…</p>
+} @else if (passo() === 'layout') {
+  <button type="button" class="btn-back" style="margin-bottom: 18px" (click)="voltar()">
+    <app-pesq-icon name="arrow-left" [size]="14" />
+    Voltar
+  </button>
+  <div class="eyebrow">
+    <span class="eyebrow-dot"></span>
+    <span class="eyebrow-text">Novo formulário</span>
+  </div>
+  <h1 class="page-title">Escolha o layout da imagem</h1>
+  <p class="page-sub">
+    Onde a imagem principal vai ficar. A marca do template (WTorre / Nubank Parque) você escolhe
+    depois, direto na tela de construção.
+  </p>
+  <div class="template-gallery layout-gallery">
+    @for (opt of layouts; track opt.id) {
+      <button
+        type="button"
+        class="layout-gallery-card"
+        (click)="escolherLayout(opt.id)"
+      >
+        <div class="lm-mockwrap">
+          <div class="layout-mock" [class]="'layout-mock lm-' + opt.id">
+            <div class="lm-image"></div>
+            <div class="lm-lines"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+        <div class="tg-info">
+          <h4>{{ opt.title }}</h4>
+          <p>{{ opt.sub }}</p>
+        </div>
+      </button>
+    }
+  </div>
 } @else {
+  <div class="builder-head">
+    <div class="builder-title-wrap">
+      <button type="button" class="btn-back" (click)="voltar()">
+        <app-pesq-icon name="arrow-left" [size]="14" />
+        Voltar
+      </button>
+      <h1 class="page-title" style="font-size: 20px; margin: 0">Novo formulário</h1>
+    </div>
+    <div class="builder-actions">
+      <button type="button" class="btn-secondary" [disabled]="salvando()" (click)="salvar(false)">
+        <app-pesq-icon name="edit" [size]="15" />
+        Salvar rascunho
+      </button>
+      <button type="button" class="btn-primary" [disabled]="salvando()" (click)="salvar(true)">
+        <app-pesq-icon name="megaphone" [size]="16" />
+        Publicar
+      </button>
+    </div>
+  </div>
+
   <div class="builder-split">
     <div class="builder-col">
-  <div class="form-card">
-    <h3><app-pesq-icon name="file-text" [size]="17" /> Informações gerais</h3>
-    <div class="field-grid" style="margin-bottom: 16px">
-      <div class="field">
-        <label>Título do formulário</label>
-        <input type="text" [ngModel]="titulo()" (ngModelChange)="titulo.set($event)" placeholder="Ex: Pesquisa de clima organizacional" />
-      </div>
-      <div class="field">
-        <label>Categoria</label>
-        <input
-          type="text"
-          [ngModel]="categoria()"
-          (ngModelChange)="categoria.set($event)"
-          placeholder="Opcional — vazio vira Sem categoria"
-          maxlength="80"
-        />
-      </div>
-    </div>
-    <div class="field-grid full">
-      <div class="field">
-        <label>Descrição</label>
-        <textarea [ngModel]="descricao()" (ngModelChange)="descricao.set($event)" placeholder="Explique o objetivo do formulário para quem for responder"></textarea>
-      </div>
-    </div>
-    <div class="field" style="margin-top: 16px">
-      <label>Capa</label>
-      <input
-        #capaInput
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        hidden
-        (change)="onCapa($event)"
-      />
-      <div class="cover-upload" role="button" tabindex="0" (click)="capaInput.click()">
-        @if (capaPreview()) {
-          <div class="cover-preview">
-            <img [src]="capaPreview()!" alt="" />
-            <button type="button" class="cover-remove" aria-label="Remover capa" (click)="removerCapaClick($event)">
-              <app-pesq-icon name="x" [size]="14" />
-            </button>
-          </div>
-        } @else {
-          <div class="cover-empty">
-            <app-pesq-icon name="image" [size]="20" />
-            <div>Clique para enviar JPEG, PNG ou WebP</div>
-          </div>
-        }
-      </div>
-    </div>
-    <div class="field-grid" style="margin-top: 16px">
-      <div class="field">
-        <label>Data início</label>
-        <input type="date" [ngModel]="prazoInicioData()" (ngModelChange)="prazoInicioData.set($event)" />
-      </div>
-      <div class="field">
-        <label>Data fim</label>
-        <input type="date" [ngModel]="prazoFimData()" (ngModelChange)="prazoFimData.set($event)" />
-      </div>
-    </div>
-    <div class="field-grid" style="margin-top: 16px">
-      <div class="field">
-        <label>Horário início</label>
-        <input type="time" [ngModel]="prazoInicioHora()" (ngModelChange)="prazoInicioHora.set($event)" />
-      </div>
-      <div class="field">
-        <label>Horário fim</label>
-        <input type="time" [ngModel]="prazoFimHora()" (ngModelChange)="prazoFimHora.set($event)" />
-      </div>
-    </div>
-    <p class="panel-desc" style="margin: 10px 0 0">{{ janelaDica() }}</p>
-    <div class="field-grid" style="margin-top: 16px">
-      <div class="field">
-        <label>Público-alvo</label>
-        <select [ngModel]="publicoAlvo()" (ngModelChange)="publicoAlvo.set($event)">
-          <option value="todos">Todos os colaboradores</option>
-          <option value="departamento">Departamento específico</option>
-          <option value="externos">Convidados externos</option>
-        </select>
-      </div>
-    </div>
-    @if (publicoAlvo() === 'departamento') {
-      <div class="field" style="margin-top: 16px">
-        <label>Departamento</label>
-        <select [ngModel]="publicoDepartamento()" (ngModelChange)="publicoDepartamento.set($event)">
-          <option value="">Selecione…</option>
-          @for (d of departamentos(); track d) {
-            <option [value]="d">{{ d }}</option>
-          }
-        </select>
-      </div>
-    }
-    <div class="toggle-row" style="margin-top: 16px">
-      <div class="toggle-text">
-        <b>Bloqueio manual</b>
-        <span>Se desativado, bloqueia na hora, mesmo dentro do horário. Ligado, a janela é quem abre e fecha.</span>
-      </div>
-      <label class="switch">
-        <input type="checkbox" [ngModel]="eventoAtivo()" (ngModelChange)="eventoAtivo.set($event)" />
-        <span class="slider"></span>
-      </label>
-    </div>
-    @if (publicoAlvo() === 'externos') {
-      <div class="ext-callout">
-        <app-pesq-icon name="alert" [size]="16" />
-        <span>
-          Formulário para convidados externos <b>não</b> é enviado ao mural de Comunicados. Quem
-          responde usa o link /f/… (ou o QR), sem login na intranet.
-        </span>
-      </div>
-      <div class="field" style="margin-top: 16px">
-        <label>Tipo de evento</label>
-        <div class="priority-row">
-          <button
-            type="button"
-            class="priority-chip"
-            [class.selected]="eventoTipo() === 'show'"
-            [class.media]="eventoTipo() === 'show'"
-            (click)="eventoTipo.set('show')"
-          >
-            Show
-          </button>
-          <button
-            type="button"
-            class="priority-chip"
-            [class.selected]="eventoTipo() === 'jogo'"
-            [class.media]="eventoTipo() === 'jogo'"
-            (click)="eventoTipo.set('jogo')"
-          >
-            Jogo
-          </button>
-          <button
-            type="button"
-            class="priority-chip"
-            [class.selected]="eventoTipo() === 'outro'"
-            [class.media]="eventoTipo() === 'outro'"
-            (click)="eventoTipo.set('outro')"
-          >
-            Outro
-          </button>
-        </div>
-      </div>
-      @if (eventoTipo() === 'outro') {
+      <div class="form-card">
+        <h3><app-pesq-icon name="file-text" [size]="17" /> Informações gerais</h3>
         <div class="field" style="margin-top: 12px">
-          <label>Qual?</label>
+          <label>Título do formulário</label>
           <input
             type="text"
-            [ngModel]="eventoTipoOutro()"
-            (ngModelChange)="eventoTipoOutro.set($event)"
-            placeholder="Descreva o tipo de evento"
-            maxlength="80"
+            [ngModel]="titulo()"
+            (ngModelChange)="titulo.set($event)"
+            placeholder="Ex: Pesquisa de satisfação do evento"
           />
         </div>
-      }
-      <div class="toggle-row" style="margin-top: 16px">
-        <div class="toggle-text">
-          <b>Exigir confirmação de identidade</b>
-          <span>O convidado precisa informar CPF e e-mail cadastrados para acessar o link</span>
-        </div>
-        <label class="switch">
-          <input
-            type="checkbox"
-            [ngModel]="exigirIdentidade()"
-            (ngModelChange)="exigirIdentidade.set($event)"
-          />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="field" style="margin-top: 16px">
-        <label>Link público</label>
-        @if (linkPublico()) {
-          <div class="link-copy-row">
-            <input type="text" [value]="linkPublico()" readonly />
-            <button type="button" class="btn-secondary" (click)="copiarLink()">
-              <app-pesq-icon name="link" [size]="15" />
-              Copiar
-            </button>
+        <div class="field-grid" style="margin-top: 16px">
+          <div class="field">
+            <label>Categoria</label>
+            <input
+              type="text"
+              [ngModel]="categoria()"
+              (ngModelChange)="categoria.set($event)"
+              placeholder="Opcional — vazio vira Sem categoria"
+              maxlength="80"
+            />
           </div>
-        } @else {
-          <p class="page-sub" style="margin: 0">Salve o rascunho para gerar o link público.</p>
-        }
-      </div>
-      <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
-      <div class="guest-add-grid">
-        <div class="field">
-          <label>Nome (opcional)</label>
-          <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
         </div>
-        <div class="field">
-          <label>CPF</label>
-          <input
-            type="text"
-            inputmode="numeric"
-            [ngModel]="guestCpf()"
-            (ngModelChange)="formatCpfInput($event)"
-            placeholder="000.000.000-00"
-          />
-        </div>
-        <div class="field">
-          <label>E-mail</label>
-          <input
-            type="email"
-            [ngModel]="guestEmail()"
-            (ngModelChange)="guestEmail.set($event)"
-            placeholder="email@exemplo.com"
-          />
-        </div>
-        <button type="button" class="btn-primary guest-add-btn" (click)="addConvidado()">
-          <app-pesq-icon name="plus" [size]="15" />
-          Adicionar
-        </button>
-      </div>
-      <button type="button" class="add-q-btn" style="margin-top: 10px" (click)="pasteOpen.set(!pasteOpen())">
-        <app-pesq-icon name="upload" [size]="15" />
-        Colar do Excel
-      </button>
-      @if (pasteOpen()) {
-        <div class="field" style="margin-top: 12px">
-          <label>Uma pessoa por linha: Nome, CPF, E-mail</label>
+        <div class="field" style="margin-top: 16px">
+          <label>Descrição</label>
           <textarea
-            [ngModel]="pasteText()"
-            (ngModelChange)="pasteText.set($event)"
-            placeholder="Maria Silva, 123.456.789-00, maria@email.com"
+            [ngModel]="descricao()"
+            (ngModelChange)="descricao.set($event)"
+            placeholder="Explique o objetivo do formulário para quem for responder"
           ></textarea>
-          <button type="button" class="btn-secondary" style="margin-top: 8px" (click)="aplicarCola()">
-            Importar linhas
-          </button>
         </div>
-      }
-      @if (convidados().length) {
-        <div class="guest-table">
-          @for (g of convidados(); track g.key) {
-            <div class="guest-row">
-              <span>{{ g.nome || '—' }}</span>
-              <span>{{ g.cpfMascara || g.cpf }}</span>
-              <span>{{ g.email }}</span>
-              <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
-                <app-pesq-icon name="x" [size]="15" />
+        <div class="field-grid" style="margin-top: 16px">
+          <div class="field">
+            <label>Data início</label>
+            <input type="date" [ngModel]="prazoInicioData()" (ngModelChange)="prazoInicioData.set($event)" />
+          </div>
+          <div class="field">
+            <label>Data fim</label>
+            <input type="date" [ngModel]="prazoFimData()" (ngModelChange)="prazoFimData.set($event)" />
+          </div>
+        </div>
+        <div class="field-grid" style="margin-top: 16px">
+          <div class="field">
+            <label>Horário início</label>
+            <input type="time" [ngModel]="prazoInicioHora()" (ngModelChange)="prazoInicioHora.set($event)" />
+          </div>
+          <div class="field">
+            <label>Horário fim</label>
+            <input type="time" [ngModel]="prazoFimHora()" (ngModelChange)="prazoFimHora.set($event)" />
+          </div>
+        </div>
+        <p class="panel-desc" style="margin: 10px 0 0">{{ janelaDica() }}</p>
+        <div class="field-grid" style="margin-top: 16px">
+          <div class="field">
+            <label>Público-alvo</label>
+            <select [ngModel]="publicoAlvo()" (ngModelChange)="publicoAlvo.set($event)">
+              <option value="todos">Todos os colaboradores</option>
+              <option value="departamento">Departamento específico</option>
+              <option value="externos">Convidados externos</option>
+            </select>
+          </div>
+        </div>
+        @if (publicoAlvo() === 'departamento') {
+          <div class="field" style="margin-top: 16px">
+            <label>Departamento</label>
+            <select [ngModel]="publicoDepartamento()" (ngModelChange)="publicoDepartamento.set($event)">
+              <option value="">Selecione…</option>
+              @for (d of departamentos(); track d) {
+                <option [value]="d">{{ d }}</option>
+              }
+            </select>
+          </div>
+        }
+        <div class="toggle-row" style="margin-top: 16px">
+          <div class="toggle-text">
+            <b>Bloqueio manual</b>
+            <span>Se desativado, bloqueia na hora, mesmo dentro do horário. Ligado, a janela é quem abre e fecha.</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="eventoAtivo()" (ngModelChange)="eventoAtivo.set($event)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        @if (publicoAlvo() === 'externos') {
+          <div class="ext-callout">
+            <app-pesq-icon name="alert" [size]="16" />
+            <span>
+              Formulário para convidados externos <b>não</b> é enviado ao mural de Comunicados. Quem
+              responde usa o link /f/… (ou o QR), sem login na intranet.
+            </span>
+          </div>
+          <div class="field" style="margin-top: 16px">
+            <label>Tipo de evento</label>
+            <div class="priority-row">
+              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'show'" [class.media]="eventoTipo() === 'show'" (click)="eventoTipo.set('show')">Show</button>
+              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'jogo'" [class.media]="eventoTipo() === 'jogo'" (click)="eventoTipo.set('jogo')">Jogo</button>
+              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'outro'" [class.media]="eventoTipo() === 'outro'" (click)="eventoTipo.set('outro')">Outro</button>
+            </div>
+          </div>
+          @if (eventoTipo() === 'outro') {
+            <div class="field" style="margin-top: 12px">
+              <label>Qual?</label>
+              <input type="text" [ngModel]="eventoTipoOutro()" (ngModelChange)="eventoTipoOutro.set($event)" placeholder="Descreva o tipo de evento" maxlength="80" />
+            </div>
+          }
+          <div class="toggle-row" style="margin-top: 16px">
+            <div class="toggle-text">
+              <b>Exigir confirmação de identidade</b>
+              <span>O convidado precisa informar CPF e e-mail cadastrados para acessar o link</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" [ngModel]="exigirIdentidade()" (ngModelChange)="exigirIdentidade.set($event)" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="field" style="margin-top: 16px">
+            <label>Link público</label>
+            @if (linkPublico()) {
+              <div class="link-copy-row">
+                <input type="text" [value]="linkPublico()" readonly />
+                <button type="button" class="btn-secondary" (click)="copiarLink()">
+                  <app-pesq-icon name="link" [size]="15" />
+                  Copiar
+                </button>
+              </div>
+            } @else {
+              <p class="page-sub" style="margin: 0">Salve o rascunho para gerar o link público.</p>
+            }
+          </div>
+          <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
+          <div class="guest-add-grid">
+            <div class="field">
+              <label>Nome (opcional)</label>
+              <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
+            </div>
+            <div class="field">
+              <label>CPF</label>
+              <input type="text" inputmode="numeric" [ngModel]="guestCpf()" (ngModelChange)="formatCpfInput($event)" placeholder="000.000.000-00" />
+            </div>
+            <div class="field">
+              <label>E-mail</label>
+              <input type="email" [ngModel]="guestEmail()" (ngModelChange)="guestEmail.set($event)" placeholder="email@exemplo.com" />
+            </div>
+            <button type="button" class="btn-primary guest-add-btn" (click)="addConvidado()">
+              <app-pesq-icon name="plus" [size]="15" />
+              Adicionar
+            </button>
+          </div>
+          <button type="button" class="add-q-btn" style="margin-top: 10px" (click)="pasteOpen.set(!pasteOpen())">
+            <app-pesq-icon name="upload" [size]="15" />
+            Colar do Excel
+          </button>
+          @if (pasteOpen()) {
+            <div class="field" style="margin-top: 12px">
+              <label>Uma pessoa por linha: Nome, CPF, E-mail</label>
+              <textarea [ngModel]="pasteText()" (ngModelChange)="pasteText.set($event)" placeholder="Maria Silva, 123.456.789-00, maria@email.com"></textarea>
+              <button type="button" class="btn-secondary" style="margin-top: 8px" (click)="aplicarCola()">Importar linhas</button>
+            </div>
+          }
+          @if (convidados().length) {
+            <div class="guest-table">
+              @for (g of convidados(); track g.key) {
+                <div class="guest-row">
+                  <span>{{ g.nome || '—' }}</span>
+                  <span>{{ g.cpfMascara || g.cpf }}</span>
+                  <span>{{ g.email }}</span>
+                  <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
+                    <app-pesq-icon name="x" [size]="15" />
+                  </button>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
+          }
+        }
+      </div>
+
+      <div class="form-card">
+        <h3><app-pesq-icon name="layers" [size]="17" /> Configurações avançadas</h3>
+        <div class="toggle-row">
+          <div class="toggle-text">
+            <b>Respostas anônimas</b>
+            <span>Ocultar a identidade de quem responde</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="anonimo()" (ngModelChange)="anonimo.set($event)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-text">
+            <b>Organizar em seções</b>
+            <span>Agrupe perguntas em blocos temáticos</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="secoes()" (ngModelChange)="secoes.set($event)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-text">
+            <b>Lógica condicional</b>
+            <span>Exibir perguntas com base em respostas anteriores</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="logica()" (ngModelChange)="logica.set($event)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h3><app-pesq-icon name="image" [size]="16" /> Imagem</h3>
+        <p class="hint">{{ zoneHint() }}</p>
+        <button type="button" class="btn-secondary" style="margin-bottom: 12px; padding: 7px 12px; font-size: 12px" (click)="abrirGaleria()">
+          Trocar posição
+        </button>
+        <input #capaInput type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="onCapa($event)" />
+        <div class="cover-upload" role="button" tabindex="0" (click)="capaInput.click()">
+          @if (capaPreview()) {
+            <div class="cover-preview">
+              <img [src]="capaPreview()!" alt="" />
+              <button type="button" class="cover-remove" aria-label="Remover capa" (click)="removerCapaClick($event)">
+                <app-pesq-icon name="x" [size]="14" />
+              </button>
+            </div>
+          } @else {
+            <div class="cover-empty">
+              <app-pesq-icon name="image" [size]="20" />
+              <div>Clique para adicionar a imagem</div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="form-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px">
+          <h3 style="margin: 0"><app-pesq-icon name="grid" [size]="16" /> Campos</h3>
+          <button type="button" class="btn-secondary" style="padding: 7px 12px; font-size: 12px" (click)="excelInput.click()">
+            <app-pesq-icon name="table" [size]="13" />
+            Importar Excel
+          </button>
+          <input #excelInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onExcel($event)" />
+        </div>
+        <p class="hint">Adicione um campo e arraste-o no quadro à direita pra qualquer posição que quiser.</p>
+        <div class="add-block-menu-wrap">
+          <button type="button" class="add-block-main-btn" (click)="menuAddOpen.set(!menuAddOpen())">
+            <app-pesq-icon name="plus" [size]="15" />
+            Adicionar campo
+          </button>
+          @if (menuAddOpen()) {
+            <div class="add-block-menu open">
+              <button type="button" class="add-block-menu-item" (click)="addBloco('pergunta')">
+                <app-pesq-icon name="list-checks" [size]="15" />
+                <div><b>Pergunta</b><span>Texto, múltipla escolha, escala, sim/não...</span></div>
+              </button>
+              <button type="button" class="add-block-menu-item" (click)="addBloco('texto')">
+                <app-pesq-icon name="text" [size]="15" />
+                <div><b>Texto</b><span>Parágrafo livre ou título de seção</span></div>
+              </button>
+              <button type="button" class="add-block-menu-item" (click)="addBloco('anexo')">
+                <app-pesq-icon name="upload" [size]="15" />
+                <div><b>Anexo</b><span>Campo para o convidado anexar um arquivo</span></div>
               </button>
             </div>
           }
         </div>
-      } @else {
-        <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
-      }
-    }
-  </div>
-
-  <div class="form-card">
-    <h3><app-pesq-icon name="layers" [size]="17" /> Configurações avançadas</h3>
-    <div class="toggle-row">
-      <div class="toggle-text">
-        <b>Organizar em seções</b>
-        <span>Agrupe perguntas em blocos temáticos</span>
-      </div>
-      <label class="switch">
-        <input type="checkbox" [ngModel]="secoes()" (ngModelChange)="secoes.set($event)" />
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <div class="toggle-text">
-        <b>Lógica condicional</b>
-        <span>Exibir perguntas com base em respostas anteriores</span>
-      </div>
-      <label class="switch">
-        <input type="checkbox" [ngModel]="logica()" (ngModelChange)="logica.set($event)" />
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <div class="toggle-text">
-        <b>Respostas anônimas</b>
-        <span>Ocultar a identidade de quem responde</span>
-      </div>
-      <label class="switch">
-        <input type="checkbox" [ngModel]="anonimo()" (ngModelChange)="anonimo.set($event)" />
-        <span class="slider"></span>
-      </label>
-    </div>
-  </div>
-
-  <div class="form-card">
-    <h3><app-pesq-icon name="list-checks" [size]="17" /> Perguntas</h3>
-    @for (p of perguntas(); track p.key; let i = $index) {
-      <div class="q-card">
-        @if (secoes()) {
-          <div class="q-secao">
-            <input
-              type="text"
-              placeholder="Título da seção (opcional)"
-              [ngModel]="p.secaoTitulo"
-              (ngModelChange)="patch(p.key, { secaoTitulo: $event })"
-            />
-          </div>
+        @if (!perguntas().length) {
+          <div class="blocks-empty">Nenhum campo ainda — adicione um texto ou uma pergunta acima.</div>
         }
-        <div class="q-head">
-          <span class="q-num">{{ i + 1 }}</span>
-          <input
-            type="text"
-            [ngModel]="p.texto"
-            (ngModelChange)="patch(p.key, { texto: $event })"
-            placeholder="Digite a pergunta"
-          />
-          <button type="button" class="q-del" (click)="removePergunta(p.key)" aria-label="Remover">
-            <app-pesq-icon name="x" [size]="15" />
-          </button>
+        <div
+          #qWrap
+          (mousedown)="onListMouseDown($event)"
+          (dragstart)="onListDragStart($event)"
+          (dragover)="onListDragOver($event)"
+          (dragleave)="onListDragLeave($event)"
+          (dragend)="onListDragEnd($event)"
+        >
+          @for (p of perguntas(); track p.key; let i = $index) {
+            @if (listDrop()?.targetKey === p.key && !!listDrop()?.insertBefore) {
+              <div class="drop-ghost drop-ghost-list" aria-hidden="true"></div>
+            }
+            <div
+              class="block-card"
+              [attr.data-key]="p.key"
+            >
+              <div class="block-head">
+                <span class="block-drag" title="Arraste para reordenar"><app-pesq-icon name="grip" [size]="14" /></span>
+                <span class="block-type-badge" [class]="'block-type-badge type-' + p.blocoTipo">
+                  <app-pesq-icon [name]="p.blocoTipo === 'texto' ? 'text' : p.blocoTipo === 'anexo' ? 'upload' : 'list-checks'" [size]="10" />
+                  {{ p.blocoTipo === 'texto' ? 'Texto' : p.blocoTipo === 'anexo' ? 'Anexo' : 'Pergunta' }}
+                </span>
+                @if (p.blocoTipo !== 'texto') {
+                  <input
+                    type="text"
+                    class="block-title-input"
+                    [ngModel]="p.texto"
+                    (ngModelChange)="patch(p.key, { texto: $event })"
+                    [placeholder]="p.blocoTipo === 'anexo' ? 'Digite o rótulo' : 'Digite a pergunta'"
+                  />
+                } @else {
+                  <span style="flex: 1"></span>
+                }
+                <button type="button" class="block-del" (click)="removePergunta(p.key)" aria-label="Remover">
+                  <app-pesq-icon name="x" [size]="14" />
+                </button>
+              </div>
+              @if (secoes() && p.blocoTipo === 'pergunta') {
+                <div class="q-secao">
+                  <input type="text" placeholder="Título da seção (opcional)" [ngModel]="p.secaoTitulo" (ngModelChange)="patch(p.key, { secaoTitulo: $event })" />
+                </div>
+              }
+              @if (p.blocoTipo === 'pergunta') {
+                <div class="q-row">
+                  <select [ngModel]="p.tipo" (ngModelChange)="patch(p.key, { tipo: $event })">
+                    <option value="texto_curto">Texto curto</option>
+                    <option value="texto_longo">Texto longo</option>
+                    <option value="multipla_escolha">Múltipla escolha</option>
+                    <option value="escala">Escala 1–5</option>
+                    <option value="sim_nao">Sim / Não</option>
+                  </select>
+                  <label class="q-req">
+                    <input type="checkbox" [ngModel]="p.obrigatoria" (ngModelChange)="patch(p.key, { obrigatoria: $event })" style="accent-color: var(--primary-600); width: 15px; height: 15px" />
+                    Obrigatória
+                  </label>
+                </div>
+                @if (p.tipo === 'multipla_escolha') {
+                  <div class="blk-options-wrap">
+                    <div class="blk-options-list">
+                      @for (op of p.opcoes; track $index; let oi = $index) {
+                        <div class="blk-option-row">
+                          <input type="text" class="blk-option" [ngModel]="op" (ngModelChange)="setOpcao(p.key, oi, $event)" />
+                          <button type="button" class="blk-option-del" (click)="removeOpcao(p.key, oi)" aria-label="Remover opção">
+                            <app-pesq-icon name="x" [size]="11" />
+                          </button>
+                        </div>
+                      }
+                    </div>
+                    <button type="button" class="blk-option-add" (click)="addOpcao(p.key)">
+                      <app-pesq-icon name="plus" [size]="11" />
+                      Adicionar opção
+                    </button>
+                  </div>
+                }
+                <input type="text" class="block-mini-input" [ngModel]="p.ajuda" (ngModelChange)="patch(p.key, { ajuda: $event })" placeholder="Texto de ajuda abaixo do campo (opcional)" />
+                @if (logica() && i > 0) {
+                  <div class="q-logic">
+                    <app-pesq-icon name="link" [size]="13" />
+                    Exibir se a resposta da pergunta {{ i }} atender:
+                    <select [ngModel]="p.logicaCondicao" (ngModelChange)="patch(p.key, { logicaCondicao: $event })">
+                      <option value="qualquer">qualquer resposta</option>
+                      <option value="sim">for "Sim"</option>
+                      <option value="nao">for "Não"</option>
+                      <option value="escala_gte_4">nota ≥ 4</option>
+                    </select>
+                  </div>
+                }
+              } @else if (p.blocoTipo === 'anexo') {
+                <label class="q-req" style="margin-top: 8px; display: inline-flex">
+                  <input type="checkbox" [ngModel]="p.obrigatoria" (ngModelChange)="patch(p.key, { obrigatoria: $event })" style="accent-color: var(--primary-600); width: 15px; height: 15px" />
+                  Obrigatória
+                </label>
+                <input type="text" class="block-mini-input" [ngModel]="p.ajuda" (ngModelChange)="patch(p.key, { ajuda: $event })" placeholder="Texto de ajuda abaixo do campo (opcional)" />
+              } @else {
+                <select class="blk-text-style" [ngModel]="p.textoEstilo" (ngModelChange)="patch(p.key, { textoEstilo: $event })">
+                  <option value="paragrafo">Parágrafo</option>
+                  <option value="titulo">Título de seção</option>
+                </select>
+                <textarea class="block-mini-input" style="min-height: 64px; resize: vertical; margin-top: 8px" [ngModel]="p.texto" (ngModelChange)="patch(p.key, { texto: $event })" placeholder="Escreva o texto..."></textarea>
+              }
+            </div>
+            @if (listDrop()?.targetKey === p.key && !listDrop()?.insertBefore) {
+              <div class="drop-ghost drop-ghost-list" aria-hidden="true"></div>
+            }
+          }
         </div>
-        <div class="q-row">
-          <select [ngModel]="p.tipo" (ngModelChange)="patch(p.key, { tipo: $event })">
-            <option value="texto_curto">Texto curto</option>
-            <option value="texto_longo">Texto longo</option>
-            <option value="multipla_escolha">Múltipla escolha</option>
-            <option value="escala">Escala 1–5</option>
-            <option value="sim_nao">Sim / Não</option>
-          </select>
-          <label class="q-req">
-            <input
-              type="checkbox"
-              [ngModel]="p.obrigatoria"
-              (ngModelChange)="patch(p.key, { obrigatoria: $event })"
-              style="accent-color: var(--primary-600); width: 15px; height: 15px"
-            />
-            Obrigatória
-          </label>
-        </div>
-        @if (p.tipo === 'multipla_escolha') {
-          <div class="q-opts">
-            <textarea
-              [ngModel]="p.opcoesTxt"
-              (ngModelChange)="patch(p.key, { opcoesTxt: $event })"
-              placeholder="Opções, uma por linha (mín. 2)"
-            ></textarea>
-          </div>
-        }
-        @if (logica() && i > 0) {
-          <div class="q-logic">
-            <app-pesq-icon name="link" [size]="13" />
-            Exibir se a resposta da pergunta {{ i }} atender:
-            <select [ngModel]="p.logicaCondicao" (ngModelChange)="patch(p.key, { logicaCondicao: $event })">
-              <option value="qualquer">qualquer resposta</option>
-              <option value="sim">for "Sim"</option>
-              <option value="nao">for "Não"</option>
-              <option value="escala_gte_4">nota ≥ 4</option>
-            </select>
-          </div>
-        }
       </div>
-    }
-    <button type="button" class="add-q-btn" (click)="addPergunta()">
-      <app-pesq-icon name="plus" [size]="15" />
-      Adicionar pergunta
-    </button>
-  </div>
     </div>
 
-    <aside class="preview-col">
+    <aside class="preview-col" [class.fullscreen]="previewExpandido()">
       <div class="tpl-switch" role="tablist" aria-label="Template visual">
         @for (t of templates(); track t.codigo) {
-          <button
-            type="button"
-            class="tpl-switch-btn"
-            [class.active]="templateCodigo() === t.codigo"
-            (click)="escolherTemplate(t.codigo)"
-          >
+          <button type="button" class="tpl-switch-btn" [class.active]="templateCodigo() === t.codigo" (click)="escolherTemplate(t.codigo)">
             {{ t.nome }}
           </button>
         }
       </div>
-      <div class="preview-label">Prévia do convidado</div>
+      <div class="preview-label">
+        <app-pesq-icon name="eye" [size]="14" />
+        <span>Como o convidado vai ver — arraste os campos pelo ícone no canto</span>
+        <button type="button" class="btn-expand-preview" (click)="togglePreview()">
+          <app-pesq-icon [name]="previewExpandido() ? 'collapse' : 'expand'" [size]="14" />
+          {{ previewExpandido() ? 'Fechar' : 'Ampliar' }}
+        </button>
+      </div>
       <app-pesquisas-guest-form
         mode="preview"
         [titulo]="titulo()"
         [descricao]="descricao()"
         [capaUrl]="capaPreview()"
+        [capaLayout]="capaLayout()"
         [template]="templateAtual()"
         [perguntas]="previewPerguntas()"
         [secoes]="secoes()"
         [respostas]="previewRespostas()"
         (valorChange)="onPreviewValor($event)"
+        (arquivoChange)="onPreviewArquivo($event)"
+        (blocosReorder)="onPreviewReorder($event)"
         (enviar)="onPreviewEnviar()"
       />
     </aside>
