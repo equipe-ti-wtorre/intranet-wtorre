@@ -28,6 +28,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
 
   readonly loading = signal(true);
   readonly loadingLista = signal(true);
+  readonly clonandoId = signal<number | null>(null);
   readonly tab = signal<'created' | 'mine'>('created');
   readonly busca = signal('');
   readonly criados = signal<PesquisasListItem[]>([]);
@@ -103,15 +104,38 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
   }
 
   statusBadgeClass(item: PesquisasListItem): string {
+    if (item.formStatus === 'publicado' && item.janela === 'depois') return 'closed';
     if (item.formStatus === 'publicado') return 'done';
     if (item.formStatus === 'rascunho') return 'draft';
     return 'closed';
   }
 
   statusBadgeText(item: PesquisasListItem): string {
+    if (item.formStatus === 'publicado' && item.janela === 'depois') return 'Encerrado';
+    if (item.formStatus === 'publicado' && item.janela === 'antes') return 'Aguardando';
     if (item.formStatus === 'publicado') return 'Publicado';
     if (item.formStatus === 'rascunho') return 'Rascunho';
     return 'Encerrado';
+  }
+
+  janelaRotulo(item: PesquisasListItem): string {
+    const ini = this.rotuloJanela(item.prazoInicio);
+    const fim = this.rotuloJanela(item.prazoFim);
+    if (ini && fim) return `${ini} – ${fim}`;
+    if (ini) return `Abre ${ini}`;
+    if (fim) return `Fecha ${fim}`;
+    return 'Sem janela';
+  }
+
+  private rotuloJanela(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const s = String(iso).replace(' ', 'T');
+    const [date, timeRaw = ''] = s.split('T');
+    const [y, m, d] = (date || '').split('-');
+    const hm = timeRaw.match(/^(\d{1,2}):(\d{2})/);
+    const hora = hm ? `${String(Number(hm[1])).padStart(2, '0')}:${hm[2]}` : '';
+    if (!y || !m || !d) return '';
+    return hora ? `${d}/${m} ${hora}` : `${d}/${m}`;
   }
 
   abrirDashboard(item: PesquisasListItem): void {
@@ -120,6 +144,29 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
 
   criarFormulario(): void {
     void this.router.navigate(['/pesquisas/formulario/novo']);
+  }
+
+  async clonarFormulario(item: PesquisasListItem): Promise<void> {
+    if (this.clonandoId()) return;
+    const ok = await this.alertas.confirmar({
+      titulo: `Clonar “${item.title}”?`,
+      texto:
+        'Será criada uma cópia em rascunho com o mesmo layout, perguntas e dados importados. Você poderá editar e publicar.',
+      confirmar: 'Clonar',
+    });
+    if (!ok) return;
+    this.clonandoId.set(item.id);
+    this.api.clonarFormulario(item.id).subscribe({
+      next: (form) => {
+        this.clonandoId.set(null);
+        this.alertas.sucesso('Cópia criada. Ajuste o que quiser e publique.');
+        void this.router.navigate(['/pesquisas/formulario', form.id, 'editar']);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.clonandoId.set(null);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível clonar o formulário.');
+      },
+    });
   }
 
   verMinhasRespostas(item: PesquisasListItem): void {

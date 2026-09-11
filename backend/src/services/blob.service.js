@@ -95,6 +95,16 @@ async function enviarArquivo(container, caminhoTmp, blobName, contentType) {
   });
 }
 
+async function enviarBuffer(container, buffer, blobName, contentType) {
+  return withBlobError(async () => {
+    const client = svc.getContainerClient(container).getBlockBlobClient(blobName);
+    await client.uploadData(buffer, {
+      blobHTTPHeaders: { blobContentType: contentType || 'application/octet-stream' },
+    });
+    return blobName;
+  });
+}
+
 async function removerBlob(container, blobName) {
   if (!blobName) return;
   return withBlobError(() =>
@@ -175,6 +185,7 @@ module.exports = {
   containerExiste,
   listarContainersDaConta,
   enviarArquivo,
+  enviarBuffer,
   removerBlob,
   gerarSasLeitura,
   baixarBuffer,

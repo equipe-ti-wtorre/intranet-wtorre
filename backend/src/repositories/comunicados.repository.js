@@ -56,14 +56,48 @@ function mapComunicado(row) {
   };
 }
 
+function nowSaoPauloSql() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const g = (t) => parts.find((p) => p.type === t)?.value;
+  return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
+}
+
 async function listarPublicos(limite = 20) {
   const pool = getPool();
   const limitNum = Math.min(Math.max(Number(limite) || 20, 1), 100);
+  const agora = nowSaoPauloSql();
   const [rows] = await pool.execute(
     `${SELECT_BASE}
-     WHERE c.ativo = 1 AND cat.ativo = 1
+     LEFT JOIN pesquisas_formularios pf
+       ON c.origem = 'pesquisas_formulario' AND c.origem_id = pf.id
+     WHERE cat.ativo = 1
+       AND (
+         (
+           (c.origem IS NULL OR c.origem <> 'pesquisas_formulario')
+           AND c.ativo = 1
+         )
+         OR (
+           c.origem = 'pesquisas_formulario'
+           AND pf.id IS NOT NULL
+           AND pf.status = 'publicado'
+           AND (pf.evento_ativo IS NULL OR pf.evento_ativo = 1)
+           AND (pf.publico_alvo IS NULL OR pf.publico_alvo <> 'externos')
+           AND (pf.prazo_inicio IS NULL OR pf.prazo_inicio <= ?)
+           AND (pf.prazo_fim IS NULL OR pf.prazo_fim >= ?)
+         )
+       )
      ORDER BY c.data_publicacao DESC, c.ordem IS NULL, c.ordem ASC, c.id DESC
-     LIMIT ${limitNum}`
+     LIMIT ${limitNum}`,
+    [agora, agora]
   );
   return rows.map(mapComunicado);
 }

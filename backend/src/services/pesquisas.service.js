@@ -302,6 +302,86 @@ function digitsCpf(raw) {
   return String(raw || '').replace(/\D/g, '');
 }
 
+function normHeader(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_./-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function isDocHeader(raw) {
+  return ['cpf', 'cnpj', 'cpf cnpj', 'documento', 'doc'].includes(normHeader(raw));
+}
+
+function isEmailHeader(raw) {
+  return ['email', 'e mail', 'mail', 'correio'].includes(normHeader(raw));
+}
+
+function extractChavesFromDados(dados) {
+  let chaveDoc = null;
+  let chaveEmail = null;
+  for (const [k, v] of Object.entries(dados || {})) {
+    const cell = String(v ?? '').trim();
+    if (!cell) continue;
+    if (isDocHeader(k)) {
+      const digits = digitsCpf(cell);
+      if (digits.length === 11 || digits.length === 14) {
+        chaveDoc = cryptoService.hmacSha256(digits);
+      }
+    }
+    if (isEmailHeader(k) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
+      chaveEmail = cell.toLowerCase();
+    }
+  }
+  return { chaveDoc, chaveEmail };
+}
+
+function normalizeBaseRows(raw) {
+  if (!Array.isArray(raw)) return [];
+  if (raw.length > 5000) {
+    throw httpError(400, 'A planilha pode ter no máximo 5.000 linhas.');
+  }
+  const out = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const keys = Object.keys(row).slice(0, 40);
+    if (!keys.length) continue;
+    const dados = {};
+    for (const k of keys) {
+      const header = str(k, 120);
+      if (!header) continue;
+      dados[header] = str(row[k], 500);
+    }
+    if (!Object.keys(dados).length) continue;
+    const { chaveDoc, chaveEmail } = extractChavesFromDados(dados);
+    out.push({ chaveDoc, chaveEmail, dados });
+  }
+  return out;
+}
+
+async function maybeReplaceBase(formId, body) {
+  if (!Array.isArray(body?.base)) return;
+  await repo.replaceFormularioBase(formId, normalizeBaseRows(body.base));
+}
+
+async function baseResumo(formId) {
+  return repo.summarizeFormularioBase(formId);
+}
+
+function lookupKeysFromValor(raw) {
+  const valor = str(raw, 200);
+  if (!valor) return { chaveDoc: null, chaveEmail: null };
+  const digits = digitsCpf(valor);
+  if (digits.length === 11 || digits.length === 14) {
+    return { chaveDoc: cryptoService.hmacSha256(digits), chaveEmail: null };
+  }
+  if (valor.includes('@')) {
+    return { chaveDoc: null, chaveEmail: valor.toLowerCase() };
+  }
+  return { chaveDoc: null, chaveEmail: null };
+}
+
 function maskCpf(digits) {
   return `***.${digits.slice(3, 6)}.**${digits[8]}-${digits.slice(9)}`;
 }
@@ -410,6 +490,8 @@ function toFormListItem(form, lista) {
     eventoTipo: form.eventoTipo,
     totalConvidados: form.totalConvidados,
     janela: janelaFora(form),
+    prazoInicio: form.prazoInicio || null,
+    prazoFim: form.prazoFim || null,
   };
 }
 
@@ -481,7 +563,13 @@ async function getFormularioPorId(id, { includeConvidados } = {}) {
   const form = await repo.findFormularioById(id);
   const perguntas = await repo.listPerguntas(id);
   const convidados = includeConvidados ? await repo.listConvidados(id) : undefined;
-  return decorateForm({ ...form, perguntas, ...(convidados ? { convidados } : {}) });
+  const resumoBase = await baseResumo(id);
+  return decorateForm({
+    ...form,
+    perguntas,
+    ...(convidados ? { convidados } : {}),
+    baseResumo: resumoBase,
+  });
 }
 
 function stripCapaSecrets(form) {
@@ -540,32 +628,49 @@ async function resolveTemplateCodigo(raw) {
   return 'wtorre';
 }
 
-async function syncComunicadoFormulario(form, { ativo, userId }) {
+async function syncComunicadoFormulario(form, { ativo, userId, bump = true }) {
   const cat = await catRepo.buscarPorSlug('pesquisas');
-  if (!cat) return;
+  if (!cat) {
+    console.error('[pesquisas] Categoria de comunicados "pesquisas" não encontrada.');
+    return false;
+  }
   const linkPath = `/pesquisas/formulario/${form.id}/responder`;
-  const today = new Date().toISOString().slice(0, 10);
+  const wantAtivo = !!ativo;
+  const existing = await comunicadosRepo.buscarPorOrigem(ORIGEM_FORM, form.id);
+  if (
+    existing &&
+    existing.titulo === form.titulo &&
+    existing.ativo === wantAtivo &&
+    existing.linkPath === linkPath &&
+    existing.categoriaId === cat.id
+  ) {
+    return false;
+  }
+  const today = nowSaoPauloSql().slice(0, 10);
   await comunicadosRepo.upsertOrigem({
     titulo: form.titulo,
     categoria_id: cat.id,
     data_publicacao: today,
     ordem: null,
-    ativo: !!ativo,
+    ativo: wantAtivo,
     criado_por: userId || form.criadorId || null,
     link_path: linkPath,
     origem: ORIGEM_FORM,
     origem_id: form.id,
   });
-  await contentVersionService.bump('comunicados');
+  if (bump) await contentVersionService.bump('comunicados');
+  return true;
 }
 
-async function desativarComunicadoFormulario(formId) {
+async function desativarComunicadoFormulario(formId, { bump = true } = {}) {
   const existing = await comunicadosRepo.buscarPorOrigem(ORIGEM_FORM, formId);
-  if (!existing) return;
+  if (!existing) return false;
   if (existing.ativo) {
     await comunicadosRepo.setAtivo(existing.id, false);
-    await contentVersionService.bump('comunicados');
+    if (bump) await contentVersionService.bump('comunicados');
+    return true;
   }
+  return false;
 }
 
 async function removerComunicadoFormulario(formId) {
@@ -575,18 +680,27 @@ async function removerComunicadoFormulario(formId) {
   await contentVersionService.bump('comunicados');
 }
 
-async function atualizarComunicadoDoFormulario(form, userId) {
-  if (
-    !form ||
-    form.publicoAlvo === 'externos' ||
-    form.status !== 'publicado' ||
-    !form.eventoAtivo ||
-    janelaFora(form)
-  ) {
-    if (form?.id) await desativarComunicadoFormulario(form.id);
-    return;
+async function atualizarComunicadoDoFormulario(form, userId, { bump = true } = {}) {
+  if (!form?.id) return false;
+  if (form.publicoAlvo === 'externos' || form.status !== 'publicado' || !form.eventoAtivo) {
+    return desativarComunicadoFormulario(form.id, { bump });
   }
-  await syncComunicadoFormulario(form, { ativo: true, userId });
+  return syncComunicadoFormulario(form, {
+    ativo: !janelaFora(form),
+    userId,
+    bump,
+  });
+}
+
+async function sincronizarComunicadosJanela() {
+  const forms = await repo.listFormulariosInternosPublicados();
+  let changed = false;
+  for (const form of forms) {
+    const did = await atualizarComunicadoDoFormulario(form, form.criadorId, { bump: false });
+    if (did) changed = true;
+  }
+  if (changed) await contentVersionService.bump('comunicados');
+  return changed;
 }
 
 async function resumo(req) {
@@ -677,7 +791,70 @@ async function getFormulario(req) {
   if (!owner && !admin) throw httpError(403, 'Você não pode editar este formulário.');
   const perguntas = await repo.listPerguntas(id);
   const convidados = await repo.listConvidados(id);
-  return decorateForm({ ...form, perguntas, convidados });
+  const resumoBase = await baseResumo(id);
+  return decorateForm({ ...form, perguntas, convidados, baseResumo: resumoBase });
+}
+
+function tituloCopia(titulo) {
+  const base = str(titulo, 255) || 'Sem título';
+  return `Cópia de ${base}`.slice(0, 255);
+}
+
+async function copiarCapaFormulario(fromId, toId) {
+  const capa = await repo.findFormularioCapa(fromId);
+  if (!capa) return;
+  const downloaded = await blobService.baixarBuffer(capa.container, capa.blob);
+  const container = await blobService.garantirContainer(env.pesquisasContainer);
+  const blobName = blobService.novoBlobName(capa.nome || downloaded.filename || 'capa');
+  await blobService.enviarBuffer(container, downloaded.buffer, blobName, downloaded.contentType);
+  await repo.setFormularioCapa(toId, {
+    container,
+    blob: blobName,
+    nome: capa.nome || downloaded.filename || 'capa',
+  });
+}
+
+async function clonarFormulario(req) {
+  const id = parseId(req.params.id);
+  const origem = await repo.findFormularioById(id);
+  if (!origem) throw httpError(404, 'Formulário não encontrado.');
+  if (origem.criadorId !== req.user.id && !isAdminPesquisas(req)) {
+    throw httpError(403, 'Você não pode clonar este formulário.');
+  }
+  const perguntas = await repo.listPerguntas(id);
+  const slug = await uniquePublicToken();
+  const novoId = await repo.insertFormulario({
+    criadorId: req.user.id,
+    titulo: tituloCopia(origem.titulo),
+    descricao: origem.descricao,
+    categoria: origem.categoria || 'Sem categoria',
+    prazo: origem.prazo,
+    prazoInicio: toSqlDateTime(origem.prazoInicio),
+    prazoFim: toSqlDateTime(origem.prazoFim),
+    publicoAlvo: origem.publicoAlvo,
+    publicoDepartamento: origem.publicoDepartamento,
+    tipo: origem.tipo || 'avancado',
+    status: 'rascunho',
+    secoes: origem.secoes,
+    logicaCondicional: origem.logicaCondicional,
+    anonimo: origem.anonimo,
+    slug,
+    eventoTipo: origem.eventoTipo,
+    eventoTipoOutro: origem.eventoTipoOutro,
+    eventoAtivo: true,
+    exigirIdentidade: origem.exigirIdentidade,
+    templateCodigo: origem.templateCodigo,
+    capaLayout: origem.capaLayout,
+  });
+  await repo.replacePerguntas(novoId, perguntas);
+  await repo.copyFormularioBase(id, novoId);
+  await repo.copyConvidados(id, novoId);
+  try {
+    await copiarCapaFormulario(id, novoId);
+  } catch {
+    /* rascunho válido mesmo se a capa não puder ser copiada */
+  }
+  return getFormularioPorId(novoId, { includeConvidados: true });
 }
 
 async function salvarFormulario(req, { publicar }) {
@@ -723,6 +900,7 @@ async function salvarFormulario(req, { publicar }) {
     if (body.publicoAlvo === 'externos') {
       await removerComunicadoFormulario(idParam);
     }
+    await maybeReplaceBase(idParam, req.body);
     return getFormularioPorId(idParam, { includeConvidados: true });
   }
 
@@ -735,6 +913,7 @@ async function salvarFormulario(req, { publicar }) {
   if (publicar && body.publicoAlvo === 'externos' && !(guests && guests.length)) {
     throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
   }
+  await maybeReplaceBase(id, req.body);
   return getFormularioPorId(id, { includeConvidados: true });
 }
 
@@ -863,7 +1042,34 @@ async function payloadResponder(req) {
     template: visual.template,
     capaUrl: visual.capaUrl,
     capaLayout: form.capaLayout || 'top',
+    temBase: (await baseResumo(id)).total > 0,
   };
+}
+
+async function lookupBaseIntranet(req) {
+  const id = parseId(req.params.id);
+  const form = await repo.findFormularioById(id);
+  if (!form) throw httpError(404, 'Formulário não encontrado.');
+  if (form.status !== 'publicado') {
+    throw httpError(409, 'Este formulário não está aberto para respostas.');
+  }
+  if (!form.eventoAtivo) {
+    throw httpError(409, 'Este formulário está desativado.');
+  }
+  if (form.publicoAlvo === 'externos') {
+    throw httpError(403, 'Este formulário é para convidados externos. Use o link público.');
+  }
+  assertJanelaAberta(form);
+  if (
+    form.publicoAlvo === 'departamento' &&
+    (req.user.departamento || '') !== (form.publicoDepartamento || '')
+  ) {
+    throw httpError(403, 'Este formulário não está disponível para o seu departamento.');
+  }
+  const keys = lookupKeysFromValor(req.body?.valor);
+  if (!keys.chaveDoc && !keys.chaveEmail) return { campos: {} };
+  const dados = await repo.lookupFormularioBase(id, keys);
+  return { campos: dados || {} };
 }
 
 function parseItensBody(req) {
@@ -1379,7 +1585,23 @@ async function publicoFormulario(req) {
     template: visual.template,
     capaUrl: visual.capaUrl,
     capaLayout: form.capaLayout || 'top',
+    temBase: (await baseResumo(form.id)).total > 0,
   };
+}
+
+async function lookupBasePublico(req) {
+  const slug = parseSlug(req.params.slug);
+  const form = await repo.findFormularioBySlug(slug);
+  assertFormularioPublicoAberto(form);
+  if (form.exigirIdentidade) {
+    if (!req.guest || req.guest.formId !== form.id || req.guest.slug !== form.slug) {
+      throw httpError(401, 'Confirme sua identidade para continuar.');
+    }
+  }
+  const keys = lookupKeysFromValor(req.body?.valor);
+  if (!keys.chaveDoc && !keys.chaveEmail) return { campos: {} };
+  const dados = await repo.lookupFormularioBase(form.id, keys);
+  return { campos: dados || {} };
 }
 
 async function publicoResponder(req) {
@@ -1560,12 +1782,14 @@ module.exports = {
   resumo,
   listFormularios,
   getFormulario,
+  clonarFormulario,
   publicarFormulario,
   despublicarFormulario,
   salvarRascunho,
   encerrarFormulario,
   excluirFormulario,
   payloadResponder,
+  lookupBaseIntranet,
   enviarResposta,
   resultados,
   minhaResposta,
@@ -1582,6 +1806,7 @@ module.exports = {
   publicoMeta,
   publicoVerificar,
   publicoFormulario,
+  lookupBasePublico,
   publicoResponder,
   atualizarEvento,
   listTemplatesAtivos,
@@ -1591,4 +1816,5 @@ module.exports = {
   excluirTemplate,
   uploadCapa,
   removerCapa,
+  sincronizarComunicadosJanela,
 };

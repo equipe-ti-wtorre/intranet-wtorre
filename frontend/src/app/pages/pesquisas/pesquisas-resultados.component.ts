@@ -57,16 +57,19 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   statusClass(): string {
-    const s = this.data()?.formulario.status;
-    if (s === 'publicado') return 'done';
-    if (s === 'rascunho') return 'draft';
+    const form = this.data()?.formulario;
+    if (form?.status === 'publicado' && form.janela === 'depois') return 'closed';
+    if (form?.status === 'publicado') return 'done';
+    if (form?.status === 'rascunho') return 'draft';
     return 'closed';
   }
 
   statusText(): string {
-    const s = this.data()?.formulario.status;
-    if (s === 'publicado') return 'Publicado';
-    if (s === 'rascunho') return 'Rascunho';
+    const form = this.data()?.formulario;
+    if (form?.status === 'publicado' && form.janela === 'depois') return 'Encerrado';
+    if (form?.status === 'publicado' && form.janela === 'antes') return 'Aguardando';
+    if (form?.status === 'publicado') return 'Publicado';
+    if (form?.status === 'rascunho') return 'Rascunho';
     return 'Encerrado';
   }
 
@@ -129,6 +132,30 @@ export class PesquisasResultadosComponent implements OnInit {
     if (id) void this.router.navigate(['/pesquisas/formulario', id, 'editar']);
   }
 
+  async clonar(): Promise<void> {
+    const d = this.data();
+    if (!d || this.agindo()) return;
+    const ok = await this.alertas.confirmar({
+      titulo: `Clonar “${d.formulario.titulo}”?`,
+      texto:
+        'Será criada uma cópia em rascunho com o mesmo layout, perguntas e dados importados. Você poderá editar e publicar.',
+      confirmar: 'Clonar',
+    });
+    if (!ok) return;
+    this.agindo.set(true);
+    this.api.clonarFormulario(d.formulario.id).subscribe({
+      next: (form) => {
+        this.agindo.set(false);
+        this.alertas.sucesso('Cópia criada. Ajuste o que quiser e publique.');
+        void this.router.navigate(['/pesquisas/formulario', form.id, 'editar']);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.agindo.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível clonar o formulário.');
+      },
+    });
+  }
+
   exportar(): void {
     const d = this.data();
     if (!d) return;
@@ -182,29 +209,10 @@ export class PesquisasResultadosComponent implements OnInit {
     });
   }
 
-  togglePublicar(): void {
+  toggleAtivo(): void {
     const d = this.data();
-    if (!d || this.agindo()) return;
-    const publicado = d.formulario.status === 'publicado';
-    this.agindo.set(true);
-    const req$ = publicado ? this.api.despublicar(d.formulario.id) : this.api.publicar({}, d.formulario.id);
-    req$.subscribe({
-      next: () => {
-        this.agindo.set(false);
-        this.alertas.sucesso(
-          publicado
-            ? 'Item despublicado.'
-            : d.formulario.publicoAlvo === 'externos'
-              ? 'Publicado. O link público não aparece em Comunicados.'
-              : 'Publicado! Agora aparece em Comunicados na intranet.'
-        );
-        this.carregar();
-      },
-      error: (err: HttpErrorResponse) => {
-        this.agindo.set(false);
-        this.alertas.erro(err.error?.mensagem || 'Não foi possível alterar a publicação.');
-      },
-    });
+    if (!d) return;
+    this.toggleEvento(d.formulario.eventoAtivo === false);
   }
 
   verRespondente(name: string): void {
@@ -254,7 +262,7 @@ export class PesquisasResultadosComponent implements OnInit {
     this.api.atualizarEvento(d.formulario.id, ativo).subscribe({
       next: () => {
         this.agindo.set(false);
-        this.alertas.sucesso(ativo ? 'Evento ativado.' : 'Evento desativado.');
+        this.alertas.sucesso(ativo ? 'Formulário ativado.' : 'Formulário desativado.');
         this.carregar();
       },
       error: (err: HttpErrorResponse) => {

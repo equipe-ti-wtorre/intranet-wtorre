@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -7,6 +7,7 @@ import { AlertasService } from '../../services/alertas.service';
 import { PesquisasPergunta, PesquisasResponderPayload } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
+import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
 
 @Component({
   selector: 'app-pesquisas-responder',
@@ -14,7 +15,7 @@ import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.compo
   imports: [FormsModule, PesqIconComponent, PesquisasGuestFormComponent],
   templateUrl: './pesquisas-responder.component.html',
 })
-export class PesquisasResponderComponent implements OnInit {
+export class PesquisasResponderComponent implements OnInit, OnDestroy {
   private readonly api = inject(PesquisasService);
   private readonly alertas = inject(AlertasService);
   private readonly route = inject(ActivatedRoute);
@@ -30,6 +31,9 @@ export class PesquisasResponderComponent implements OnInit {
     for (const [k, v] of Object.entries(this.respostas())) out[k] = v;
     return out;
   });
+
+  private lookupTimer: ReturnType<typeof setTimeout> | null = null;
+  private lookupSeq = 0;
 
   readonly visiveis = computed(() => {
     const p = this.payload();
@@ -53,6 +57,10 @@ export class PesquisasResponderComponent implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+    if (this.lookupTimer) clearTimeout(this.lookupTimer);
+  }
+
   setValor(id: number, valor: string): void {
     this.respostas.update((r) => ({ ...r, [id]: valor }));
   }
@@ -61,6 +69,7 @@ export class PesquisasResponderComponent implements OnInit {
     const id = Number(ev.key);
     if (!Number.isFinite(id)) return;
     this.setValor(id, ev.valor);
+    this.agendarLookup(id, ev.valor);
   }
 
   onGuestArquivo(ev: { key: string; file: File | null }): void {
@@ -100,6 +109,27 @@ export class PesquisasResponderComponent implements OnInit {
 
   voltar(): void {
     void this.router.navigate(['/pesquisas']);
+  }
+
+  private agendarLookup(id: number, valor: string): void {
+    const p = this.payload();
+    if (!p?.temBase) return;
+    const q = p.perguntas.find((x) => x.id === id);
+    if (!q || !isChaveHeader(q.texto)) return;
+    if (this.lookupTimer) clearTimeout(this.lookupTimer);
+    this.lookupTimer = setTimeout(() => {
+      if (!lookupPronto(valor)) return;
+      const seq = ++this.lookupSeq;
+      this.api.lookupBase(p.id, valor).subscribe({
+        next: (out) => {
+          if (seq !== this.lookupSeq) return;
+          const fill = matchCampos(out.campos || {}, p.perguntas, id);
+          if (!Object.keys(fill).length) return;
+          this.respostas.update((r) => ({ ...r, ...fill }));
+        },
+        error: () => undefined,
+      });
+    }, 400);
   }
 
   private visivel(

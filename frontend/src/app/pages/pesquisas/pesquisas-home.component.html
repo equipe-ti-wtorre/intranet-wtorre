@@ -94,40 +94,47 @@
       </div>
     } @else {
       @for (item of criadosFiltrados(); track item.id) {
-        <button type="button" class="list-row" (click)="abrirDashboard(item)">
-          <div class="row-icon">
-            <app-pesq-icon name="file-text" />
-          </div>
-          <div class="row-main">
-            <p class="row-title">{{ item.title }}</p>
-            <div class="row-meta">
-              <span>Formulário</span>
-              <span>·</span>
-              <span>{{ item.category }}</span>
-              @if (item.createdDate) {
+        <div class="list-row">
+          <button type="button" class="list-row-main" (click)="abrirDashboard(item)">
+            <div class="row-icon">
+              <app-pesq-icon name="file-text" />
+            </div>
+            <div class="row-main">
+              <p class="row-title">{{ item.title }}</p>
+              <div class="row-meta">
+                <span>Formulário</span>
                 <span>·</span>
-                <span>Criado em {{ item.createdDate }}</span>
-              }
-              @if (item.publicoAlvo === 'externos') {
-                <span class="badge exec">Externo (sem Comunicados)</span>
-              }
-              @if (item.eventoAtivo === false) {
-                <span class="badge recusada">Evento desativado</span>
-              }
-              @if (item.formStatus === 'publicado' && item.janela === 'antes') {
-                <span class="badge pending">Aguardando abertura</span>
-              }
+                <span>{{ item.category }}</span>
+                <span>·</span>
+                <span>{{ janelaRotulo(item) }}</span>
+                @if (item.publicoAlvo === 'externos') {
+                  <span class="badge exec">Externo (sem Comunicados)</span>
+                }
+                @if (item.eventoAtivo === false) {
+                  <span class="badge recusada">Evento desativado</span>
+                }
+              </div>
             </div>
-          </div>
-          <div class="row-metric">
-            <div class="rm-num">{{ item.totalRespostas || 0 }} respostas</div>
-            <div class="progress-track">
-              <div class="progress-fill" [style.width.%]="formPct(item)"></div>
+            <div class="row-metric">
+              <div class="rm-num">{{ item.totalRespostas || 0 }} respostas</div>
+              <div class="progress-track">
+                <div class="progress-fill" [style.width.%]="formPct(item)"></div>
+              </div>
             </div>
-          </div>
-          <span class="badge" [class]="statusBadgeClass(item)">{{ statusBadgeText(item) }}</span>
-          <span class="chev-right"><app-pesq-icon name="chevron-right" [size]="15" /></span>
-        </button>
+            <span class="badge" [class]="statusBadgeClass(item)">{{ statusBadgeText(item) }}</span>
+            <span class="chev-right"><app-pesq-icon name="chevron-right" [size]="15" /></span>
+          </button>
+          <button
+            type="button"
+            class="row-action"
+            [disabled]="clonandoId() === item.id"
+            title="Clonar formulário"
+            (click)="clonarFormulario(item)"
+          >
+            <app-pesq-icon name="copy" [size]="13" />
+            Clonar
+          </button>
+        </div>
       }
     }
   </div>

@@ -33,6 +33,12 @@ router.get(
   controller.publicoFormulario
 );
 router.post(
+  '/publico/:slug/base/lookup',
+  rateLimitPesquisasPublico,
+  optionalPesquisasGuest,
+  controller.publicoLookupBase
+);
+router.post(
   '/publico/:slug/respostas',
   rateLimitPesquisasPublico,
   optionalPesquisasGuest,
@@ -48,6 +54,7 @@ router.get('/templates', requireJwt, controller.listTemplates);
 router.get('/formularios', requireJwt, controller.listFormularios);
 router.post('/formularios', requireJwt, controller.criarRascunho);
 router.get('/formularios/:id/responder', requireJwt, controller.payloadResponder);
+router.post('/formularios/:id/base/lookup', requireJwt, controller.lookupBase);
 router.post(
   '/formularios/:id/respostas',
   requireJwt,
@@ -56,6 +63,7 @@ router.post(
 );
 router.get('/formularios/:id/resultados', requireJwt, controller.resultados);
 router.get('/formularios/:id/minha-resposta', requireJwt, controller.minhaResposta);
+router.post('/formularios/:id/clonar', requireJwt, controller.clonar);
 router.post('/formularios/:id/publicar', requireJwt, controller.publicar);
 router.post('/formularios/:id/despublicar', requireJwt, controller.despublicar);
 router.post('/formularios/:id/evento', requireJwt, controller.atualizarEvento);

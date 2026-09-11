@@ -86,18 +86,6 @@
             placeholder="Ex: Pesquisa de satisfação do evento"
           />
         </div>
-        <div class="field-grid" style="margin-top: 16px">
-          <div class="field">
-            <label>Categoria</label>
-            <input
-              type="text"
-              [ngModel]="categoria()"
-              (ngModelChange)="categoria.set($event)"
-              placeholder="Opcional — vazio vira Sem categoria"
-              maxlength="80"
-            />
-          </div>
-        </div>
         <div class="field" style="margin-top: 16px">
           <label>Descrição</label>
           <textarea
@@ -148,16 +136,6 @@
             </select>
           </div>
         }
-        <div class="toggle-row" style="margin-top: 16px">
-          <div class="toggle-text">
-            <b>Bloqueio manual</b>
-            <span>Se desativado, bloqueia na hora, mesmo dentro do horário. Ligado, a janela é quem abre e fecha.</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" [ngModel]="eventoAtivo()" (ngModelChange)="eventoAtivo.set($event)" />
-            <span class="slider"></span>
-          </label>
-        </div>
         @if (publicoAlvo() === 'externos') {
           <div class="ext-callout">
             <app-pesq-icon name="alert" [size]="16" />
@@ -265,26 +243,6 @@
             <span class="slider"></span>
           </label>
         </div>
-        <div class="toggle-row">
-          <div class="toggle-text">
-            <b>Organizar em seções</b>
-            <span>Agrupe perguntas em blocos temáticos</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" [ngModel]="secoes()" (ngModelChange)="secoes.set($event)" />
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="toggle-row">
-          <div class="toggle-text">
-            <b>Lógica condicional</b>
-            <span>Exibir perguntas com base em respostas anteriores</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" [ngModel]="logica()" (ngModelChange)="logica.set($event)" />
-            <span class="slider"></span>
-          </label>
-        </div>
       </div>
 
       <div class="form-card">
@@ -383,11 +341,6 @@
                   <app-pesq-icon name="x" [size]="14" />
                 </button>
               </div>
-              @if (secoes() && p.blocoTipo === 'pergunta') {
-                <div class="q-secao">
-                  <input type="text" placeholder="Título da seção (opcional)" [ngModel]="p.secaoTitulo" (ngModelChange)="patch(p.key, { secaoTitulo: $event })" />
-                </div>
-              }
               @if (p.blocoTipo === 'pergunta') {
                 <div class="q-row">
                   <select [ngModel]="p.tipo" (ngModelChange)="patch(p.key, { tipo: $event })">
@@ -421,18 +374,6 @@
                   </div>
                 }
                 <input type="text" class="block-mini-input" [ngModel]="p.ajuda" (ngModelChange)="patch(p.key, { ajuda: $event })" placeholder="Texto de ajuda abaixo do campo (opcional)" />
-                @if (logica() && i > 0) {
-                  <div class="q-logic">
-                    <app-pesq-icon name="link" [size]="13" />
-                    Exibir se a resposta da pergunta {{ i }} atender:
-                    <select [ngModel]="p.logicaCondicao" (ngModelChange)="patch(p.key, { logicaCondicao: $event })">
-                      <option value="qualquer">qualquer resposta</option>
-                      <option value="sim">for "Sim"</option>
-                      <option value="nao">for "Não"</option>
-                      <option value="escala_gte_4">nota ≥ 4</option>
-                    </select>
-                  </div>
-                }
               } @else if (p.blocoTipo === 'anexo') {
                 <label class="q-req" style="margin-top: 8px; display: inline-flex">
                   <input type="checkbox" [ngModel]="p.obrigatoria" (ngModelChange)="patch(p.key, { obrigatoria: $event })" style="accent-color: var(--primary-600); width: 15px; height: 15px" />
@@ -479,7 +420,7 @@
         [capaLayout]="capaLayout()"
         [template]="templateAtual()"
         [perguntas]="previewPerguntas()"
-        [secoes]="secoes()"
+        [secoes]="false"
         [respostas]="previewRespostas()"
         (valorChange)="onPreviewValor($event)"
         (arquivoChange)="onPreviewArquivo($event)"

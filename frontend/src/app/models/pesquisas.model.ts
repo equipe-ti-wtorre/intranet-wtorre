@@ -66,6 +66,8 @@ export interface PesquisasListItem {
   eventoTipo?: string | null;
   totalConvidados?: number;
   janela?: 'antes' | 'depois' | null;
+  prazoInicio?: string | null;
+  prazoFim?: string | null;
 }
 
 export interface PesquisasLogica {
@@ -130,6 +132,7 @@ export interface PesquisasFormulario {
   capaUrl?: string | null;
   capaLayout?: CapaLayout;
   temCapa?: boolean;
+  baseResumo?: { total: number; temCpf: boolean; temEmail: boolean };
 }
 
 export interface PesquisasTemplateVisual {
@@ -160,6 +163,7 @@ export interface PesquisasResponderPayload {
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
   capaLayout?: CapaLayout;
+  temBase?: boolean;
 }
 
 export interface PesquisasResultadoItem {

@@ -55,6 +55,10 @@ export class PesquisasService {
     return this.http.get<PesquisasFormulario>(this.api(`/formularios/${id}`));
   }
 
+  clonarFormulario(id: number): Observable<PesquisasFormulario> {
+    return this.http.post<PesquisasFormulario>(this.api(`/formularios/${id}/clonar`), {});
+  }
+
   salvarRascunho(body: Record<string, unknown>, id?: number): Observable<PesquisasFormulario> {
     if (id) {
       return this.http.post<PesquisasFormulario>(this.api(`/formularios/${id}/rascunho`), body);
@@ -76,6 +80,26 @@ export class PesquisasService {
 
   payloadResponder(id: number): Observable<PesquisasResponderPayload> {
     return this.http.get<PesquisasResponderPayload>(this.api(`/formularios/${id}/responder`));
+  }
+
+  lookupBase(id: number, valor: string): Observable<{ campos: Record<string, string> }> {
+    return this.http.post<{ campos: Record<string, string> }>(
+      this.api(`/formularios/${id}/base/lookup`),
+      { valor }
+    );
+  }
+
+  publicoLookupBase(
+    slug: string,
+    valor: string,
+    token?: string
+  ): Observable<{ campos: Record<string, string> }> {
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    return this.http.post<{ campos: Record<string, string> }>(
+      this.api(`/publico/${encodeURIComponent(slug)}/base/lookup`),
+      { valor },
+      { headers }
+    );
   }
 
   enviarResposta(

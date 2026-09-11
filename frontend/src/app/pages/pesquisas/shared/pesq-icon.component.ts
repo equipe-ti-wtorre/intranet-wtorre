@@ -78,6 +78,10 @@ import { Component, Input } from '@angular/core';
           <path d="M9.2 14.8 14.8 9.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           <path d="M8 12.8 6.2 14.6a2.9 2.9 0 0 0 4.1 4.1L12 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
         }
+        @case ('copy') {
+          <rect x="8.2" y="8.2" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.7" />
+          <path d="M6.2 15.2V6.8c0-1 .8-1.8 1.8-1.8h8.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+        }
         @case ('megaphone') {
           <path d="M3 10.5v3a1 1 0 0 0 1 1h1.4l6.6 3.4V6.1L5.4 9.5H4a1 1 0 0 0-1 1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
           <path d="M15 8.3a3.2 3.2 0 0 1 0 7.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />

@@ -42,6 +42,7 @@ const { agendarJobsCamarotes } = require('./services/camarotes-cron.service');
 const { agendarJobsBid } = require('./services/bid-cron.service');
 const { agendarJobsFollowup } = require('./services/followup-cron.service');
 const { agendarLembretesMassagem } = require('./services/massagem-lembrete.service');
+const { agendarJobsPesquisas } = require('./services/pesquisas-cron.service');
 const { reconcileAll } = require('./services/doc-pagina-menu.sync');
 const { ensureFotosDir } = require('./controllers/colaboradores.controller');
 const { ensureGrupoLogosDir } = require('./config/grupo-logos-upload');
@@ -69,7 +70,7 @@ app.use(
 
 app.use('/api/v1/webhooks', webhooksRoutes);
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(requestIdMiddleware);
 
 app.get('/api/health', (_req, res) => {
@@ -160,4 +161,5 @@ app.listen(env.port, () => {
   agendarJobsBid();
   agendarJobsFollowup();
   agendarLembretesMassagem();
+  agendarJobsPesquisas();
 });

@@ -24,9 +24,6 @@
           @if (d.formulario.eventoAtivo === false) {
             <span class="badge recusada">Evento desativado</span>
           }
-          @if (d.formulario.status === 'publicado' && d.formulario.janela === 'antes') {
-            <span class="badge pending">Aguardando abertura</span>
-          }
         </div>
       </div>
     </div>
@@ -37,36 +34,22 @@
           Editar
         </button>
       }
+      <button type="button" class="btn-secondary" [disabled]="agindo()" (click)="clonar()">
+        <app-pesq-icon name="copy" [size]="15" />
+        Clonar
+      </button>
       <button type="button" class="btn-secondary" (click)="exportar()">
         <app-pesq-icon name="download" [size]="15" />
         Exportar
       </button>
-      <button type="button" class="btn-primary" [disabled]="agindo()" (click)="togglePublicar()">
+      <button type="button" class="btn-primary" [disabled]="agindo()" (click)="toggleAtivo()">
         <app-pesq-icon name="megaphone" [size]="16" />
-        {{ d.formulario.status === 'publicado' ? 'Despublicar' : 'Publicar' }}
+        {{ d.formulario.eventoAtivo === false ? 'Ativar' : 'Desativar' }}
       </button>
       <button type="button" class="btn-danger" [disabled]="agindo()" (click)="excluir()">
         <app-pesq-icon name="trash" [size]="15" />
         Excluir
       </button>
-    </div>
-  </div>
-
-  <div class="form-card">
-    <div class="toggle-row">
-      <div class="toggle-text">
-        <b>Bloqueio manual</b>
-        <span>Se desativado, bloqueia na hora, mesmo dentro do horário. Ligado, a janela é quem abre e fecha.</span>
-      </div>
-      <label class="switch">
-        <input
-          type="checkbox"
-          [checked]="d.formulario.eventoAtivo !== false"
-          (change)="toggleEvento($any($event.target).checked)"
-          [disabled]="agindo()"
-        />
-        <span class="slider"></span>
-      </label>
     </div>
   </div>
 

@@ -221,6 +221,17 @@ async function listFormulariosAdmin() {
   return rows.map(mapFormulario);
 }
 
+async function listFormulariosInternosPublicados() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `${FORM_SELECT}
+     WHERE f.status = 'publicado'
+       AND (f.publico_alvo IS NULL OR f.publico_alvo <> 'externos')
+     ORDER BY f.id ASC`
+  );
+  return rows.map(mapFormulario);
+}
+
 async function countFormulariosPendentes(user) {
   const pool = getPool();
   const [rows] = await pool.execute(
@@ -813,6 +824,103 @@ async function findConvidadoHash(formularioId, id) {
   };
 }
 
+async function copyFormularioBase(fromId, toId) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO pesquisas_formulario_base (formulario_id, chave_doc, chave_email, dados)
+     SELECT ?, chave_doc, chave_email, dados
+     FROM pesquisas_formulario_base
+     WHERE formulario_id = ?`,
+    [toId, fromId]
+  );
+}
+
+async function copyConvidados(fromId, toId) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO pesquisas_convidados (formulario_id, nome, email, cpf_hash, cpf_mascara)
+     SELECT ?, nome, email, cpf_hash, cpf_mascara
+     FROM pesquisas_convidados
+     WHERE formulario_id = ?`,
+    [toId, fromId]
+  );
+}
+
+async function replaceFormularioBase(formularioId, rows) {
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute('DELETE FROM pesquisas_formulario_base WHERE formulario_id = ?', [
+      formularioId,
+    ]);
+    for (const row of rows) {
+      await conn.execute(
+        `INSERT INTO pesquisas_formulario_base
+          (formulario_id, chave_doc, chave_email, dados)
+         VALUES (?, ?, ?, ?)`,
+        [formularioId, row.chaveDoc || null, row.chaveEmail || null, JSON.stringify(row.dados)]
+      );
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function summarizeFormularioBase(formularioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) AS n,
+            SUM(chave_doc IS NOT NULL) AS tem_cpf,
+            SUM(chave_email IS NOT NULL) AS tem_email
+     FROM pesquisas_formulario_base
+     WHERE formulario_id = ?`,
+    [formularioId]
+  );
+  const row = rows[0] || {};
+  return {
+    total: Number(row.n || 0),
+    temCpf: Number(row.tem_cpf || 0) > 0,
+    temEmail: Number(row.tem_email || 0) > 0,
+  };
+}
+
+function parseDados(raw) {
+  if (raw && typeof raw === 'object' && !Buffer.isBuffer(raw)) return raw;
+  try {
+    return JSON.parse(String(raw || '{}')) || {};
+  } catch {
+    return {};
+  }
+}
+
+async function lookupFormularioBase(formularioId, { chaveDoc, chaveEmail }) {
+  const pool = getPool();
+  if (chaveDoc) {
+    const [rows] = await pool.execute(
+      `SELECT dados FROM pesquisas_formulario_base
+       WHERE formulario_id = ? AND chave_doc = ?
+       LIMIT 1`,
+      [formularioId, chaveDoc]
+    );
+    if (rows[0]) return parseDados(rows[0].dados);
+  }
+  if (chaveEmail) {
+    const [rows] = await pool.execute(
+      `SELECT dados FROM pesquisas_formulario_base
+       WHERE formulario_id = ? AND chave_email = ?
+       LIMIT 1`,
+      [formularioId, chaveEmail]
+    );
+    if (rows[0]) return parseDados(rows[0].dados);
+  }
+  return null;
+}
+
 async function findRespostaDoConvidado(formularioId, convidadoId) {
   const pool = getPool();
   const [rows] = await pool.execute(
@@ -839,6 +947,7 @@ module.exports = {
   listFormulariosRespondidos,
   listFormulariosCriados,
   listFormulariosAdmin,
+  listFormulariosInternosPublicados,
   countFormulariosPendentes,
   countFormulariosRespondidos,
   countFormulariosCriados,
@@ -879,6 +988,11 @@ module.exports = {
   findConvidadoByHashEmail,
   findConvidadoHash,
   findRespostaDoConvidado,
+  copyFormularioBase,
+  copyConvidados,
+  replaceFormularioBase,
+  summarizeFormularioBase,
+  lookupFormularioBase,
   setFormularioCapa,
   findFormularioCapa,
   mapTemplate,

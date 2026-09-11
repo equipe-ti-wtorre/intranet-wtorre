@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -11,6 +11,7 @@ import {
   PesquisasTemplateVisual,
 } from '../../models/pesquisas.model';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
+import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
 
 @Component({
   selector: 'app-pesquisas-publico',
@@ -19,7 +20,7 @@ import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.compo
   templateUrl: './pesquisas-publico.component.html',
   encapsulation: ViewEncapsulation.None,
 })
-export class PesquisasPublicoComponent implements OnInit {
+export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   private readonly api = inject(PesquisasService);
   private readonly alertas = inject(AlertasService);
   private readonly route = inject(ActivatedRoute);
@@ -52,6 +53,8 @@ export class PesquisasPublicoComponent implements OnInit {
       }
   );
   private guestToken: string | null = null;
+  private lookupTimer: ReturnType<typeof setTimeout> | null = null;
+  private lookupSeq = 0;
 
   readonly visiveis = computed(() => {
     const p = this.payload();
@@ -75,6 +78,10 @@ export class PesquisasPublicoComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.lookupTimer) clearTimeout(this.lookupTimer);
   }
 
   formatCpfInput(raw: string): void {
@@ -110,6 +117,7 @@ export class PesquisasPublicoComponent implements OnInit {
     const id = Number(ev.key);
     if (!Number.isFinite(id)) return;
     this.setValor(id, ev.valor);
+    this.agendarLookup(id, ev.valor);
   }
 
   onGuestArquivo(ev: { key: string; file: File | null }): void {
@@ -198,6 +206,28 @@ export class PesquisasPublicoComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  private agendarLookup(id: number, valor: string): void {
+    const p = this.payload();
+    const m = this.meta();
+    if (!p?.temBase || !m) return;
+    const q = p.perguntas.find((x) => x.id === id);
+    if (!q || !isChaveHeader(q.texto)) return;
+    if (this.lookupTimer) clearTimeout(this.lookupTimer);
+    this.lookupTimer = setTimeout(() => {
+      if (!lookupPronto(valor)) return;
+      const seq = ++this.lookupSeq;
+      this.api.publicoLookupBase(m.slug, valor, this.guestToken || undefined).subscribe({
+        next: (out) => {
+          if (seq !== this.lookupSeq) return;
+          const fill = matchCampos(out.campos || {}, p.perguntas, id);
+          if (!Object.keys(fill).length) return;
+          this.respostas.update((r) => ({ ...r, ...fill }));
+        },
+        error: () => undefined,
+      });
+    }, 400);
   }
 
   private visivel(

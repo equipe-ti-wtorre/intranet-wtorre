@@ -56,6 +56,16 @@ async function getFormulario(req, res) {
   }
 }
 
+async function clonar(req, res) {
+  try {
+    const form = await service.clonarFormulario(req);
+    await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_FORMULARIO_CLONAR' });
+    res.status(201).json(form);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function criarRascunho(req, res) {
   try {
     res.status(201).json(await service.salvarRascunho(req));
@@ -97,6 +107,14 @@ async function excluirFormulario(req, res) {
     const out = await service.excluirFormulario(req);
     await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_FORMULARIO_EXCLUIR' });
     res.json(out);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function lookupBase(req, res) {
+  try {
+    res.json(await service.lookupBaseIntranet(req));
   } catch (err) {
     handleError(res, err);
   }
@@ -171,6 +189,14 @@ async function publicoVerificar(req, res) {
 async function publicoFormulario(req, res) {
   try {
     res.json(await service.publicoFormulario(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function publicoLookupBase(req, res) {
+  try {
+    res.json(await service.lookupBasePublico(req));
   } catch (err) {
     handleError(res, err);
   }
@@ -320,12 +346,14 @@ module.exports = {
   buscarAprovadores,
   listFormularios,
   getFormulario,
+  clonar,
   criarRascunho,
   atualizarRascunho,
   publicar,
   encerrar,
   excluirFormulario,
   payloadResponder,
+  lookupBase,
   enviarResposta,
   resultados,
   minhaResposta,
@@ -334,6 +362,7 @@ module.exports = {
   publicoMeta,
   publicoVerificar,
   publicoFormulario,
+  publicoLookupBase,
   publicoResponder,
   listRequisicoes,
   getRequisicao,

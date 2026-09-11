@@ -24,6 +24,12 @@ import {
   GuestReorderEvent,
   PesquisasGuestFormComponent,
 } from './shared/pesquisas-guest-form.component';
+import {
+  isChaveHeader,
+  lookupLocal,
+  lookupPronto,
+  matchCampos,
+} from './shared/pesquisas-base.util';
 
 const TPL_WTORRE: PesquisasTemplateVisual = {
   codigo: 'wtorre',
@@ -110,6 +116,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly previewExpandido = signal(false);
   readonly previewRespostas = signal<Record<string, string>>({});
   private capaPendente: File | null = null;
+  private baseLinhas: Record<string, unknown>[] | null = null;
+  private previewLookupTimer: ReturnType<typeof setTimeout> | null = null;
   private listDragKey: number | null = null;
   readonly listDrop = signal<{ targetKey: number; insertBefore: boolean } | null>(null);
   readonly layouts: { id: CapaLayout; title: string; sub: string }[] = [
@@ -158,7 +166,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     const iniHora = this.normalizeHora(this.prazoInicioHora()) || (iniData ? '00:00' : '');
     const fimHora = this.normalizeHora(this.prazoFimHora()) || (fimData ? '23:59' : '');
     if (!iniData && !fimData) {
-      return 'Sem janela: fica aberto enquanto estiver publicado e o bloqueio manual estiver ligado.';
+      return 'Sem janela: fica aberto enquanto estiver publicado e ativo.';
     }
     const now = this.agoraBrasilia();
     const ini = iniData ? `${iniData} ${iniHora}:00` : null;
@@ -227,6 +235,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.previewLookupTimer) clearTimeout(this.previewLookupTimer);
     this.revokeCapaLocal();
   }
 
@@ -270,6 +279,21 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   onPreviewValor(ev: { key: string; valor: string }): void {
     this.previewRespostas.update((r) => ({ ...r, [ev.key]: ev.valor }));
+    const q = this.previewPerguntas().find((p) => String(p.id) === ev.key);
+    if (!q || !isChaveHeader(q.texto) || !this.baseLinhas?.length) return;
+    if (this.previewLookupTimer) clearTimeout(this.previewLookupTimer);
+    this.previewLookupTimer = setTimeout(() => {
+      if (!lookupPronto(ev.valor)) return;
+      const campos = lookupLocal(this.baseLinhas || [], ev.valor);
+      if (!campos) return;
+      const fill = matchCampos(campos, this.previewPerguntas(), q.id);
+      if (!Object.keys(fill).length) return;
+      this.previewRespostas.update((r) => {
+        const next = { ...r };
+        for (const [id, val] of Object.entries(fill)) next[id] = val;
+        return next;
+      });
+    }, 400);
   }
 
   onPreviewEnviar(): void {
@@ -365,7 +389,11 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         this.alertas.erro('A planilha está vazia.');
         return;
       }
-      this.importRowIntoForm(rows[0]);
+      if (rows.length > 5000) {
+        this.alertas.erro('A planilha pode ter no máximo 5.000 linhas.');
+        return;
+      }
+      this.importRowsIntoForm(rows);
     } catch {
       this.alertas.erro('Não consegui ler essa planilha.');
     }
@@ -739,13 +767,15 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     };
   }
 
-  private importRowIntoForm(row: Record<string, unknown>): void {
-    const titleFields = ['titulo', 'título', 'nome do evento', 'evento', 'nome'];
+  private importRowsIntoForm(rows: Record<string, unknown>[]): void {
+    const first = rows[0];
+    const titleFields = ['titulo', 'título', 'nome do evento', 'evento'];
     let created = 0;
-    for (const header of Object.keys(row)) {
+    const headers = Object.keys(first).slice(0, 40);
+    for (const header of headers) {
       const norm = header.trim().toLowerCase();
       if (titleFields.includes(norm)) {
-        this.titulo.set(String(row[header] ?? '').trim());
+        if (!this.titulo().trim()) this.titulo.set(String(first[header] ?? '').trim());
         continue;
       }
       const exists = this.perguntas().some(
@@ -757,8 +787,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       this.perguntas.update((list) => [...list, card]);
       created += 1;
     }
+    this.baseLinhas = rows.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const h of headers) out[h] = row[h];
+      return out;
+    });
     this.alertas.sucesso(
-      created === 1 ? '1 pergunta criada a partir das colunas da planilha.' : `${created} pergunta(s) criada(s) a partir das colunas da planilha.`
+      `${created} pergunta(s) e ${rows.length} linha(s) importadas. CPF/e-mail preenchem o resto.`
     );
   }
 
@@ -839,7 +874,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     return {
       titulo: this.titulo().trim(),
       descricao: this.descricao().trim(),
-      categoria: this.categoria().trim(),
+      categoria: '',
       prazoInicio: this.combineDateTime(this.prazoInicioData(), this.prazoInicioHora()),
       prazoFim: this.combineDateTime(this.prazoFimData(), this.prazoFimHora()),
       prazoInicioData: this.prazoInicioData() || null,
@@ -849,8 +884,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       publicoAlvo: this.publicoAlvo(),
       publicoDepartamento: this.publicoDepartamento(),
       tipo: 'avancado',
-      secoes: this.secoes(),
-      logicaCondicional: this.logica(),
+      secoes: false,
+      logicaCondicional: false,
       anonimo: this.anonimo(),
       eventoTipo: this.eventoTipo(),
       eventoTipoOutro: this.eventoTipoOutro().trim(),
@@ -858,6 +893,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       exigirIdentidade: this.exigirIdentidade(),
       templateCodigo: this.templateCodigo(),
       capaLayout: this.capaLayout(),
+      ...(this.baseLinhas ? { base: this.baseLinhas } : {}),
       convidados: this.convidados().map((g) => ({
         id: g.id,
         nome: g.nome,
@@ -879,10 +915,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         ajuda: p.ajuda,
         novaLinha: p.novaLinha,
         secaoTitulo: p.secaoTitulo,
-        logica:
-          this.logica() && idx > 0 && p.blocoTipo === 'pergunta'
-            ? { perguntaOrdem: idx, condicao: p.logicaCondicao }
-            : null,
+        logica: null,
       })),
     };
   }
