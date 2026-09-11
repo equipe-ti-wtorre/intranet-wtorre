@@ -50,6 +50,9 @@ function mapComunicado(row) {
     criado_por: row.criado_por,
     criado_em: row.criado_em,
     atualizado_em: row.atualizado_em,
+    linkPath: row.link_path || null,
+    origem: row.origem || null,
+    origemId: row.origem_id != null ? Number(row.origem_id) : null,
   };
 }
 
@@ -95,8 +98,9 @@ async function buscarPorId(id) {
 async function criar(data) {
   const pool = getPool();
   const [result] = await pool.execute(
-    `INSERT INTO comunicados (titulo, categoria_id, data_publicacao, ordem, ativo, criado_por)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO comunicados
+       (titulo, categoria_id, data_publicacao, ordem, ativo, criado_por, link_path, origem, origem_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.titulo,
       data.categoria_id,
@@ -104,6 +108,9 @@ async function criar(data) {
       data.ordem ?? null,
       data.ativo ? 1 : 0,
       data.criado_por ?? null,
+      data.link_path ?? null,
+      data.origem ?? null,
+      data.origem_id ?? null,
     ]
   );
   return buscarPorId(result.insertId);
@@ -127,6 +134,44 @@ async function atualizar(id, data) {
   return buscarPorId(id);
 }
 
+async function buscarPorOrigem(origem, origemId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `${SELECT_BASE} WHERE c.origem = ? AND c.origem_id = ? LIMIT 1`,
+    [origem, origemId]
+  );
+  return mapComunicado(rows[0]);
+}
+
+async function upsertOrigem(data) {
+  const existing = await buscarPorOrigem(data.origem, data.origem_id);
+  if (existing) {
+    const pool = getPool();
+    await pool.execute(
+      `UPDATE comunicados
+       SET titulo = ?, categoria_id = ?, ativo = ?, link_path = ?, origem = ?, origem_id = ?
+       WHERE id = ?`,
+      [
+        data.titulo,
+        data.categoria_id,
+        data.ativo ? 1 : 0,
+        data.link_path ?? null,
+        data.origem,
+        data.origem_id,
+        existing.id,
+      ]
+    );
+    return buscarPorId(existing.id);
+  }
+  return criar(data);
+}
+
+async function setAtivo(id, ativo) {
+  const pool = getPool();
+  await pool.execute('UPDATE comunicados SET ativo = ? WHERE id = ?', [ativo ? 1 : 0, id]);
+  return buscarPorId(id);
+}
+
 async function remover(id) {
   const pool = getPool();
   await pool.execute('DELETE FROM comunicados WHERE id = ?', [id]);
@@ -136,6 +181,9 @@ module.exports = {
   listarPublicos,
   listarAdmin,
   buscarPorId,
+  buscarPorOrigem,
+  upsertOrigem,
+  setAtivo,
   criar,
   atualizar,
   remover,

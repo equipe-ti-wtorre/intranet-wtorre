@@ -19,6 +19,7 @@ export interface Comunicado {
   dia: string;
   mes: string;
   dataPublicacao: string;
+  linkPath?: string | null;
 }
 
 export interface ComunicadoAdmin extends Comunicado {

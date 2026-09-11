@@ -28,6 +28,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*",
+                "input": "node_modules/tinymce",
+                "output": "/tinymce"
               }
             ],
             "styles": [
@@ -68,7 +73,8 @@
               "intranet.nubankparque.com",
               "intranet.basecoworking.space",
               "intranet.novoanhangabau.com.br",
-              "intranet.wtorre.com.br"
+              "intranet.wtorre.com.br",
+              "intranet.nbpdev.com.br"
             ]
           },
           "configurations": {

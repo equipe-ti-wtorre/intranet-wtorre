@@ -55,6 +55,15 @@ async function buscarPorIdAtiva(id) {
   return mapCategoria(rows[0]);
 }
 
+async function buscarPorSlug(slug) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM comunicado_categorias WHERE slug = ? LIMIT 1',
+    [slug]
+  );
+  return mapCategoria(rows[0]);
+}
+
 async function contarComunicados(categoriaId) {
   const pool = getPool();
   const [rows] = await pool.execute(
@@ -96,6 +105,7 @@ module.exports = {
   listar,
   buscarPorId,
   buscarPorIdAtiva,
+  buscarPorSlug,
   contarComunicados,
   criar,
   atualizar,

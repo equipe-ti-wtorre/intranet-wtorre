@@ -2,6 +2,7 @@
 @use 'styles/breakpoints' as bp;
 @use 'styles/admin';
 @use 'styles/swal';
+@use 'app/pages/pesquisas/shared/pesquisas-theme';
 
 * {
   box-sizing: border-box;

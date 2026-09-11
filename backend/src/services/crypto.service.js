@@ -28,4 +28,8 @@ function decrypt(ciphertext) {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
 }
 
-module.exports = { encrypt, decrypt };
+function hmacSha256(value) {
+  return crypto.createHmac('sha256', getKey()).update(String(value), 'utf8').digest('hex');
+}
+
+module.exports = { encrypt, decrypt, hmacSha256 };

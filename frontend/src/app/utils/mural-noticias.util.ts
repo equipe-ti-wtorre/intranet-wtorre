@@ -45,6 +45,7 @@ function comunicadoParaMuralItem(comunicado: Comunicado): MuralNoticiaItem {
     categoriaCor: comunicado.categoriaCor,
     dia: comunicado.dia,
     mes: comunicado.mes,
+    link: comunicado.linkPath || undefined,
   };
 }
 
