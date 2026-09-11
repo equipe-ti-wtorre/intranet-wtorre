@@ -40,6 +40,10 @@ export class ConteudoEntidadesEditorComponent {
 
   private initSeq = 0;
   private treesByPagina = new Map<number, CategoriaDocumento[]>();
+  private lastEmittedKey = '';
+  private lastAppliedKey = '';
+  /** Após reset (value vazio), o próximo value do pai é aplicado sem merge local. */
+  private blankSlate = true;
 
   constructor() {
     this.documentosService.listarPaginasAdmin().subscribe({
@@ -59,6 +63,7 @@ export class ConteudoEntidadesEditorComponent {
         this.rows.set([]);
         this.carregando.set(true);
         this.erro.set('');
+        this.lastAppliedKey = '';
         return;
       }
 
@@ -68,8 +73,7 @@ export class ConteudoEntidadesEditorComponent {
         return;
       }
 
-      this.rows.set(this.buildRows(paginas, value));
-      this.carregando.set(false);
+      this.aplicarEstado(paginas, value);
     });
   }
 
@@ -92,10 +96,7 @@ export class ConteudoEntidadesEditorComponent {
         paginas.forEach((pagina, i) => {
           this.treesByPagina.set(pagina.id, trees[i] ?? []);
         });
-        const built = this.buildRows(paginas, value);
-        const merged = this.mergeRowsState(built, untracked(() => this.rows()));
-        this.rows.set(merged);
-        this.carregando.set(false);
+        this.aplicarEstado(paginas, value);
       },
       error: () => {
         if (seq !== this.initSeq) return;
@@ -105,12 +106,57 @@ export class ConteudoEntidadesEditorComponent {
     });
   }
 
+  /**
+   * Aplica o value do pai sem apagar toggles locais ainda não refletidos
+   * (ex.: entidade marcada cujo emit ainda não inclui categoria).
+   * value vazio = reset autoritativo (cancelar/fechar modal).
+   */
+  private aplicarEstado(paginas: DocumentoPagina[], value: VisibilidadeEntidade[]): void {
+    const appliedKey = this.valueKey(value, paginas);
+    const built = this.buildRows(paginas, value);
+    const current = untracked(() => this.rows());
+
+    if (!value.length) {
+      this.rows.set(built);
+      this.lastAppliedKey = appliedKey;
+      this.lastEmittedKey = '';
+      this.blankSlate = true;
+      this.carregando.set(false);
+      this.emitir();
+      return;
+    }
+
+    // Evita loop value → emit → value com o mesmo conteúdo
+    if (appliedKey === this.lastAppliedKey && current.length) {
+      this.carregando.set(false);
+      return;
+    }
+
+    // Após reset, confia no value; depois preserva toggles locais entre reconciles
+    const rows = this.blankSlate || !current.length ? built : this.mergeRowsState(built, current);
+    this.blankSlate = false;
+    this.rows.set(rows);
+    this.lastAppliedKey = appliedKey;
+    this.carregando.set(false);
+    this.emitir();
+  }
+
+  private valueKey(value: VisibilidadeEntidade[], paginas: DocumentoPagina[]): string {
+    const vis = value
+      .map((v) => `${Number(v.pagina_id)}:${v.categoria_id ?? ''}`)
+      .sort()
+      .join('|');
+    const pags = paginas.map((p) => p.id).join(',');
+    return `${pags}::${vis}`;
+  }
+
   private mergeRowsState(built: EntidadeRow[], current: EntidadeRow[]): EntidadeRow[] {
     if (!current.length) return built;
     const currentMap = new Map(current.map((r) => [r.pagina.id, r]));
     return built.map((row) => {
       const prev = currentMap.get(row.pagina.id);
       if (!prev) return row;
+      // Estado local (toggle do usuário) prevalece sobre o value intermediário do pai
       const ativo = prev.ativo;
       let categoriaId = prev.categoriaId;
       if (ativo && categoriaId != null && !row.flat.some((c) => c.id === categoriaId)) {
@@ -190,6 +236,12 @@ export class ConteudoEntidadesEditorComponent {
     const lista: VisibilidadeEntidadeInput[] = this.rows()
       .filter((r) => r.ativo && r.categoriaId != null)
       .map((r) => ({ pagina_id: r.pagina.id, categoria_id: r.categoriaId! }));
+    const key = lista
+      .map((i) => `${i.pagina_id}:${i.categoria_id}`)
+      .sort()
+      .join('|');
+    if (key === this.lastEmittedKey) return;
+    this.lastEmittedKey = key;
     this.valueChange.emit(lista);
   }
 

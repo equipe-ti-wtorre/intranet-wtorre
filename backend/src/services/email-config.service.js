@@ -5,6 +5,15 @@ const { env } = require('../config/env');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HOSTNAME_RE = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63}(?<!-))*$/;
+const EMAIL_CONFIG_TTL_MS = 30_000;
+
+let cachedProviderConfig = null;
+let cachedProviderConfigAt = 0;
+
+function invalidateEmailConfigCache() {
+  cachedProviderConfig = null;
+  cachedProviderConfigAt = 0;
+}
 
 function isEmailAddress(value) {
   return EMAIL_RE.test(String(value || '').trim());
@@ -40,7 +49,39 @@ async function getPublicConfig() {
   };
 }
 
-async function getEmailProviderConfig({ requireActive = false } = {}) {
+function assertActiveConfig(config) {
+  if (!config.ativo) {
+    const err = new Error('Envio de e-mail está desativado.');
+    err.status = 503;
+    throw err;
+  }
+
+  if (config.provider === 'smtp') {
+    if (!config.smtp_host || !config.smtp_user || !config.smtp_from || !config.smtp_pass) {
+      const err = new Error('Configuração SMTP incompleta.');
+      err.status = 503;
+      throw err;
+    }
+    if (!isHostname(config.smtp_host)) {
+      const err = new Error('Host SMTP deve ser um hostname válido, não um endereço de e-mail.');
+      err.status = 503;
+      throw err;
+    }
+  } else if (config.provider === 'acs') {
+    if (!config.acs_connection_string || !config.acs_sender) {
+      const err = new Error('Configuração Azure ACS incompleta.');
+      err.status = 503;
+      throw err;
+    }
+    if (!isEmailAddress(config.acs_sender)) {
+      const err = new Error('Endereço remetente ACS inválido.');
+      err.status = 503;
+      throw err;
+    }
+  }
+}
+
+async function loadEmailProviderConfig() {
   const smtp = await smtpConfigRepo.get();
   const providerRow = await emailProviderConfigRepo.get();
 
@@ -48,12 +89,6 @@ async function getEmailProviderConfig({ requireActive = false } = {}) {
     providerRow?.provider === 'acs' || env.emailProvider === 'acs' ? 'acs' : 'smtp';
   const ativo = providerRow?.ativo ?? false;
   const ocultarPara = providerRow?.ocultar_para ?? env.emailOcultarPara ?? false;
-
-  if (requireActive && !ativo) {
-    const err = new Error('Envio de e-mail está desativado.');
-    err.status = 503;
-    throw err;
-  }
 
   let smtpPass = null;
   if (smtp?.password_ciphertext) {
@@ -65,7 +100,7 @@ async function getEmailProviderConfig({ requireActive = false } = {}) {
     acsConnectionString = decrypt(providerRow.acs_connection_string_ciphertext);
   }
 
-  const config = {
+  return {
     provider,
     smtp_host: smtp?.host?.trim() || '',
     smtp_port: smtp?.port ?? 587,
@@ -79,31 +114,19 @@ async function getEmailProviderConfig({ requireActive = false } = {}) {
     email_ocultar_para: !!ocultarPara,
     ativo,
   };
+}
+
+async function getEmailProviderConfig({ requireActive = false } = {}) {
+  const now = Date.now();
+  let config = cachedProviderConfig;
+  if (!config || now - cachedProviderConfigAt >= EMAIL_CONFIG_TTL_MS) {
+    config = await loadEmailProviderConfig();
+    cachedProviderConfig = config;
+    cachedProviderConfigAt = Date.now();
+  }
 
   if (requireActive) {
-    if (provider === 'smtp') {
-      if (!config.smtp_host || !config.smtp_user || !config.smtp_from || !config.smtp_pass) {
-        const err = new Error('Configuração SMTP incompleta.');
-        err.status = 503;
-        throw err;
-      }
-      if (!isHostname(config.smtp_host)) {
-        const err = new Error('Host SMTP deve ser um hostname válido, não um endereço de e-mail.');
-        err.status = 503;
-        throw err;
-      }
-    } else if (provider === 'acs') {
-      if (!config.acs_connection_string || !config.acs_sender) {
-        const err = new Error('Configuração Azure ACS incompleta.');
-        err.status = 503;
-        throw err;
-      }
-      if (!isEmailAddress(config.acs_sender)) {
-        const err = new Error('Endereço remetente ACS inválido.');
-        err.status = 503;
-        throw err;
-      }
-    }
+    assertActiveConfig(config);
   }
 
   return config;
@@ -234,6 +257,8 @@ async function save(body) {
     ativo: validated.ativo,
   });
 
+  invalidateEmailConfigCache();
+
   return getPublicConfig();
 }
 
@@ -260,4 +285,5 @@ module.exports = {
   isConfigured,
   isHostname,
   isEmailAddress,
+  invalidateEmailConfigCache,
 };

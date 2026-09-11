@@ -53,24 +53,26 @@
 
       <footer class="m-foot">
         <ng-content select="[adminModalFootStart]" />
-        <button type="button" class="btn btn-ghost" (click)="onCancel()">Cancelar</button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          [disabled]="salvando() || saveDisabled()"
-          (click)="onSave()"
-        >
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M5 13l4 4L19 7"
-              stroke="#fff"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          {{ salvando() ? 'Salvando...' : saveLabel() }}
-        </button>
+        <button type="button" class="btn btn-ghost" (click)="onCancel()">{{ cancelLabel() }}</button>
+        @if (showSave()) {
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="salvando() || saveDisabled()"
+            (click)="onSave()"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="#fff"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            {{ salvando() ? 'Salvando...' : saveLabel() }}
+          </button>
+        }
       </footer>
     </div>
   </div>

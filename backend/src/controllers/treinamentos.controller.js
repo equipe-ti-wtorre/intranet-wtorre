@@ -211,7 +211,12 @@ async function criar(req, res) {
 
     let visibilidades;
     try {
-      const legacyPaginaId = parsePaginaId(req.body);
+      // Frontend envia só `visibilidades`; pagina_id legado só se vier com valor útil.
+      // String vazia no multipart NÃO deve disparar parsePaginaId ("pagina_id é obrigatório").
+      const hasLegacyPagina =
+        (req.body.pagina_id != null && String(req.body.pagina_id).trim() !== '') ||
+        (req.body.paginaId != null && String(req.body.paginaId).trim() !== '');
+      const legacyPaginaId = hasLegacyPagina ? parsePaginaId(req.body) : null;
       let legacyCategoriaId = null;
       if (req.body.categoria_id !== undefined || req.body.categoriaId !== undefined) {
         legacyCategoriaId = parseCategoriaId(req.body);
@@ -336,10 +341,10 @@ async function atualizar(req, res) {
       req.body.categoriaId !== undefined
     ) {
       try {
-        const legacyPaginaId =
-          req.body.pagina_id !== undefined || req.body.paginaId !== undefined
-            ? parsePaginaId(req.body)
-            : existing.pagina_id;
+        const hasLegacyPagina =
+          (req.body.pagina_id != null && String(req.body.pagina_id).trim() !== '') ||
+          (req.body.paginaId != null && String(req.body.paginaId).trim() !== '');
+        const legacyPaginaId = hasLegacyPagina ? parsePaginaId(req.body) : existing.pagina_id;
         let legacyCategoriaId = existing.categoria_id;
         if (req.body.categoria_id !== undefined || req.body.categoriaId !== undefined) {
           legacyCategoriaId = parseCategoriaId(req.body);

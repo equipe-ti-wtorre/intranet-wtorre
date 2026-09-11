@@ -1,4 +1,5 @@
 const { getPool } = require('../db/pool');
+const { normalizarIconePersistido } = require('../utils/doc-icone.util');
 
 const FOOTER_CONFIG_KEY = 'footer.config';
 const TOPBAR_CONFIG_KEY = 'topbar.config';
@@ -66,17 +67,20 @@ const HOME_CARROSSEL_DEFAULTS = {
   slides: [],
 };
 
-const HOME_SISTEMAS_ICONES = new Set([
-  'user',
-  'wallet',
-  'badge',
-  'database',
-  'cloud',
-  'check',
-  'task',
-  'building',
-  'phone',
-]);
+/** Ícones curtos do seed legado → formato atual (lucide:/brand:/…). */
+const HOME_SISTEMAS_ICONES_LEGADO = {
+  user: 'lucide:user',
+  wallet: 'lucide:wallet',
+  badge: 'lucide:badge',
+  database: 'lucide:database',
+  cloud: 'lucide:cloud',
+  check: 'lucide:circle-check',
+  task: 'lucide:list-todo',
+  building: 'lucide:building-2',
+  phone: 'lucide:phone',
+};
+
+const HOME_SISTEMAS_ICONE_PADRAO = 'lucide:user';
 
 const HOME_SISTEMAS_DEFAULTS = {
   tag: 'Acesso rápido',
@@ -426,13 +430,19 @@ async function setHomeCarrossel(config) {
   return normalized;
 }
 
+function normalizeHomeSistemaIcon(raw) {
+  const icon = String(raw ?? '').trim().toLowerCase();
+  if (!icon) return HOME_SISTEMAS_ICONE_PADRAO;
+  if (HOME_SISTEMAS_ICONES_LEGADO[icon]) return HOME_SISTEMAS_ICONES_LEGADO[icon];
+  return normalizarIconePersistido(icon) || HOME_SISTEMAS_ICONE_PADRAO;
+}
+
 function normalizeHomeSistemaItem(item, index) {
-  const icon = String(item?.icon ?? 'user').trim();
   return {
     id: String(item?.id ?? '').trim() || `sistema-${index + 1}`,
     nome: String(item?.nome ?? '').trim(),
     subtitulo: String(item?.subtitulo ?? '').trim(),
-    icon: HOME_SISTEMAS_ICONES.has(icon) ? icon : 'user',
+    icon: normalizeHomeSistemaIcon(item?.icon),
     url: item?.url?.trim() || null,
     abrirNovaAba: item?.abrirNovaAba === true,
     ordem: Number.isFinite(Number(item?.ordem)) ? Number(item.ordem) : index + 1,

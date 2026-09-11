@@ -18,6 +18,8 @@ const NOT_CONFIGURED_MSG = 'Provedor de e-mail não configurado.';
 
 let cachedSmtpTransporter = null;
 let cachedSmtpConfigKey = null;
+let cachedAcsClient = null;
+let cachedAcsClientKey = null;
 
 function smtpConfigKey(cfg) {
   return [cfg.smtp_host, cfg.smtp_port, cfg.smtp_secure, cfg.smtp_user, cfg.smtp_pass].join('|');
@@ -37,9 +39,17 @@ function getSmtpTransporter(cfg) {
       user: cfg.smtp_user,
       pass: cfg.smtp_pass,
     },
+    connectionTimeout: 15000,
+    socketTimeout: 15000,
+    greetingTimeout: 15000,
   });
   cachedSmtpConfigKey = key;
   return cachedSmtpTransporter;
+}
+
+function refreshAcsMailSender() {
+  cachedAcsClient = null;
+  cachedAcsClientKey = null;
 }
 
 function refreshSmtpMailSender() {
@@ -52,6 +62,65 @@ function refreshSmtpMailSender() {
   }
   cachedSmtpTransporter = null;
   cachedSmtpConfigKey = null;
+  refreshAcsMailSender();
+  emailConfigService.invalidateEmailConfigCache();
+}
+
+function getAcsClient(cfg) {
+  const key = `${cfg.acs_connection_string}|${cfg.acs_sender}`;
+  if (cachedAcsClient && cachedAcsClientKey === key) {
+    return cachedAcsClient;
+  }
+  cachedAcsClient = new EmailClient(cfg.acs_connection_string);
+  cachedAcsClientKey = key;
+  return cachedAcsClient;
+}
+
+function acsResultFromPoller(poller) {
+  try {
+    const state = typeof poller.getOperationState === 'function' ? poller.getOperationState() : {};
+    const fromState = state?.result || null;
+    if (fromState) return fromState;
+    if (typeof poller.getResult === 'function') {
+      return poller.getResult() || null;
+    }
+  } catch {
+    /* poller ainda sem resultado */
+  }
+  return null;
+}
+
+function acsMessageIdFromPoller(poller, result) {
+  if (result?.id) return result.id;
+  try {
+    const state = typeof poller.getOperationState === 'function' ? poller.getOperationState() : {};
+    if (state?.result?.id) return state.result.id;
+    if (state?.id) return state.id;
+    const loc = state?.config?.operationLocation || state?.operationLocation;
+    if (typeof loc === 'string') {
+      const match = loc.match(/operations\/([0-9a-f-]{8,})/i);
+      if (match) return match[1];
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function watchAcsPoller(poller, { to, subject } = {}) {
+  poller
+    .pollUntilDone()
+    .then((result) => {
+      if (result?.status && result.status !== 'Succeeded') {
+        const detail = result?.error?.message || result.status;
+        console.warn(
+          `[email-acs] envio não concluído (${detail}) to=${to || ''} subject=${subject || ''}`
+        );
+      }
+    })
+    .catch((err) => {
+      console.warn('[email-acs] falha no acompanhamento:', err?.message || err);
+    });
 }
 
 function formatSmtpFrom(cfg) {
@@ -148,7 +217,7 @@ function buildAcsSender(cfg) {
     from,
     sendMail: async (opts) => {
       const mailOpts = applyHiddenToRecipients(opts, cfg);
-      const client = new EmailClient(cfg.acs_connection_string);
+      const client = getAcsClient(cfg);
 
       const message = {
         senderAddress: cfg.acs_sender,
@@ -165,22 +234,36 @@ function buildAcsSender(cfg) {
         message.attachments = acsAttachments;
       }
 
-      await acsRateLimit(mailOpts.onAcsWait);
+      await acsRateLimit(mailOpts.onAcsWait, {
+        priority: mailOpts.priority === 'high' ? 'high' : 'normal',
+        label: mailOpts.acsLabel || mailOpts.to,
+      });
 
       const poller = await client.beginSend(message);
-      const result = await poller.pollUntilDone();
+      const accepted = acsResultFromPoller(poller);
+      const messageId = acsMessageIdFromPoller(poller, accepted);
 
-      if (result?.status !== 'Succeeded') {
-        const detail = result?.error?.message || result?.status || 'desconhecido';
-        const err = new Error(`Falha ao enviar e-mail via Azure ACS: ${detail}`);
-        err.status = 400;
-        throw err;
+      if (mailOpts.waitUntilDone) {
+        const result = await poller.pollUntilDone();
+        if (result?.status !== 'Succeeded') {
+          const detail = result?.error?.message || result?.status || 'desconhecido';
+          const err = new Error(`Falha ao enviar e-mail via Azure ACS: ${detail}`);
+          err.status = 400;
+          throw err;
+        }
+        return {
+          provider: 'acs',
+          messageId: result?.id || messageId,
+          raw: result,
+        };
       }
+
+      watchAcsPoller(poller, mailOpts);
 
       return {
         provider: 'acs',
-        messageId: result?.id || null,
-        raw: result,
+        messageId,
+        raw: accepted || { status: 'Running', id: messageId },
       };
     },
   };
@@ -219,7 +302,7 @@ async function sendEmail(opts) {
   return sender.sendMail(opts);
 }
 
-async function sendMailBatched({ recipients, subject, html, text, attachments }) {
+async function sendMailBatched({ recipients, subject, html, text, attachments, priority }) {
   const list = normalizeRecipients(recipients || []);
   if (!list.length) return { enviados: 0, erros: [] };
 
@@ -246,7 +329,7 @@ async function sendMailBatched({ recipients, subject, html, text, attachments })
     }
 
     try {
-      await sendEmail({ to, subject, html, text, attachments });
+      await sendEmail({ to, subject, html, text, attachments, priority });
       enviados += 1;
     } catch (err) {
       erros.push({ email: to, mensagem: err.message });

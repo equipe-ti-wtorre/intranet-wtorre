@@ -240,7 +240,8 @@ export class MenuSistemasAdminComponent implements OnInit, OnDestroy {
     };
 
     this.menuService.salvarHomeSistemas(config).subscribe({
-      next: () => {
+      next: (salvo) => {
+        this.patchForm(salvo);
         this.mensagem.set('Sistemas Corporativos salvos.');
         this.salvando.set(false);
       },

@@ -146,13 +146,19 @@ Detalhes de fila e status: [camarotes-alertas.md](./camarotes-alertas.md).
 
 Rate limiter em memória (`email-sender.helpers.js`), alinhado aos limites padrão do Azure:
 
-| Janela | Limite |
-|--------|--------|
-| 1 minuto | 30 e-mails |
-| 1 hora | 100 e-mails |
-| 24 horas | 2.400 e-mails |
+| Janela | Limite total | Disparo (`normal`) | Transacional (`high`) |
+|--------|--------------|--------------------|------------------------|
+| 1 minuto | 30 e-mails | 25 (5 reservados) | até 30 (usa a reserva) |
+| 1 hora | 100 e-mails | 85 (15 reservados) | até 100 (usa a reserva) |
+| 24 horas | 2.400 e-mails | 2.400 | 2.400 |
 
-Quando o limite é atingido, `acsRateLimit` aguarda a janela e pode notificar via callback `onAcsWait` (usado pelos alertas de Camarotes para status `na_fila` + `enviar_em`).
+Envios `priority: 'high'` entram na frente da fila de disparo. Massagem usa `high` em confirmação, cancelamento, fila, falta e lembrete; o disparo da sessão permanece `normal`.
+
+Quando o limite é atingido, `acsRateLimit` aguarda a janela, registra `[email-acs] aguardando Ns (...)` e pode notificar via callback `onAcsWait` (usado pelos alertas de Camarotes para status `na_fila` + `enviar_em`).
+
+O ACS considera o envio **aceito** em `beginSend` (HTTP 202). `pollUntilDone` roda em background (log se falhar), para não bloquear o próximo destinatário nem estourar o teto de *Get Email Status* (60/min, 200/hora). Quem precisar esperar o `Succeeded` passa `waitUntilDone: true`.
+
+A config descriptografada fica em cache por 30s; o `EmailClient` ACS é reutilizado. Salvar a config no admin invalida os dois.
 
 Em lotes (`sendMailBatched`), throttle ACS adicional:
 
@@ -175,6 +181,9 @@ await sendEmail({
   html: '...',
   text: '...',           // opcional; ACS gera plainText do HTML se omitido
   attachments: [...],    // opcional
+  priority: 'high',      // opcional; transacional (default: normal)
+  acsLabel: 'reserva-confirmada', // opcional; aparece no log de espera
+  waitUntilDone: false,  // opcional; true espera Succeeded do ACS
   onAcsWait: (enviarEm, waitMs, motivo) => { /* fila */ },
 });
 ```
@@ -220,6 +229,7 @@ Segredos ACS/SMTP **não** devem ir no `.env`.
 - [ ] Teste de envio OK
 - [ ] (Camarotes) Event Grid → webhook + `EVENT_GRID_WEBHOOK_SECRET`
 - [ ] Disparo de alerta registra `message_id` e atualiza para `entregue` / `bounce`
+- [ ] Listas de disparo > ~85 destinatários/hora: pedir [aumento de cota ACS](https://learn.microsoft.com/en-us/azure/communication-services/concepts/email/email-quota-increase)
 
 ---
 

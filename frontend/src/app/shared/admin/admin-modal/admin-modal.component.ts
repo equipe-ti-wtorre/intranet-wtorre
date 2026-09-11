@@ -21,6 +21,8 @@ export class AdminModalComponent {
   readonly salvando = input(false);
   readonly saveDisabled = input(false);
   readonly saveLabel = input('Salvar');
+  readonly cancelLabel = input('Cancelar');
+  readonly showSave = input(true);
   readonly size = input<AdminModalSize>('default');
 
   readonly save = output<void>();
