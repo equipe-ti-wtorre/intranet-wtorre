@@ -4,3 +4,8 @@ dist/
 *.log
 .npm-cache/
 .claude/
+frontend/public/tinymce/
+backend/storage/icones-custom/
+*.sql.zip
+.vscode/
+*.code-workspace
