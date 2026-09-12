@@ -21,4 +21,17 @@ function familiaStatus(statusGeral) {
   return STATUS_FAMILIA[String(statusGeral || '').trim()] || 'info';
 }
 
-module.exports = { STATUS_FAMILIA, familiaStatus };
+/** Classifica Solicitação / Contrato / Pedido.
+ *  Pedido e Contrato vêm da aba Pedido.Contrato.Aditivo (TipoDocumento).
+ *  Sem TipoDocumento = linha da aba Requisição → Solicitação.
+ */
+function tipoFollowup(tipoDocumento, statusGeral) {
+  const tipo = String(tipoDocumento || '')
+    .trim()
+    .toUpperCase();
+  if (tipo.includes('ADITIVO') || tipo.includes('CONTRATO')) return 'contrato';
+  if (tipo.includes('PEDIDO')) return 'pedido';
+  return 'solicitacao';
+}
+
+module.exports = { STATUS_FAMILIA, familiaStatus, tipoFollowup };

@@ -1,0 +1,101 @@
+.pagina {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #f4f5f8);
+}
+
+.rd-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  color: var(--ink, #10151f);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.page-head {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+
+  h1 {
+    font-family: 'Archivo', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  p {
+    color: var(--ink-soft, #48536a);
+    font-size: 15px;
+    margin: 4px 0 0;
+  }
+}
+
+.btn-instalador {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line, #e2e6ee);
+  background: #fff;
+  color: var(--ink, #10151f);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--wtorre, #1d54e6);
+    color: var(--wtorre, #1d54e6);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.rd-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line, #e2e6ee);
+}
+
+.rd-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink-dim, #8a93a8);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ink, #10151f);
+  }
+
+  &.active {
+    color: var(--wtorre, #1d54e6);
+    border-bottom-color: var(--wtorre, #1d54e6);
+  }
+}

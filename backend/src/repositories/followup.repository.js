@@ -9,7 +9,14 @@ function mapSolicitacao(row) {
     requisitante: row.requisitante || null,
     usuario: row.usuario,
     status_geral: row.status_geral || null,
-    pedido_contrato: row.pedido_contrato || null,
+    tipo_documento:
+      row.tipo_documento != null && String(row.tipo_documento).trim() !== ''
+        ? String(row.tipo_documento).trim()
+        : null,
+    pedido_contrato:
+      row.pedido_contrato != null && String(row.pedido_contrato).trim() !== ''
+        ? String(row.pedido_contrato).trim()
+        : null,
     fornecedor: row.fornecedor || null,
     valor_total_pedido: row.valor_total_pedido != null ? Number(row.valor_total_pedido) : null,
     saldo_pedido: row.saldo_pedido != null ? Number(row.saldo_pedido) : null,
@@ -34,7 +41,7 @@ function mapConfig(row) {
       biblioteca: null,
       arquivo_caminho: null,
       item_id: null,
-      aba_rm: 'TblRM',
+      aba_rm: 'Requisição',
       aba_matriz: 'TblMatrizMensagens',
       sync_automatica: false,
       sync_intervalo_min: 60,
@@ -53,7 +60,7 @@ function mapConfig(row) {
     biblioteca: row.biblioteca || null,
     arquivo_caminho: row.arquivo_caminho || null,
     item_id: row.item_id || null,
-    aba_rm: row.aba_rm || 'TblRM',
+    aba_rm: row.aba_rm || 'Requisição',
     aba_matriz: row.aba_matriz || 'TblMatrizMensagens',
     sync_automatica: !!row.sync_automatica,
     sync_intervalo_min: Number(row.sync_intervalo_min) || 60,
@@ -165,13 +172,47 @@ async function resumoByUsuario(usuario) {
   }));
 }
 
-async function findByNumero(nRequisicao) {
+async function findByNumero(nRequisicao, escopo = 'todos') {
   const pool = getPool();
+  const n = Math.trunc(Number(nRequisicao));
+  const esc = String(escopo || 'todos').toLowerCase();
+
+  if (esc === 'rm') {
+    const [rows] = await pool.execute(
+      `SELECT * FROM followup_solicitacoes
+       WHERE n_requisicao = ?
+       ORDER BY
+         CASE WHEN tipo_documento IS NULL OR TRIM(tipo_documento) = '' THEN 0 ELSE 1 END,
+         tipo_documento ASC,
+         cod_filial ASC,
+         id ASC`,
+      [n]
+    );
+    return rows.map(mapSolicitacao);
+  }
+
+  if (esc === 'documento') {
+    const [rows] = await pool.execute(
+      `SELECT * FROM followup_solicitacoes
+       WHERE pedido_contrato = ?
+         AND tipo_documento IS NOT NULL
+         AND TRIM(tipo_documento) <> ''
+       ORDER BY tipo_documento ASC, cod_filial ASC, id ASC`,
+      [String(n)]
+    );
+    return rows.map(mapSolicitacao);
+  }
+
   const [rows] = await pool.execute(
     `SELECT * FROM followup_solicitacoes
      WHERE n_requisicao = ?
-     ORDER BY cod_filial ASC, id ASC`,
-    [nRequisicao]
+        OR pedido_contrato = ?
+     ORDER BY
+       CASE WHEN n_requisicao = ? THEN 0 ELSE 1 END,
+       tipo_documento ASC,
+       cod_filial ASC,
+       id ASC`,
+    [n, String(n), n]
   );
   return rows.map(mapSolicitacao);
 }
@@ -213,36 +254,42 @@ async function replaceSolicitacoes(solicitacoes) {
     await conn.execute('DELETE FROM followup_solicitacoes');
 
     if (solicitacoes.length) {
-      const placeholders = solicitacoes.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
-      const params = [];
-      for (const s of solicitacoes) {
-        params.push(
-          s.n_requisicao,
-          s.requisitante,
-          s.usuario,
-          s.status_geral,
-          s.pedido_contrato,
-          s.fornecedor,
-          s.valor_total_pedido,
-          s.saldo_pedido,
-          s.data_emissao_pedido,
-          s.data_aprovacao_rm,
-          s.mapa_cotacao,
-          s.numero_approvo,
-          s.centro_custo,
-          s.nome_filial,
-          s.cod_filial != null && String(s.cod_filial).trim() !== '' ? String(s.cod_filial).trim() : ''
+      const cols = 16;
+      const maxRowsPerBatch = Math.floor(60000 / cols);
+      for (let offset = 0; offset < solicitacoes.length; offset += maxRowsPerBatch) {
+        const batch = solicitacoes.slice(offset, offset + maxRowsPerBatch);
+        const placeholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
+        const params = [];
+        for (const s of batch) {
+          params.push(
+            s.n_requisicao,
+            s.requisitante,
+            s.usuario,
+            s.status_geral,
+            s.tipo_documento || '',
+            s.pedido_contrato || '',
+            s.fornecedor,
+            s.valor_total_pedido,
+            s.saldo_pedido,
+            s.data_emissao_pedido,
+            s.data_aprovacao_rm,
+            s.mapa_cotacao,
+            s.numero_approvo,
+            s.centro_custo,
+            s.nome_filial,
+            s.cod_filial != null && String(s.cod_filial).trim() !== '' ? String(s.cod_filial).trim() : ''
+          );
+        }
+        await conn.execute(
+          `INSERT INTO followup_solicitacoes (
+            n_requisicao, requisitante, usuario, status_geral, tipo_documento,
+            pedido_contrato, fornecedor, valor_total_pedido, saldo_pedido,
+            data_emissao_pedido, data_aprovacao_rm, mapa_cotacao, numero_approvo,
+            centro_custo, nome_filial, cod_filial
+          ) VALUES ${placeholders}`,
+          params
         );
       }
-      await conn.execute(
-        `INSERT INTO followup_solicitacoes (
-          n_requisicao, requisitante, usuario, status_geral,
-          pedido_contrato, fornecedor, valor_total_pedido, saldo_pedido,
-          data_emissao_pedido, data_aprovacao_rm, mapa_cotacao, numero_approvo,
-          centro_custo, nome_filial, cod_filial
-        ) VALUES ${placeholders}`,
-        params
-      );
     }
 
     await conn.commit();

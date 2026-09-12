@@ -16,6 +16,7 @@ import {
   tabletUserCanMatch,
 } from './guards/tablet.guard';
 import { ramalAuthGuard, ramalGuestGuard, ramalAdminGuard } from './guards/ramal.guard';
+import { rustdeskGuard, rustdeskRouteMatch } from './guards/rustdesk.guard';
 
 export const routes: Routes = [
   {
@@ -275,6 +276,12 @@ export const routes: Routes = [
       },
       { path: 'config', pathMatch: 'full', redirectTo: 'config/usuarios' },
     ],
+  },
+  {
+    matcher: rustdeskRouteMatch,
+    canActivate: [authGuard, rustdeskGuard],
+    loadComponent: () =>
+      import('./pages/ti/rustdesk/rustdesk.component').then((m) => m.RustdeskComponent),
   },
   {
     path: 'dashboards',

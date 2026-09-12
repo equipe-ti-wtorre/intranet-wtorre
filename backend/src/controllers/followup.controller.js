@@ -20,17 +20,6 @@ function handleError(res, err) {
   });
 }
 
-/** Dono da RM, ADMIN ou módulo followup-suprimentos. */
-function podeVerSolicitacao(req, row) {
-  if (!row) return false;
-  if (req.user?.perfil === 'ADMIN') return true;
-  const modulos = req.userModulos || [];
-  if (modulos.includes('followup-suprimentos')) return true;
-  const login = resolveLoginFromUser(req.user);
-  if (!login) return false;
-  return String(row.usuario || '').toLowerCase() === login;
-}
-
 async function enriquecerLista(rows) {
   const matriz = await followupRepo.getMatrizMap();
   return rows.map((r) => enriquecerSolicitacao(r, matriz));
@@ -67,25 +56,31 @@ async function resumo(req, res) {
   }
 }
 
+/** Qualquer usuário autenticado pode consultar por número (lista /minhas segue restrita ao dono).
+ *  Query: escopo=rm | documento | todos (default).
+ */
 async function solicitacaoPorNumero(req, res) {
   try {
     const numero = Number(String(req.params.numero || '').trim());
     if (!Number.isFinite(numero) || numero <= 0) {
-      return res.status(400).json({ mensagem: 'Número da solicitação inválido.' });
+      return res.status(400).json({ mensagem: 'Número inválido.' });
     }
 
-    const rows = await followupRepo.findByNumero(Math.trunc(numero));
-    const visiveis = rows.filter((row) => podeVerSolicitacao(req, row));
-    if (!visiveis.length) {
-      if (rows.length) {
-        return res.status(403).json({
-          mensagem: 'Você não tem permissão para visualizar esta solicitação.',
-        });
-      }
-      return res.status(404).json({ mensagem: 'Nenhuma solicitação encontrada com esse número.' });
+    const escopoRaw = String(req.query.escopo || 'todos').toLowerCase();
+    const escopo = ['rm', 'documento', 'todos'].includes(escopoRaw) ? escopoRaw : 'todos';
+
+    const rows = await followupRepo.findByNumero(Math.trunc(numero), escopo);
+    if (!rows.length) {
+      const msg =
+        escopo === 'documento'
+          ? 'Nenhum contrato/pedido encontrado com esse número.'
+          : escopo === 'rm'
+            ? 'Nenhuma requisição encontrada com esse número.'
+            : 'Nenhuma solicitação encontrada com esse número.';
+      return res.status(404).json({ mensagem: msg });
     }
 
-    return res.json(await enriquecerLista(visiveis));
+    return res.json(await enriquecerLista(rows));
   } catch (err) {
     return handleError(res, err);
   }
@@ -200,5 +195,4 @@ module.exports = {
   testarConexao,
   sincronizar,
   statusSync,
-  podeVerSolicitacao,
 };

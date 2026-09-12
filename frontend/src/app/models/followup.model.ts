@@ -6,6 +6,7 @@ export interface FollowupSolicitacao {
   requisitante: string | null;
   usuario: string;
   status_geral: string | null;
+  tipo_documento: string | null;
   pedido_contrato: string | null;
   fornecedor: string | null;
   valor_total_pedido: number | null;

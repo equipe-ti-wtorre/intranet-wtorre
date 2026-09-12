@@ -22,6 +22,7 @@ export class SalasDashboardComponent {
   readonly carregando = input(false);
   readonly modoReservas = input(false);
   readonly usuarioEmail = input('');
+  readonly falhaCarregamento = input(false);
 
   readonly salaClick = output<Sala>();
   readonly dataChange = output<string>();

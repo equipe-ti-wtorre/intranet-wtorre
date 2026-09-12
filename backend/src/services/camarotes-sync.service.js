@@ -36,7 +36,10 @@ async function sincronizarCamarotes() {
     }
 
     const token = await graphService.getAppToken(tenant);
-    const buffer = await graphService.downloadSharedDriveItemContent(token, shareUrl);
+    const buffer = await graphService.downloadSharedDriveItemContent(
+      token,
+      graphService.normalizeShareUrl(shareUrl)
+    );
     const { unidades, linhas_lidas } = parseWorksheet(buffer, sheetName, tipoUnidade);
     const linhas_gravadas = await camarotesRepo.replaceUnidadesByTipo(tipoUnidade, unidades);
     const duracao_ms = Date.now() - inicio;

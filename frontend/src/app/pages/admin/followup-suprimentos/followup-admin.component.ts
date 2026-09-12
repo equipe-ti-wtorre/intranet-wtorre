@@ -26,7 +26,7 @@ export class FollowupAdminComponent implements OnInit {
   readonly sincronizando = signal(false);
 
   readonly sharepointUrl = signal('');
-  readonly abaRm = signal('TblRM');
+  readonly abaRm = signal('Requisição');
   readonly abaMatriz = signal('TblMatrizMensagens');
   readonly syncAutomatica = signal(false);
   readonly syncIntervaloMin = signal(60);
@@ -71,7 +71,7 @@ export class FollowupAdminComponent implements OnInit {
   private applyConfig(cfg: FollowupConfig): void {
     this.configSalva.set(cfg);
     this.sharepointUrl.set(cfg.sharepoint_url || '');
-    this.abaRm.set(cfg.aba_rm || 'TblRM');
+    this.abaRm.set(cfg.aba_rm || 'Requisição');
     this.abaMatriz.set(cfg.aba_matriz || 'TblMatrizMensagens');
     this.syncAutomatica.set(!!cfg.sync_automatica);
     this.syncIntervaloMin.set(cfg.sync_intervalo_min || 60);
@@ -89,7 +89,7 @@ export class FollowupAdminComponent implements OnInit {
     this.followup
       .salvarConfig({
         sharepoint_url: this.sharepointUrl().trim() || null,
-        aba_rm: this.abaRm().trim() || 'TblRM',
+        aba_rm: this.abaRm().trim() || 'Requisição',
         aba_matriz: this.abaMatriz().trim() || 'TblMatrizMensagens',
         sync_automatica: this.syncAutomatica(),
         sync_intervalo_min: Number(this.syncIntervaloMin()) || 60,

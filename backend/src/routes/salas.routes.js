@@ -35,6 +35,7 @@ router.post('/schedule', requireJwt, salasController.postSchedule);
 router.post('/availability/preview', requireJwt, salasController.postPreview);
 router.post('/book', requireJwt, salasController.postBook);
 router.get('/bookings', requireJwt, salasController.getBookings);
+router.get('/my-meetings', requireJwt, salasController.getMyMeetings);
 router.delete('/bookings/:eventId', requireJwt, salasController.deleteBooking);
 router.get('/directory/users', requireJwt, salasController.getDirectoryUsers);
 

@@ -1,0 +1,146 @@
+@if (carregando() && !resumo()) {
+  <p class="state-msg">Carregando servidor…</p>
+} @else if (resumo(); as r) {
+  <div class="srv-toolbar">
+    <div class="bridge-status" [class.ok]="r.bridge.alcancavel" [class.fail]="!r.bridge.alcancavel">
+      <span class="dot"></span>
+      @if (r.bridge.alcancavel) {
+        Bridge no ar{{ r.bridge.versao ? ' · v' + r.bridge.versao : '' }}
+      } @else {
+        {{ r.bridge.mensagem || 'Bridge indisponível' }}
+      }
+    </div>
+    <button type="button" class="btn btn-primary" [disabled]="sincronizando()" (click)="sincronizar()">
+      {{ sincronizando() ? 'Sincronizando…' : 'Sincronizar agora' }}
+    </button>
+  </div>
+
+  <section class="kpi-grid">
+    <article class="kpi">
+      <span class="kpi-label">Peers no hbbs</span>
+      <strong class="kpi-value">{{ r.stats?.total ?? r.bridge.total_peers ?? '—' }}</strong>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">Registrados na última hora</span>
+      <strong class="kpi-value">{{ r.stats ? r.stats.registrados_ultima_hora : '—' }}</strong>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">Última sync</span>
+      <strong class="kpi-value kpi-value-sm">
+        @if (r.sync) {
+          {{ formatDateTimeBr(r.sync.finalizado_em || r.sync.iniciado_em) }}
+          <span class="kpi-sub" [class.ok]="r.sync.sucesso" [class.fail]="!r.sync.sucesso">
+            {{ r.sync.sucesso ? 'sucesso' : 'falhou' }}
+          </span>
+        } @else {
+          Nunca
+        }
+      </strong>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">SQLite hbbs</span>
+      <strong class="kpi-value kpi-value-sm">
+        @if (r.bridge.sqlite_acessivel === true) {
+          Acessível
+        } @else if (r.bridge.sqlite_acessivel === false) {
+          Indisponível
+        } @else {
+          —
+        }
+      </strong>
+    </article>
+  </section>
+
+  @if (!r.metricas.disponivel || r.bridge.metricas_disponiveis === false) {
+    <section class="card metricas-off">
+      <h2>Métricas do coletor</h2>
+      <p>
+        {{ r.metricas.mensagem || 'Métricas indisponíveis no momento.' }}
+        O cadastro de dispositivos continua utilizável na aba Biblioteca.
+      </p>
+    </section>
+  } @else {
+    <section class="card">
+      <header class="card-head">
+        <h2>Métricas</h2>
+        <span class="muted">
+          Coletado {{ formatDateTimeBr(r.metricas.coletado_em) }}
+          · {{ formatDefasagem(r.metricas.defasagem_segundos) }}
+        </span>
+      </header>
+      <div class="metric-grid">
+        <article class="metric">
+          <span class="kpi-label">Sessões no relay</span>
+          <strong>{{ labelSessoes(r.metricas.relay?.sessoes_ativas) }}</strong>
+        </article>
+        <article class="metric">
+          <span class="kpi-label">Egress acumulado</span>
+          <strong>{{ formatEgressGb(r.metricas.relay?.egress_bytes_acumulado) }}</strong>
+          <span class="hint">Contador, não taxa</span>
+        </article>
+        <article class="metric">
+          <span class="kpi-label">Uptime do host</span>
+          <strong>{{ formatUptime(r.metricas.host?.uptime_segundos) }}</strong>
+        </article>
+        <article class="metric">
+          <span class="kpi-label">Carga (1 min)</span>
+          <strong>{{ formatCarga(r.metricas.host?.carga_media_1min) }}</strong>
+        </article>
+        <article class="metric">
+          <span class="kpi-label">hbbs memória</span>
+          <strong>{{ formatMemMb(r.metricas.containers?.hbbs?.memoria_mb) }}</strong>
+          <span class="hint" [attr.data-tone]="r.metricas.containers?.hbbs?.ativo === true ? 'ok' : r.metricas.containers?.hbbs?.ativo === false ? 'fail' : 'dim'">
+            {{ labelAtivo(r.metricas.containers?.hbbs?.ativo) }}
+          </span>
+        </article>
+        <article class="metric">
+          <span class="kpi-label">hbbr memória</span>
+          <strong>{{ formatMemMb(r.metricas.containers?.hbbr?.memoria_mb) }}</strong>
+          <span class="hint" [attr.data-tone]="r.metricas.containers?.hbbr?.ativo === true ? 'ok' : r.metricas.containers?.hbbr?.ativo === false ? 'fail' : 'dim'">
+            {{ labelAtivo(r.metricas.containers?.hbbr?.ativo) }}
+          </span>
+        </article>
+      </div>
+    </section>
+  }
+
+  <section class="card">
+    <header class="card-head">
+      <h2>Log de sincronização</h2>
+    </header>
+    @if (!logs().length) {
+      <p class="state-msg">Nenhuma sincronização registrada ainda.</p>
+    } @else {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Quando</th>
+              <th>Resultado</th>
+              <th>Peers</th>
+              <th>Atualizados</th>
+              <th>Órfãos novos</th>
+              <th>Erro</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (log of logs(); track log.id) {
+              <tr>
+                <td>{{ formatDateTimeBr(log.finalizado_em || log.iniciado_em) }}</td>
+                <td>
+                  <span class="badge" [class.ok]="log.sucesso" [class.fail]="!log.sucesso">
+                    {{ log.sucesso ? 'Sucesso' : 'Falha' }}
+                  </span>
+                </td>
+                <td>{{ log.peers_lidos }}</td>
+                <td>{{ log.dispositivos_atualizados }}</td>
+                <td>{{ log.orfaos_novos }}</td>
+                <td class="erro-cell">{{ log.mensagem_erro || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+}

@@ -68,6 +68,16 @@ async function getBookings(req, res) {
   }
 }
 
+async function getMyMeetings(req, res) {
+  try {
+    const { start, end } = req.query;
+    const dados = await salasService.listMyMeetings(req.user, start, end);
+    return res.json(dados);
+  } catch (err) {
+    return proxyError(res, err);
+  }
+}
+
 async function deleteBooking(req, res) {
   try {
     const { eventId } = req.params;
@@ -199,6 +209,7 @@ module.exports = {
   postPreview,
   postBook,
   getBookings,
+  getMyMeetings,
   deleteBooking,
   getDirectoryUsers,
   getConfig,

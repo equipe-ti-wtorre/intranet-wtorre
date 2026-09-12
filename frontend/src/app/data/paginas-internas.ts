@@ -28,6 +28,7 @@ export const PAGINAS_INTERNAS: PaginaInterna[] = [
   { path: '/followup-suprimentos', label: 'Follow-up de Suprimentos' },
   { path: '/massagem', label: 'Massagem' },
   { path: '/pesquisas', label: 'Central de Pesquisas' },
+  { path: '/ti/rustdesk', label: 'TI / Rust Desk' },
 ];
 
 export function paginasDocumentosFromPaginas(

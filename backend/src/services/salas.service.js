@@ -1,5 +1,6 @@
 const salasConfigService = require('./salas-config.service');
 const salasUiConfigService = require('./salas-ui-config.service');
+const { resolveApiLocalidade } = require('./salas-ui-config.resolver');
 const { salasRequest } = require('./salas-api.client');
 
 const TTL_ROOMS_MS = 10 * 60 * 1000;
@@ -160,6 +161,38 @@ async function listBookings(localidade, start, end) {
   return data;
 }
 
+async function resolveLocalidadeFromUserEmail(userEmail) {
+  const config = await assertConfigured();
+  const uiConfig = await salasUiConfigService.getPublicUiConfig();
+  const domain = String(userEmail || '').trim().toLowerCase().split('@').pop();
+  const mapped = domain ? resolveApiLocalidade(domain, uiConfig) : null;
+  if (mapped) {
+    return resolveLocalidade(mapped);
+  }
+  return resolveLocalidade(config.localidade_padrao);
+}
+
+async function listMyMeetings(user, start, end) {
+  const config = await assertConfigured();
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const err = new Error('Usuário sem e-mail válido.');
+    err.status = 400;
+    throw err;
+  }
+
+  const loc = await resolveLocalidadeFromUserEmail(email);
+  const key = `my-meetings:${loc}:${email}:${String(start || '').slice(0, 10)}`;
+  const cached = readCache(key);
+  if (cached) return cached;
+
+  const data = await salasRequest(config.api_base_url, loc, '/my-meetings', {
+    query: { userEmail: email, start, end },
+  });
+  writeCache(key, data, TTL_BOOKINGS_MS);
+  return data;
+}
+
 async function cancelBooking(localidade, user, eventId, query = {}) {
   const config = await assertConfigured();
   const loc = await resolveLocalidade(localidade);
@@ -202,7 +235,9 @@ async function searchUsers(localidade, query) {
 
 function invalidateScheduleAndBookingsCache(dayIso) {
   for (const key of [...cache.keys()]) {
-    if (!key.startsWith('schedule:') && !key.startsWith('bookings:')) continue;
+    if (!key.startsWith('schedule:') && !key.startsWith('bookings:') && !key.startsWith('my-meetings:')) {
+      continue;
+    }
     if (!dayIso || key.includes(`:${dayIso}:`) || key.endsWith(`:${dayIso}`)) {
       cache.delete(key);
     }
@@ -220,9 +255,11 @@ module.exports = {
   previewAvailability,
   book,
   listBookings,
+  listMyMeetings,
   cancelBooking,
   searchUsers,
   resolveLocalidade,
+  resolveLocalidadeFromUserEmail,
   invalidarCache,
   invalidateScheduleAndBookingsCache,
 };

@@ -35,6 +35,12 @@
         }
       </header>
 
+      @if (avisoParcial()) {
+        <div class="state-aviso">
+          <p>{{ avisoParcial() }}</p>
+        </div>
+      }
+
       @if (erro()) {
         <div class="state-erro" [class.state-config]="naoConfigurado()">
           <p>{{ erro() }}</p>
@@ -66,6 +72,7 @@
           [carregando]="carregandoInicial()"
           [modoReservas]="modoReservas()"
           [usuarioEmail]="usuarioEmail()"
+          [falhaCarregamento]="falhaCarregamentoParcial()"
           (salaClick)="abrirSala($event)"
           (dataChange)="onDataChange($event)"
           (cancelarReserva)="cancelarReserva($event)"

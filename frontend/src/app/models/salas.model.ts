@@ -70,6 +70,10 @@ export interface BookingsResponse {
   bookings?: Reserva[];
 }
 
+export interface MyMeetingsResponse {
+  meetings?: Reserva[];
+}
+
 export interface BookPayload {
   roomEmail: string;
   title: string;

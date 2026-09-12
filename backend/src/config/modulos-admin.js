@@ -17,6 +17,7 @@ const MODULOS = [
   { codigo: 'followup-suprimentos', nome: 'Follow-up de Suprimentos', ordem: 16 },
   { codigo: 'massagem', nome: 'Massagem', ordem: 17 },
   { codigo: 'pesquisas', nome: 'Central de Pesquisas', ordem: 18 },
+  { codigo: 'rustdesk', nome: 'Rust Desk', ordem: 19 },
 ];
 
 const CODIGOS = new Set(MODULOS.map((m) => m.codigo));

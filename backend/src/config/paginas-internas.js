@@ -11,6 +11,7 @@ const PAGINAS_INTERNAS = [
   { path: '/followup-suprimentos', label: 'Follow-up de Suprimentos' },
   { path: '/massagem', label: 'Massagem' },
   { path: '/pesquisas', label: 'Central de Pesquisas' },
+  { path: '/ti/rustdesk', label: 'TI / Rust Desk' },
 ];
 
 const DOCUMENTOS_PATH_REGEX = /^\/documentos(\/[a-z0-9-]+)?$/;

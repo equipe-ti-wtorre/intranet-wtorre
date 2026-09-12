@@ -16,6 +16,7 @@ import { AlertasService } from '../../services/alertas.service';
 import { AuthService } from '../../services/auth.service';
 import {
   BookingsResponse,
+  MyMeetingsResponse,
   Reserva,
   Sala,
   SalaComOcupacao,
@@ -76,6 +77,7 @@ export class SalasComponent implements OnInit, OnDestroy {
   private salasCarregadas = false;
   private readonly abasAgendaCarregadas = new Set<string>();
   private readonly reservasLocalidadesCarregadas = new Set<string>();
+  private myMeetingsCarregadas = false;
   private prefetchTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly view = signal<SalasView>('dashboard');
@@ -90,6 +92,8 @@ export class SalasComponent implements OnInit, OnDestroy {
   readonly carregandoInicial = signal(true);
   readonly atualizando = signal(false);
   readonly erro = signal('');
+  readonly avisoParcial = signal('');
+  readonly falhaCarregamentoParcial = signal(false);
   readonly naoConfigurado = signal(false);
   readonly modalAberto = signal(false);
   readonly slotSelecionado = signal<TimeSlot | null>(null);
@@ -257,8 +261,11 @@ export class SalasComponent implements OnInit, OnDestroy {
     this.dataIso.set(iso);
     this.abasAgendaCarregadas.clear();
     this.reservasLocalidadesCarregadas.clear();
+    this.myMeetingsCarregadas = false;
     this.reservas.set([]);
     this.scheduleMap.set({});
+    this.avisoParcial.set('');
+    this.falhaCarregamentoParcial.set(false);
     this.salasService.invalidateScheduleAndBookingsCache(iso);
     this.carregarAgendaEReservasDaAba(this.abaAtivaTabId(), { forceRefresh: true });
   }
@@ -359,12 +366,32 @@ export class SalasComponent implements OnInit, OnDestroy {
   private invalidarAgendaDoDia(): void {
     const day = this.dataIso();
     this.salasService.invalidateScheduleAndBookingsCache(day);
+    this.myMeetingsCarregadas = false;
     for (const key of [...this.abasAgendaCarregadas]) {
       if (key.endsWith(`:${day}`)) this.abasAgendaCarregadas.delete(key);
     }
     for (const key of [...this.reservasLocalidadesCarregadas]) {
       if (key.endsWith(`:${day}`)) this.reservasLocalidadesCarregadas.delete(key);
     }
+  }
+
+  private reservaKey(r: Reserva): string {
+    return `${r.eventId || r.id || ''}:${r.roomEmail || ''}:${r.start}`;
+  }
+
+  private mesclarReservas(novas: Reserva[]): void {
+    if (!novas.length) return;
+    this.reservas.update((existing) => {
+      const merged = [...existing];
+      const seen = new Set(merged.map((r) => this.reservaKey(r)));
+      for (const booking of novas) {
+        const key = this.reservaKey(booking);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(booking);
+      }
+      return merged;
+    });
   }
 
   private recarregarCompleto(options: { forceRefresh: boolean }): void {
@@ -380,8 +407,11 @@ export class SalasComponent implements OnInit, OnDestroy {
       this.salasService.invalidateCache();
       this.abasAgendaCarregadas.clear();
       this.reservasLocalidadesCarregadas.clear();
+      this.myMeetingsCarregadas = false;
       this.reservas.set([]);
       this.scheduleMap.set({});
+      this.avisoParcial.set('');
+      this.falhaCarregamentoParcial.set(false);
       this.salasCarregadas = false;
     }
 
@@ -453,6 +483,10 @@ export class SalasComponent implements OnInit, OnDestroy {
     const bounds = dayBoundsUtc(day);
     const background = options.background ?? false;
 
+    this.erro.set('');
+    this.avisoParcial.set('');
+    this.falhaCarregamentoParcial.set(false);
+
     if (!background && !this.todasSalas().length && tabId !== RESERVAS_TAB_ID) {
       this.carregandoInicial.set(true);
     } else if (!background) {
@@ -474,6 +508,9 @@ export class SalasComponent implements OnInit, OnDestroy {
       scheduleGroups = [...agruparEmailsPorLocalidade(roomsForTab).entries()];
     }
 
+    const avisos: string[] = [];
+    let houveFalha = false;
+
     const scheduleRequests = scheduleGroups.map(([loc, emails]) =>
       this.salasService
         .getSchedule(
@@ -481,7 +518,15 @@ export class SalasComponent implements OnInit, OnDestroy {
           { rooms: emails, start: bounds.start, end: bounds.end },
           { forceRefresh: options.forceRefresh }
         )
-        .pipe(catchError(() => of({ schedule: [] } as ScheduleResponse)))
+        .pipe(
+          catchError((err: HttpErrorResponse) => {
+            houveFalha = true;
+            avisos.push(
+              `Agenda indisponível (${loc}): ${err.error?.mensagem || 'erro ao consultar Graph.'}`
+            );
+            return of({ schedule: [] } as ScheduleResponse);
+          })
+        )
     );
 
     const bookingLocsToFetch = localidades.filter(
@@ -491,12 +536,36 @@ export class SalasComponent implements OnInit, OnDestroy {
     const bookingRequests = bookingLocsToFetch.map((loc) =>
       this.salasService
         .getBookings(loc, bounds.start, bounds.end, { forceRefresh: options.forceRefresh })
-        .pipe(catchError(() => of({ bookings: [] } as BookingsResponse)))
+        .pipe(
+          catchError((err: HttpErrorResponse) => {
+            houveFalha = true;
+            avisos.push(
+              `Reservas indisponíveis (${loc}): ${err.error?.mensagem || 'erro ao consultar Graph.'}`
+            );
+            return of({ bookings: [] } as BookingsResponse);
+          })
+        )
     );
 
-    const requests: Observable<ScheduleResponse | BookingsResponse>[] = [
+    const myMeetingsRequest =
+      this.usuarioEmail() && (options.forceRefresh || !this.myMeetingsCarregadas)
+        ? this.salasService
+            .getMyMeetings(bounds.start, bounds.end, { forceRefresh: options.forceRefresh })
+            .pipe(
+              catchError((err: HttpErrorResponse) => {
+                houveFalha = true;
+                avisos.push(
+                  `Suas reuniões Outlook: ${err.error?.mensagem || 'erro ao consultar calendário.'}`
+                );
+                return of({ meetings: [] } as MyMeetingsResponse);
+              })
+            )
+        : null;
+
+    const requests: Observable<ScheduleResponse | BookingsResponse | MyMeetingsResponse>[] = [
       ...scheduleRequests,
       ...bookingRequests,
+      ...(myMeetingsRequest ? [myMeetingsRequest] : []),
     ];
 
     if (!requests.length) {
@@ -508,8 +577,13 @@ export class SalasComponent implements OnInit, OnDestroy {
 
     forkJoin(requests).subscribe({
       next: (results) => {
-        const schedResults = results.slice(0, scheduleRequests.length) as ScheduleResponse[];
-        const bookResults = results.slice(scheduleRequests.length) as BookingsResponse[];
+        const schedCount = scheduleRequests.length;
+        const bookCount = bookingRequests.length;
+        const schedResults = results.slice(0, schedCount) as ScheduleResponse[];
+        const bookResults = results.slice(schedCount, schedCount + bookCount) as BookingsResponse[];
+        const myMeetingsResult = myMeetingsRequest
+          ? (results[schedCount + bookCount] as MyMeetingsResponse)
+          : null;
 
         if (schedResults.length) {
           this.scheduleMap.update((map) => {
@@ -524,24 +598,21 @@ export class SalasComponent implements OnInit, OnDestroy {
         }
 
         if (bookResults.length) {
-          this.reservas.update((existing) => {
-            const merged = [...existing];
-            const seen = new Set(
-              merged.map((r) => `${r.eventId || r.id || ''}:${r.roomEmail || ''}:${r.start}`)
-            );
-            for (const res of bookResults) {
-              for (const booking of res.bookings || []) {
-                const key = `${booking.eventId || booking.id || ''}:${booking.roomEmail || ''}:${booking.start}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                merged.push(booking);
-              }
-            }
-            return merged;
-          });
+          const bookingsFlat = bookResults.flatMap((res) => res.bookings || []);
+          this.mesclarReservas(bookingsFlat);
           for (const loc of bookingLocsToFetch) {
             this.reservasLocalidadesCarregadas.add(`${loc}:${day}`);
           }
+        }
+
+        if (myMeetingsResult) {
+          this.mesclarReservas(myMeetingsResult.meetings || []);
+          this.myMeetingsCarregadas = true;
+        }
+
+        if (avisos.length) {
+          this.avisoParcial.set(avisos.join(' '));
+          this.falhaCarregamentoParcial.set(houveFalha);
         }
 
         this.abasAgendaCarregadas.add(cacheKey);

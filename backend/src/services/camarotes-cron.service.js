@@ -48,8 +48,9 @@ async function refreshSyncSchedule() {
     return;
   }
 
-  if (!env.camarotesFileShareUrl?.trim()) {
-    console.log('[camarotes.cron] CAMAROTES_FILE_SHARE_URL ausente, sync automática ignorada.');
+  const shareUrl = config?.sharepoint_url?.trim() || env.camarotesFileShareUrl?.trim();
+  if (!shareUrl) {
+    console.log('[camarotes.cron] URL SharePoint não configurada — sync automática ignorada.');
     return;
   }
 

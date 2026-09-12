@@ -3,6 +3,7 @@ import { MenuItem } from '../models/menu.model';
 export interface NavItem {
   label: string;
   href?: string;
+  children?: NavItem[];
 }
 
 export interface NavDropdown {
@@ -21,7 +22,7 @@ export const NAV_LINKS: NavItem[] = [
   { label: 'Assinaturas de E-mail', href: '/assinaturas' },
   { label: 'Plaquinhas Camarote', href: '/plaquinhas-camarote' },
   { label: 'Ferramentas de PDF', href: '/ferramentas/pdf' },
-  { label: 'TI' },
+  { label: 'TI', children: [{ label: 'Rust Desk', href: '/ti/rustdesk' }] },
   { label: 'BI' },
   { label: 'Oportunidades' },
   { label: 'Shows | Jogos' },
@@ -100,7 +101,15 @@ export function navDataToMenuTree(): MenuItem[] {
       abrir_nova_aba: false,
       icone: null,
       cabecalho: null,
-      children: [],
+      children: (link.children ?? []).map((sub) => ({
+        id: nextId(),
+        label: sub.label,
+        url: sub.href ?? null,
+        abrir_nova_aba: false,
+        icone: null,
+        cabecalho: null,
+        children: [],
+      })),
     });
   }
 

@@ -39,8 +39,14 @@
 
     @if (carregando()) {
       <p class="state-msg">Carregando reservas…</p>
+    } @else if (falhaCarregamento() && !reservas().length) {
+      <p class="state-msg state-msg-erro">Não foi possível carregar as reservas. Tente atualizar a página.</p>
     } @else if (!reservas().length) {
       <p class="state-msg">Nenhuma reserva para esta data.</p>
+      <p class="state-hint">
+        Reuniões criadas no Outlook precisam incluir a sala como recurso (seletor de Salas), não apenas no campo Local.
+        Suas reuniões pessoais com sala vinculada aparecem aqui quando você é o organizador.
+      </p>
     } @else {
       <div class="reservas-grid">
         @for (r of reservas(); track r.eventId || r.id || r.start) {

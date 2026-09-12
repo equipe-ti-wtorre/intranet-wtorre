@@ -8,6 +8,7 @@ import {
   BookPayload,
   BookingsResponse,
   DirectoryUsersResponse,
+  MyMeetingsResponse,
   PreviewPayload,
   RoomsResponse,
   SalasUiConfig,
@@ -27,6 +28,7 @@ interface CacheEntry<T> {
 const TTL_ROOMS_MS = 10 * 60 * 1000;
 const TTL_SCHEDULE_MS = 60 * 1000;
 const TTL_BOOKINGS_MS = 60 * 1000;
+const TTL_MY_MEETINGS_MS = 60 * 1000;
 
 @Injectable({ providedIn: 'root' })
 export class SalasService {
@@ -84,10 +86,15 @@ export class SalasService {
 
   invalidateScheduleAndBookingsCache(dayIso?: string): void {
     for (const key of [...this.cache.keys()]) {
-      if (key.startsWith('schedule:') || key.startsWith('bookings:')) {
-        if (!dayIso || key.includes(`:${dayIso}:`) || key.endsWith(`:${dayIso}`)) {
-          this.cache.delete(key);
-        }
+      if (
+        !key.startsWith('schedule:') &&
+        !key.startsWith('bookings:') &&
+        !key.startsWith('my-meetings:')
+      ) {
+        continue;
+      }
+      if (!dayIso || key.includes(`:${dayIso}:`) || key.endsWith(`:${dayIso}`)) {
+        this.cache.delete(key);
       }
     }
   }
@@ -153,6 +160,24 @@ export class SalasService {
       () =>
         this.http.get<BookingsResponse>(`${this.base}/bookings`, {
           params: this.params(localidade, { start, end }),
+        }),
+      options
+    );
+  }
+
+  getMyMeetings(
+    start?: string,
+    end?: string,
+    options?: SalasFetchOptions
+  ): Observable<MyMeetingsResponse> {
+    const dayIso = start?.slice(0, 10) || '';
+    const key = `my-meetings:${dayIso}`;
+    return this.fetchWithCache(
+      key,
+      TTL_MY_MEETINGS_MS,
+      () =>
+        this.http.get<MyMeetingsResponse>(`${this.base}/my-meetings`, {
+          params: new HttpParams().set('start', start || '').set('end', end || ''),
         }),
       options
     );

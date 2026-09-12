@@ -124,6 +124,12 @@ const env = {
   pbiEmbedTokenCacheMin: Number(process.env.PBI_EMBED_TOKEN_CACHE_MIN) || 55,
   pbiEmbedRateLimitMax: Number(process.env.PBI_EMBED_RATE_LIMIT_MAX) || 30,
   pbiEmbedRateLimitWindowMs: Number(process.env.PBI_EMBED_RATE_LIMIT_WINDOW_MS) || 900000,
+  rustdeskBridgeUrl: process.env.RUSTDESK_BRIDGE_URL || 'http://127.0.0.1:3011',
+  rustdeskBridgeApiKey: process.env.RUSTDESK_BRIDGE_API_KEY || '',
+  rustdeskSyncIntervalMin: Number(process.env.RUSTDESK_SYNC_INTERVAL_MIN) || 5,
+  rustdeskInstallerPath:
+    process.env.RUSTDESK_INSTALLER_PATH ||
+    path.join(__dirname, '..', '..', 'storage', 'rustdesk', 'Rustdesk.zip'),
 };
 
 function validateEnv() {

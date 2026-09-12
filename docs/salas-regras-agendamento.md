@@ -44,6 +44,23 @@ Documento de referência do comportamento **atual** do sistema (backend + fronte
 - Eventos retornados por `listBookings` (calendarView da mailbox da sala) são fundidos com os itens do `getSchedule`.
 - Evita “falso livre” quando há ocupação visível na grade mas sem evento no calendário da sala.
 
+### Reuniões criadas diretamente no Outlook
+
+A intranet consulta **dois calendários** para montar `/salas`:
+
+| Fonte | Endpoint | O que lê |
+|-------|----------|----------|
+| Calendário da **sala** | `GET /bookings` | Eventos aceitos na mailbox da sala (recurso) |
+| Calendário **pessoal** do usuário logado | `GET /my-meetings` | Eventos em que o usuário é organizador **e** a sala aparece como local ou convidado recurso |
+
+**Importante — Local vs recurso no Outlook:**
+
+- **Correto:** usar o seletor de **Salas** ao agendar. Isso adiciona a sala como attendee `type: resource`, faz AutoAccept e o evento aparece tanto no Outlook quanto na intranet (grade + lista de reservas).
+- **Limitado:** preencher só o campo **Local** com o nome da sala, sem convidar como recurso. O evento fica apenas no calendário pessoal; a grade coletiva da sala pode continuar livre. A intranet tenta exibir essas reuniões na lista **Reservas** do organizador via `GET /my-meetings`, mas **não bloqueia** o horário para outros usuários.
+- **Fora de escopo:** reuniões pessoais **sem sala** não aparecem em `/salas`.
+
+Para a grade coletiva refletir ocupação, o Exchange precisa marcar a sala como busy (`getSchedule`) — o que exige convite à sala como recurso (ou AutoAccept cross-tenant configurado).
+
 ### Status de disponibilidade na pré-visualização
 
 | `availabilityStatus` | Bloqueia reserva? |

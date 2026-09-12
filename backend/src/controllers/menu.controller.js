@@ -8,6 +8,7 @@ const { usuarioPodeVisualizar: usuarioPodeVisualizarSolicitacao } = require('../
 
 const CAMAROTES_BI_URL = '/bi/camarotes';
 const SOLICITACAO_COLABORADOR_URL = '/solicitacao-colaborador';
+const RUSTDESK_URL = '/ti/rustdesk';
 
 function filterUrlFromTree(nodes, url) {
   const result = [];
@@ -17,6 +18,20 @@ function filterUrlFromTree(nodes, url) {
     result.push({ ...node, children });
   }
   return result;
+}
+
+function pruneParentIfEmpty(nodes, label) {
+  return nodes
+    .filter((node) => {
+      if (node.label === label && !node.url && !(node.children && node.children.length)) {
+        return false;
+      }
+      return true;
+    })
+    .map((node) => ({
+      ...node,
+      children: pruneParentIfEmpty(node.children || [], label),
+    }));
 }
 
 async function validateParent(parentId, selfId = null) {
@@ -76,6 +91,13 @@ async function getPublicTree(req, res) {
   );
   if (!podeVisualizarSolicitacao) {
     tree = filterUrlFromTree(tree, SOLICITACAO_COLABORADOR_URL);
+  }
+
+  const podeRustdesk =
+    req.user?.perfil === 'ADMIN' || (req.userModulos || []).includes('rustdesk');
+  if (!podeRustdesk) {
+    tree = filterUrlFromTree(tree, RUSTDESK_URL);
+    tree = pruneParentIfEmpty(tree, 'TI');
   }
 
   return res.json(tree);

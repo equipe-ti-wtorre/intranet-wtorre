@@ -1,0 +1,308 @@
+<div class="maq">
+  <div class="toolbar">
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+        <path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      <input
+        #buscaInput
+        type="search"
+        placeholder="Buscar por nome, ID, local ou setor"
+        [ngModel]="busca()"
+        (ngModelChange)="busca.set($event)"
+        aria-label="Buscar máquinas"
+      />
+      <kbd>/</kbd>
+      <span class="kbd-hint">buscar</span>
+    </label>
+    <select class="filter" [ngModel]="tipoFiltro()" (ngModelChange)="tipoFiltro.set($event)" aria-label="Tipo">
+      <option value="">Todos os tipos</option>
+      @for (t of tiposPadrao; track t) {
+        <option [value]="t">{{ t }}</option>
+      }
+    </select>
+    <select class="filter" [ngModel]="estadoFiltro()" (ngModelChange)="estadoFiltro.set($event)" aria-label="Estado">
+      <option value="">Qualquer estado</option>
+      <option value="no_servidor">No servidor</option>
+      <option value="ausente_hbbs">Fora do hbbs</option>
+      <option value="sem_servico">Sem serviço</option>
+      <option value="nunca_registrou">Nunca registrou</option>
+    </select>
+  </div>
+
+  <section class="kpis">
+    <article class="kpi">
+      <div>
+        <span class="kpi-l">No inventário</span>
+        <strong>{{ kpis().inventario }}</strong>
+        <span class="kpi-s">{{ kpis().entidades }} entidades</span>
+      </div>
+      <span class="kpi-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 20h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </span>
+    </article>
+    <article class="kpi kpi-now">
+      <div>
+        <span class="kpi-l">Registradas agora</span>
+        <strong>{{ kpis().noServidor }}</strong>
+        <span class="kpi-s">presentes no hbbs na última sync</span>
+      </div>
+      <span class="kpi-ico ico-blue" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5c2.8-3 5.4-4.5 7-4.5s4.2 1.5 7 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8.5 16c1.5-1.6 2.8-2.3 3.5-2.3s2 .7 3.5 2.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="19" r="1.2" fill="currentColor"/></svg>
+      </span>
+    </article>
+    <article class="kpi kpi-danger">
+      <div>
+        <span class="kpi-l">Exigem atenção</span>
+        <strong>{{ kpis().atencao }}</strong>
+        <span class="kpi-s">sem serviço ou nunca registraram</span>
+      </div>
+      <span class="kpi-ico ico-danger" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 4l9 16H3L12 4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.5" r="1" fill="currentColor"/></svg>
+      </span>
+    </article>
+    <article class="kpi kpi-warn">
+      <div>
+        <span class="kpi-l">Cliente desatualizado</span>
+        <strong>{{ kpis().desatualizados }}</strong>
+        <span class="kpi-s">{{ kpis().versaoAlvo ? 'versão atual ' + kpis().versaoAlvo : 'sem versão de referência' }}</span>
+      </div>
+      <span class="kpi-ico ico-warn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v10M8 9l4-4 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 19h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </span>
+    </article>
+  </section>
+
+  <div class="ent-row">
+    <span class="ent-l">Entidade</span>
+    <div class="chips">
+      <button type="button" class="chip" [class.on]="entidadeFiltro() === ''" (click)="selecionarEntidade('')">
+        Todas <b>{{ kpis().inventario }}</b>
+      </button>
+      @for (c of chipsEntidade(); track c.id) {
+        <button type="button" class="chip" [class.on]="entidadeFiltro() === c.id" (click)="selecionarEntidade(c.id)">
+          {{ c.nome }} <b>{{ c.qtd }}</b>
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (orfaos().length) {
+    <div class="orfaos-bar">
+      <span><b>{{ orfaos().length }}</b> ID(s) no hbbs sem cadastro</span>
+      <div class="orfaos-ids">
+        @for (o of orfaos(); track o.rustdesk_id) {
+          <button type="button" class="orfao-pill" (click)="vincular(o)">{{ o.rustdesk_id }} · Vincular</button>
+        }
+      </div>
+    </div>
+  }
+
+  <section class="sheet">
+    <header class="sheet-head">
+      <h2>Máquinas</h2>
+      <div class="sheet-actions">
+        <span class="count">{{ filtrados().length }} de {{ kpis().inventario }}</span>
+        <label class="btn-ghost file-btn" [class.disabled]="importando()">
+          {{ importando() ? 'Importando…' : 'CSV' }}
+          <input type="file" accept=".csv,text/csv" hidden [disabled]="importando()" (change)="onCsvSelecionado($event)" />
+        </label>
+        <button type="button" class="btn-add" (click)="novo()">Nova</button>
+      </div>
+    </header>
+
+    @if (carregando() && !inventario().length) {
+      <p class="state-msg">Carregando…</p>
+    } @else if (!filtrados().length) {
+      <p class="state-msg">Nenhuma máquina neste filtro.</p>
+    } @else {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Máquina</th>
+              <th>ID RustDesk</th>
+              <th>Entidade</th>
+              <th>Local</th>
+              <th>Registro</th>
+              <th>Acesso</th>
+              <th class="col-acoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (d of filtrados(); track d.id) {
+              <tr (click)="editar(d)">
+                <td>
+                  <div class="maq-cell">
+                    <span class="tipo-ico" [attr.data-tipo]="iconeMaquina(d.tipo)" aria-hidden="true">
+                      @switch (iconeMaquina(d.tipo)) {
+                        @case ('servidor') {
+                          <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="6" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="14" width="16" height="6" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M8 7h.01M8 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        }
+                        @case ('notebook') {
+                          <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="11" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M3 18h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                        }
+                        @case ('cftv') {
+                          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="11" r="3.2" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.7"/></svg>
+                        }
+                        @default {
+                          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 20h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                        }
+                      }
+                    </span>
+                    <div>
+                      <strong>{{ d.hostname || 'Sem hostname' }}</strong>
+                      @if (subtituloMaquina(d); as sub) {
+                        <div class="sub">{{ sub }}</div>
+                      }
+                    </div>
+                  </div>
+                </td>
+                <td class="mono">{{ d.rustdesk_id }}</td>
+                <td>{{ d.entidade_nome || '—' }}</td>
+                <td>{{ d.localizacao || '—' }}</td>
+                <td>
+                  <div class="reg" [class.ok]="d.presente_no_hbbs && d.estado !== 'sem_servico'" [class.bad]="d.estado === 'sem_servico' || d.estado === 'nunca_registrou'">
+                    <span class="dot"></span>
+                    <div>
+                      <b>{{ d.estado === 'sem_servico' ? 'Sem serviço' : d.presente_no_hbbs ? 'Registrada' : labelEstado(d.estado) }}</b>
+                      <small>{{ d.presente_no_hbbs && d.estado !== 'sem_servico' ? 'no hbbs · última sync' : '—' }}</small>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  @if (labelAcesso(d.modo_acesso); as acc) {
+                    <span class="acc" [attr.data-tone]="toneAcesso(d.modo_acesso)">{{ acc }}</span>
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+                <td class="col-acoes" (click)="$event.stopPropagation()">
+                  <a
+                    class="iconbtn"
+                    [href]="urlConectar(d.rustdesk_id)"
+                    (click)="conectar(d.rustdesk_id, $event)"
+                    title="Conectar"
+                    aria-label="Conectar"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 12l5 5-1.5 1.5a3.54 3.54 0 11-5-5L7 12z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M17 12l-5-5 1.5-1.5a3.54 3.54 0 115 5L17 12z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M3 21l2.4-2.4M18.6 5.4L21 3M10 11l-2 2M13 14l-2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                  </a>
+                  <button type="button" class="iconbtn" title="Copiar ID" (click)="copiarId(d.rustdesk_id, $event)">
+                    <svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M4 16V6a2 2 0 012-2h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  </button>
+                  <button type="button" class="iconbtn" title="Editar cadastro" (click)="editar(d, $event)">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M4 20h4L19.5 8.5a2.12 2.12 0 00-3-3L5 17v3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M14 6.5l3.5 3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  [title]="tituloModal()"
+  [salvando]="salvando()"
+  [saveDisabled]="form.invalid"
+  size="wide"
+  (save)="salvar()"
+  (cancel)="fecharModal()"
+>
+  <form [formGroup]="form" class="rd-form" (ngSubmit)="salvar()">
+    <div class="rd-grid">
+      <div class="field mono">
+        <label for="rd-id">ID RustDesk *</label>
+        <input id="rd-id" type="text" formControlName="rustdesk_id" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="rd-host">Hostname</label>
+        <input id="rd-host" type="text" formControlName="hostname" />
+      </div>
+    </div>
+    <div class="rd-grid">
+      <div class="field">
+        <label for="rd-ent">Entidade</label>
+        <select id="rd-ent" formControlName="entidade_id">
+          <option value="">—</option>
+          @for (e of entidades(); track e.id) {
+            <option [value]="e.id">{{ e.nome }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="rd-setor">Setor</label>
+        <input id="rd-setor" type="text" formControlName="setor" />
+      </div>
+    </div>
+    <div class="rd-grid">
+      <div class="field">
+        <label for="rd-tipo">Tipo</label>
+        <select id="rd-tipo" formControlName="tipo">
+          <option value="">—</option>
+          @for (t of tiposPadrao; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="rd-loc">Localização</label>
+        <input id="rd-loc" type="text" formControlName="localizacao" />
+      </div>
+    </div>
+    <div class="rd-grid">
+      <div class="field">
+        <label for="rd-modo">Modo de acesso</label>
+        <select id="rd-modo" formControlName="modo_acesso">
+          <option value="">—</option>
+          <option value="senha_ou_aprovacao">Senha ou aprovação</option>
+          <option value="attended">Aprovação</option>
+          <option value="unattended">Senha fixa</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="rd-serv">Estado do serviço</label>
+        <select id="rd-serv" formControlName="servico_estado">
+          <option value="ativo">Ativo</option>
+          <option value="ausente">Ausente</option>
+        </select>
+      </div>
+    </div>
+    <div class="rd-grid">
+      <div class="field">
+        <label for="rd-cofre">Referência no cofre</label>
+        <input id="rd-cofre" type="text" formControlName="cofre_ref" placeholder="Sem senha — só a referência" />
+      </div>
+      <div class="field">
+        <label for="rd-ver">Versão do cliente</label>
+        <input id="rd-ver" type="text" formControlName="versao_cliente" />
+      </div>
+    </div>
+    <div class="field">
+      <label for="rd-obs">Observação</label>
+      <textarea id="rd-obs" rows="3" formControlName="observacao"></textarea>
+    </div>
+    @if (editando()) {
+      <div class="field field-toggle">
+        <label class="toggle-field">
+          <span class="tt">Cadastro ativo</span>
+          <span class="switch">
+            <input type="checkbox" formControlName="ativo" />
+            <span class="slider"></span>
+          </span>
+        </label>
+      </div>
+    }
+  </form>
+</app-admin-modal>
