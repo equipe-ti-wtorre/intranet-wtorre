@@ -106,9 +106,11 @@ function validarPayload(body, { parcial = false } = {}) {
   };
 }
 
-async function listarPublicos(_req, res) {
+async function listarPublicos(req, res) {
   try {
-    const lista = await comunicadosRepo.listarPublicos();
+    const lista = await comunicadosRepo.listarPublicos({
+      departamento: String(req.user?.departamento || '').trim(),
+    });
     return res.json(lista);
   } catch (err) {
     return handleError(res, err);

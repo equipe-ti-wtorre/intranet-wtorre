@@ -76,162 +76,6 @@
   <div class="builder-split">
     <div class="builder-col">
       <div class="form-card">
-        <h3><app-pesq-icon name="file-text" [size]="17" /> Informações gerais</h3>
-        <div class="field" style="margin-top: 12px">
-          <label>Título do formulário</label>
-          <input
-            type="text"
-            [ngModel]="titulo()"
-            (ngModelChange)="titulo.set($event)"
-            placeholder="Ex: Pesquisa de satisfação do evento"
-          />
-        </div>
-        <div class="field" style="margin-top: 16px">
-          <label>Descrição</label>
-          <textarea
-            [ngModel]="descricao()"
-            (ngModelChange)="descricao.set($event)"
-            placeholder="Explique o objetivo do formulário para quem for responder"
-          ></textarea>
-        </div>
-        <div class="field-grid" style="margin-top: 16px">
-          <div class="field">
-            <label>Data início</label>
-            <input type="date" [ngModel]="prazoInicioData()" (ngModelChange)="prazoInicioData.set($event)" />
-          </div>
-          <div class="field">
-            <label>Data fim</label>
-            <input type="date" [ngModel]="prazoFimData()" (ngModelChange)="prazoFimData.set($event)" />
-          </div>
-        </div>
-        <div class="field-grid" style="margin-top: 16px">
-          <div class="field">
-            <label>Horário início</label>
-            <input type="time" [ngModel]="prazoInicioHora()" (ngModelChange)="prazoInicioHora.set($event)" />
-          </div>
-          <div class="field">
-            <label>Horário fim</label>
-            <input type="time" [ngModel]="prazoFimHora()" (ngModelChange)="prazoFimHora.set($event)" />
-          </div>
-        </div>
-        <p class="panel-desc" style="margin: 10px 0 0">{{ janelaDica() }}</p>
-        <div class="field-grid" style="margin-top: 16px">
-          <div class="field">
-            <label>Público-alvo</label>
-            <select [ngModel]="publicoAlvo()" (ngModelChange)="publicoAlvo.set($event)">
-              <option value="todos">Todos os colaboradores</option>
-              <option value="departamento">Departamento específico</option>
-              <option value="externos">Convidados externos</option>
-            </select>
-          </div>
-        </div>
-        @if (publicoAlvo() === 'departamento') {
-          <div class="field" style="margin-top: 16px">
-            <label>Departamento</label>
-            <select [ngModel]="publicoDepartamento()" (ngModelChange)="publicoDepartamento.set($event)">
-              <option value="">Selecione…</option>
-              @for (d of departamentos(); track d) {
-                <option [value]="d">{{ d }}</option>
-              }
-            </select>
-          </div>
-        }
-        @if (publicoAlvo() === 'externos') {
-          <div class="ext-callout">
-            <app-pesq-icon name="alert" [size]="16" />
-            <span>
-              Formulário para convidados externos <b>não</b> é enviado ao mural de Comunicados. Quem
-              responde usa o link /f/… (ou o QR), sem login na intranet.
-            </span>
-          </div>
-          <div class="field" style="margin-top: 16px">
-            <label>Tipo de evento</label>
-            <div class="priority-row">
-              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'show'" [class.media]="eventoTipo() === 'show'" (click)="eventoTipo.set('show')">Show</button>
-              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'jogo'" [class.media]="eventoTipo() === 'jogo'" (click)="eventoTipo.set('jogo')">Jogo</button>
-              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'outro'" [class.media]="eventoTipo() === 'outro'" (click)="eventoTipo.set('outro')">Outro</button>
-            </div>
-          </div>
-          @if (eventoTipo() === 'outro') {
-            <div class="field" style="margin-top: 12px">
-              <label>Qual?</label>
-              <input type="text" [ngModel]="eventoTipoOutro()" (ngModelChange)="eventoTipoOutro.set($event)" placeholder="Descreva o tipo de evento" maxlength="80" />
-            </div>
-          }
-          <div class="toggle-row" style="margin-top: 16px">
-            <div class="toggle-text">
-              <b>Exigir confirmação de identidade</b>
-              <span>O convidado precisa informar CPF e e-mail cadastrados para acessar o link</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" [ngModel]="exigirIdentidade()" (ngModelChange)="exigirIdentidade.set($event)" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="field" style="margin-top: 16px">
-            <label>Link público</label>
-            @if (linkPublico()) {
-              <div class="link-copy-row">
-                <input type="text" [value]="linkPublico()" readonly />
-                <button type="button" class="btn-secondary" (click)="copiarLink()">
-                  <app-pesq-icon name="link" [size]="15" />
-                  Copiar
-                </button>
-              </div>
-            } @else {
-              <p class="page-sub" style="margin: 0">Salve o rascunho para gerar o link público.</p>
-            }
-          </div>
-          <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
-          <div class="guest-add-grid">
-            <div class="field">
-              <label>Nome (opcional)</label>
-              <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
-            </div>
-            <div class="field">
-              <label>CPF</label>
-              <input type="text" inputmode="numeric" [ngModel]="guestCpf()" (ngModelChange)="formatCpfInput($event)" placeholder="000.000.000-00" />
-            </div>
-            <div class="field">
-              <label>E-mail</label>
-              <input type="email" [ngModel]="guestEmail()" (ngModelChange)="guestEmail.set($event)" placeholder="email@exemplo.com" />
-            </div>
-            <button type="button" class="btn-primary guest-add-btn" (click)="addConvidado()">
-              <app-pesq-icon name="plus" [size]="15" />
-              Adicionar
-            </button>
-          </div>
-          <button type="button" class="add-q-btn" style="margin-top: 10px" (click)="pasteOpen.set(!pasteOpen())">
-            <app-pesq-icon name="upload" [size]="15" />
-            Colar do Excel
-          </button>
-          @if (pasteOpen()) {
-            <div class="field" style="margin-top: 12px">
-              <label>Uma pessoa por linha: Nome, CPF, E-mail</label>
-              <textarea [ngModel]="pasteText()" (ngModelChange)="pasteText.set($event)" placeholder="Maria Silva, 123.456.789-00, maria@email.com"></textarea>
-              <button type="button" class="btn-secondary" style="margin-top: 8px" (click)="aplicarCola()">Importar linhas</button>
-            </div>
-          }
-          @if (convidados().length) {
-            <div class="guest-table">
-              @for (g of convidados(); track g.key) {
-                <div class="guest-row">
-                  <span>{{ g.nome || '—' }}</span>
-                  <span>{{ g.cpfMascara || g.cpf }}</span>
-                  <span>{{ g.email }}</span>
-                  <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
-                    <app-pesq-icon name="x" [size]="15" />
-                  </button>
-                </div>
-              }
-            </div>
-          } @else {
-            <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
-          }
-        }
-      </div>
-
-      <div class="form-card">
         <h3><app-pesq-icon name="layers" [size]="17" /> Configurações avançadas</h3>
         <div class="toggle-row">
           <div class="toggle-text">
@@ -270,11 +114,203 @@
       </div>
 
       <div class="form-card">
+        <h3><app-pesq-icon name="file-text" [size]="17" /> Informações gerais</h3>
+        <div class="field" style="margin-top: 12px">
+          <label>Título do formulário</label>
+          <input
+            type="text"
+            [ngModel]="titulo()"
+            (ngModelChange)="titulo.set($event)"
+            placeholder="Ex: Pesquisa de satisfação do evento"
+          />
+        </div>
+        <div class="field" style="margin-top: 16px">
+          <label>Descrição</label>
+          <textarea
+            [ngModel]="descricao()"
+            (ngModelChange)="descricao.set($event)"
+            placeholder="Explique o objetivo do formulário para quem for responder"
+          ></textarea>
+        </div>
+        <div class="field-grid" style="margin-top: 16px">
+          <div class="field">
+            <label>Data início</label>
+            <input type="date" [ngModel]="prazoInicioData()" (ngModelChange)="prazoInicioData.set($event)" />
+          </div>
+          <div class="field">
+            <label>Data fim</label>
+            <input type="date" [ngModel]="prazoFimData()" (ngModelChange)="prazoFimData.set($event)" />
+          </div>
+        </div>
+        <div class="field-grid" style="margin-top: 16px">
+          <div class="field">
+            <label>Horário início</label>
+            <input type="time" [ngModel]="prazoInicioHora()" (ngModelChange)="prazoInicioHora.set($event)" />
+          </div>
+          <div class="field">
+            <label>Horário fim</label>
+            <input type="time" [ngModel]="prazoFimHora()" (ngModelChange)="prazoFimHora.set($event)" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h3><app-pesq-icon name="users" [size]="17" /> Público-alvo</h3>
+        <div class="field" style="margin-top: 12px">
+          <label>Público-alvo</label>
+          <select [ngModel]="publicoAlvo()" (ngModelChange)="onPublicoAlvoChange($event)">
+            <option value="todos">Todos os colaboradores</option>
+            <option value="departamento">Departamento específico</option>
+            <option value="externos">Convidados externos</option>
+          </select>
+        </div>
+        @if (publicoAlvo() === 'departamento') {
+          <div class="field" style="margin-top: 16px">
+            <label>Departamento</label>
+            <select [ngModel]="publicoDepartamento()" (ngModelChange)="publicoDepartamento.set($event)">
+              <option value="">Selecione…</option>
+              @for (d of departamentos(); track d) {
+                <option [value]="d">{{ d }}</option>
+              }
+            </select>
+          </div>
+        }
+        @if (publicoAlvo() === 'externos') {
+          <div class="ext-callout">
+            <app-pesq-icon name="alert" [size]="16" />
+            <span>
+              Formulário para convidados externos <b>não</b> é enviado ao mural de Comunicados. Quem
+              responde usa o link /f/… (ou o QR), sem login na intranet.
+            </span>
+          </div>
+          <div class="field" style="margin-top: 16px">
+            <label>Tipo de evento</label>
+            <div class="priority-row">
+              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'show'" [class.media]="eventoTipo() === 'show'" (click)="eventoTipo.set('show')">Show</button>
+              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'jogo'" [class.media]="eventoTipo() === 'jogo'" (click)="eventoTipo.set('jogo')">Jogo</button>
+              <button type="button" class="priority-chip" [class.selected]="eventoTipo() === 'outro'" [class.media]="eventoTipo() === 'outro'" (click)="eventoTipo.set('outro')">Outro</button>
+            </div>
+          </div>
+          @if (eventoTipo() === 'outro') {
+            <div class="field" style="margin-top: 12px">
+              <label>Qual?</label>
+              <input type="text" [ngModel]="eventoTipoOutro()" (ngModelChange)="eventoTipoOutro.set($event)" placeholder="Descreva o tipo de evento" maxlength="80" />
+            </div>
+          }
+          <div class="toggle-row" style="margin-top: 16px">
+            <div class="toggle-text">
+              <b>Exigir confirmação de identidade</b>
+              <span>O convidado precisa informar CPF ou CNPJ e e-mail cadastrados para acessar o link</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" [ngModel]="exigirIdentidade()" (ngModelChange)="exigirIdentidade.set($event)" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="field" style="margin-top: 16px">
+            <label>Link público</label>
+            @if (linkPublico()) {
+              <div class="link-copy-row">
+                <input type="text" [value]="linkPublico()" readonly />
+                <button type="button" class="btn-secondary" (click)="copiarLink()">
+                  <app-pesq-icon name="link" [size]="15" />
+                  Copiar
+                </button>
+              </div>
+            } @else {
+              <p class="page-sub" style="margin: 0">Salve o rascunho para gerar o link público.</p>
+            }
+          </div>
+          <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
+          <div class="field" style="margin-top: 12px">
+            <label>Origem dos convidados</label>
+            <div class="priority-row">
+              <button type="button" class="priority-chip" [class.selected]="convidadosFonte() === 'planilha'" [class.media]="convidadosFonte() === 'planilha'" (click)="escolherFonteConvidados('planilha')">Da planilha</button>
+              <button type="button" class="priority-chip" [class.selected]="convidadosFonte() === 'manual'" [class.media]="convidadosFonte() === 'manual'" (click)="escolherFonteConvidados('manual')">Manual</button>
+            </div>
+          </div>
+          @if (convidadosFonte() === 'planilha') {
+            @if (!temBaseSessao() && !temBaseSalva()) {
+              <div class="ext-callout ext-callout-info">
+                <app-pesq-icon name="table" [size]="16" />
+                <span>
+                  Próximo passo: importe a planilha em <b>Campos</b>. Os convidados serão cadastrados
+                  automaticamente.
+                </span>
+              </div>
+            } @else if (!temBaseSessao() && temBaseSalva()) {
+              <p class="page-sub" style="margin-top: 12px">Ao salvar, os convidados serão cadastrados a partir da planilha já importada em Campos.</p>
+            } @else if (planilhaResumo(); as r) {
+              <p class="page-sub" style="margin-top: 12px">
+                {{ r.total }} pessoa(s) da planilha.
+                @if (r.ignoradas) {
+                  {{ r.ignoradas }} linha(s) sem CPF/CNPJ ou e-mail ignoradas.
+                }
+              </p>
+            }
+          } @else {
+            <div class="guest-add-grid">
+              <div class="field">
+                <label>Nome (opcional)</label>
+                <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
+              </div>
+              <div class="field">
+                <label>CPF ou CNPJ</label>
+                <input type="text" inputmode="numeric" [ngModel]="guestCpf()" (ngModelChange)="formatCpfInput($event)" placeholder="000.000.000-00 ou 00.000.000/0001-00" />
+              </div>
+              <div class="field">
+                <label>E-mail</label>
+                <input type="email" [ngModel]="guestEmail()" (ngModelChange)="guestEmail.set($event)" placeholder="email@exemplo.com" />
+              </div>
+              <button type="button" class="btn-primary guest-add-btn" (click)="addConvidado()">
+                <app-pesq-icon name="plus" [size]="15" />
+                Adicionar
+              </button>
+            </div>
+            <div class="guest-import-row">
+              <button type="button" class="add-q-btn" (click)="guestsExcelInput.click()">
+                <app-pesq-icon name="table" [size]="15" />
+                Importar CSV ou Excel
+              </button>
+              <input
+                #guestsExcelInput
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                hidden
+                (change)="onExcelConvidados($event)"
+              />
+            </div>
+            <p class="page-sub" style="margin-top: 8px">
+              Use colunas Nome (opcional), CPF ou CNPJ e E-mail. Outras colunas são ignoradas.
+            </p>
+          }
+          @if (convidados().length) {
+            <div class="guest-table">
+              @for (g of convidados(); track g.key) {
+                <div class="guest-row">
+                  <span>{{ g.nome || '—' }}</span>
+                  <span>{{ g.cpfMascara || g.cpf }}</span>
+                  <span>{{ g.email }}</span>
+                  @if (podeRemoverConvidado()) {
+                    <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
+                      <app-pesq-icon name="x" [size]="15" />
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          } @else if (convidadosFonte() === 'manual') {
+            <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
+          }
+        }
+      </div>
+
+      <div class="form-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 10px">
           <h3 style="margin: 0"><app-pesq-icon name="grid" [size]="16" /> Campos</h3>
           <button type="button" class="btn-secondary" style="padding: 7px 12px; font-size: 12px" (click)="excelInput.click()">
             <app-pesq-icon name="table" [size]="13" />
-            Importar Excel
+            Importar
           </button>
           <input #excelInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onExcel($event)" />
         </div>
@@ -399,8 +435,20 @@
     <aside class="preview-col" [class.fullscreen]="previewExpandido()">
       <div class="tpl-switch" role="tablist" aria-label="Template visual">
         @for (t of templates(); track t.codigo) {
-          <button type="button" class="tpl-switch-btn" [class.active]="templateCodigo() === t.codigo" (click)="escolherTemplate(t.codigo)">
-            {{ t.nome }}
+          <button
+            type="button"
+            class="tpl-switch-btn"
+            [class.active]="templateCodigo() === t.codigo"
+            [attr.aria-label]="t.nome"
+            [attr.data-marca]="t.codigo"
+            [style.--tpl-primary]="t.corPrimaria"
+            (click)="escolherTemplate(t.codigo)"
+          >
+            @if (logoSrc(t.codigo); as src) {
+              <img class="tpl-switch-logo" [src]="src" [alt]="t.nome" />
+            } @else {
+              {{ t.nome }}
+            }
           </button>
         }
       </div>

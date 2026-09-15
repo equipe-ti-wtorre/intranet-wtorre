@@ -6,6 +6,8 @@ import {
   PesquisasTemplateVisual,
 } from '../../../models/pesquisas.model';
 import { PesqIconComponent } from './pesq-icon.component';
+import { PesquisasMarcaLogosComponent } from './pesquisas-marca-logos.component';
+import { PESQUISAS_TPL_WTORRE } from './pesquisas-marca.util';
 
 export interface GuestReorderEvent {
   keys: number[];
@@ -15,7 +17,7 @@ export interface GuestReorderEvent {
 @Component({
   selector: 'app-pesquisas-guest-form',
   standalone: true,
-  imports: [FormsModule, PesqIconComponent],
+  imports: [FormsModule, PesqIconComponent, PesquisasMarcaLogosComponent],
   templateUrl: './pesquisas-guest-form.component.html',
 })
 export class PesquisasGuestFormComponent {
@@ -39,17 +41,7 @@ export class PesquisasGuestFormComponent {
   readonly escala = [1, 2, 3, 4, 5];
   readonly rows = computed(() => this.groupRows(this.perguntas()));
 
-  readonly tpl = computed(
-    () =>
-      this.template() || {
-        codigo: 'wtorre',
-        nome: 'WTorre',
-        wordmark: 'WTORRE',
-        corPrimaria: '#0f1e3d',
-        corPrimariaEscura: '#080e1e',
-        raioPx: 10,
-      }
-  );
+  readonly tpl = computed(() => this.template() || PESQUISAS_TPL_WTORRE);
 
   private lastDrop: { targetKey: number; insertBefore: boolean; joinRow: boolean } | null = null;
   private dragKey: number | null = null;

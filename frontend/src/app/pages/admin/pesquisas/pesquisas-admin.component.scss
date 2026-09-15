@@ -175,6 +175,29 @@
   color: var(--danger, #d8456e);
 }
 
+.slide-thumb {
+  display: block;
+  width: 72px;
+  height: 44px;
+  border-radius: 8px;
+  background: #e8ebf2 center / cover no-repeat;
+  border: 1px solid var(--line, #e2e6ee);
+}
+
+.slide-preview {
+  width: 100%;
+  height: 140px;
+  border-radius: 12px;
+  background: #e8ebf2 center / cover no-repeat;
+  border: 1px solid var(--line, #e2e6ee);
+  margin-bottom: 10px;
+}
+
+.actions .iact:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
   .field-row {
     grid-template-columns: 1fr;

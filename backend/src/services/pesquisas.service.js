@@ -318,6 +318,38 @@ function isEmailHeader(raw) {
   return ['email', 'e mail', 'mail', 'correio'].includes(normHeader(raw));
 }
 
+function isNomeHeader(raw) {
+  return ['nome', 'nome completo', 'name', 'razao social', 'razão social'].includes(normHeader(raw));
+}
+
+function extractGuestsFromRows(rows) {
+  const guests = [];
+  const seen = new Set();
+  const list = Array.isArray(rows) ? rows : [];
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue;
+    let nome = '';
+    let cpf = '';
+    let email = '';
+    for (const [k, v] of Object.entries(row)) {
+      const cell = String(v ?? '').trim();
+      if (!cell) continue;
+      if (!nome && isNomeHeader(k)) nome = cell.slice(0, 200);
+      if (!cpf && isDocHeader(k)) {
+        const digits = digitsCpf(cell);
+        if (digits.length === 11 || digits.length === 14) cpf = digits;
+      }
+      if (!email && isEmailHeader(k) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell.toLowerCase())) {
+        email = cell.toLowerCase().slice(0, 200);
+      }
+    }
+    if (!cpf || !email || seen.has(cpf)) continue;
+    seen.add(cpf);
+    guests.push({ nome, cpf, email });
+  }
+  return { guests, ignoradas: Math.max(0, list.length - guests.length) };
+}
+
 function extractChavesFromDados(dados) {
   let chaveDoc = null;
   let chaveEmail = null;
@@ -382,8 +414,44 @@ function lookupKeysFromValor(raw) {
   return { chaveDoc: null, chaveEmail: null };
 }
 
-function maskCpf(digits) {
+function isDocumentoValido(digits) {
+  return digits.length === 11 || digits.length === 14;
+}
+
+function maskDocumento(digits) {
+  if (digits.length === 14) {
+    return `**.${digits.slice(2, 5)}.***/${digits.slice(8, 12)}-${digits.slice(12)}`;
+  }
   return `***.${digits.slice(3, 6)}.**${digits[8]}-${digits.slice(9)}`;
+}
+
+function guestsHaveFreshDocumento(raw) {
+  return Array.isArray(raw) && raw.some((g) => isDocumentoValido(digitsCpf(g?.cpf)));
+}
+
+async function resolveConvidadosFromBody(body, formularioId) {
+  const fontePlanilha = body?.convidadosFonte === 'planilha';
+  const rawGuests = Array.isArray(body?.convidados) ? body.convidados : null;
+  if (fontePlanilha && !guestsHaveFreshDocumento(rawGuests)) {
+    let rows = Array.isArray(body.base) ? body.base : null;
+    if (!rows && formularioId) {
+      rows = await repo.listFormularioBaseDados(formularioId);
+    }
+    const extracted = extractGuestsFromRows(rows);
+    if (extracted.guests.length) {
+      return normalizeConvidados(extracted.guests, formularioId);
+    }
+    if (rows && rows.length) {
+      throw httpError(
+        400,
+        'A planilha precisa de colunas de CPF/CNPJ e e-mail para cadastrar convidados.'
+      );
+    }
+  }
+  if (rawGuests) {
+    return normalizeConvidados(rawGuests, formularioId);
+  }
+  return null;
 }
 
 async function normalizeConvidados(raw, formularioId) {
@@ -396,24 +464,24 @@ async function normalizeConvidados(raw, formularioId) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw httpError(400, 'Informe um e-mail válido para cada convidado.');
     }
-    const cpf = digitsCpf(g.cpf);
+    const doc = digitsCpf(g.cpf);
     let cpfHash;
     let cpfMascara;
-    if (cpf.length === 11) {
-      cpfHash = cryptoService.hmacSha256(cpf);
-      cpfMascara = maskCpf(cpf);
+    if (isDocumentoValido(doc)) {
+      cpfHash = cryptoService.hmacSha256(doc);
+      cpfMascara = maskDocumento(doc);
     } else if (formularioId && g.id) {
       const prev = await repo.findConvidadoHash(formularioId, Number(g.id));
       if (!prev) {
-        throw httpError(400, 'Cada convidado precisa de um CPF com 11 dígitos.');
+        throw httpError(400, 'Cada convidado precisa de um CPF (11 dígitos) ou CNPJ (14 dígitos).');
       }
       cpfHash = prev.cpfHash;
       cpfMascara = prev.cpfMascara;
     } else {
-      throw httpError(400, 'Cada convidado precisa de um CPF com 11 dígitos.');
+      throw httpError(400, 'Cada convidado precisa de um CPF (11 dígitos) ou CNPJ (14 dígitos).');
     }
     if (seen.has(cpfHash)) {
-      throw httpError(400, 'Há CPFs duplicados na lista de convidados.');
+      throw httpError(400, 'Há CPF ou CNPJ duplicados na lista de convidados.');
     }
     seen.add(cpfHash);
     out.push({ nome, email, cpfHash, cpfMascara });
@@ -607,8 +675,8 @@ async function resolveTemplate(codigo) {
       codigo: 'wtorre',
       nome: 'WTorre',
       wordmark: 'WTORRE',
-      corPrimaria: '#0f1e3d',
-      corPrimariaEscura: '#080e1e',
+      corPrimaria: '#1d54e6',
+      corPrimariaEscura: '#0b2a6b',
       raioPx: 10,
     }
   );
@@ -868,9 +936,7 @@ async function salvarFormulario(req, { publicar }) {
   }
   const status = publicar ? 'publicado' : 'rascunho';
   const idParam = req.params.id ? parseId(req.params.id) : null;
-  const guests = Array.isArray(req.body?.convidados)
-    ? await normalizeConvidados(req.body.convidados, idParam)
-    : null;
+  const guests = await resolveConvidadosFromBody(req.body, idParam);
 
   if (idParam) {
     const existing = await repo.findFormularioById(idParam);
@@ -1530,30 +1596,107 @@ async function publicoMeta(req) {
   };
 }
 
+function parseIdentidadeBody(body) {
+  const valor = str(body?.valor, 200);
+  const cpfRaw = str(body?.cpf, 32);
+  const emailRaw = str(body?.email, 200).toLowerCase();
+  let doc = digitsCpf(valor || cpfRaw);
+  let email = '';
+  if (valor.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor.toLowerCase())) {
+    email = valor.toLowerCase();
+    doc = '';
+  } else if (emailRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+    email = emailRaw;
+  }
+  const hasDoc = isDocumentoValido(doc);
+  if (!hasDoc && !email) {
+    throw httpError(400, 'Informe um CPF (11 dígitos), CNPJ (14 dígitos) ou o e-mail cadastrado.');
+  }
+  return {
+    cpfHash: hasDoc ? cryptoService.hmacSha256(doc) : null,
+    email: email || null,
+  };
+}
+
+function tokenIdentidade(identity) {
+  const payload = {};
+  if (identity.cpfHash) payload.cpfHash = identity.cpfHash;
+  if (identity.email) payload.email = identity.email;
+  return payload;
+}
+
+async function resolveGuestDoForm(form, guest) {
+  if (!guest) {
+    throw httpError(401, 'Confirme sua identidade para continuar.');
+  }
+  const row = await repo.findConvidadoByIdentidade(form.id, guest.cpfHash, guest.email);
+  if (!row) {
+    throw httpError(401, 'Confirme sua identidade para continuar.');
+  }
+  return row;
+}
+
+function itemPortal(row) {
+  return {
+    slug: row.slug,
+    titulo: row.titulo,
+    descricao: row.descricao || '',
+    prazoFim: row.prazoFim || null,
+    respondidoEm: row.respondidoEm || null,
+  };
+}
+
 async function publicoVerificar(req) {
   const slug = parseSlug(req.params.slug);
   const form = await repo.findFormularioBySlug(slug);
-  assertFormularioPublicoAberto(form);
-  const cpf = digitsCpf(req.body?.cpf);
-  const email = str(req.body?.email, 200).toLowerCase();
-  if (cpf.length !== 11 || !email) {
-    throw httpError(400, 'Informe CPF e e-mail cadastrados.');
+  if (!form || form.publicoAlvo !== 'externos') {
+    throw httpError(404, 'Formulário não encontrado.');
   }
-  const hash = cryptoService.hmacSha256(cpf);
-  const guest = await repo.findConvidadoByHashEmail(form.id, hash, email);
-  if (!guest) {
-    throw httpError(401, 'CPF ou e-mail não conferem.');
+  const identity = parseIdentidadeBody(req.body);
+  const convites = await repo.findConvidadosByIdentidade(identity.cpfHash, identity.email);
+  if (!convites.length) {
+    throw httpError(401, 'CPF, CNPJ ou e-mail não conferem.');
   }
-  const ja = await repo.findRespostaDoConvidado(form.id, guest.id);
-  if (ja) {
-    throw httpError(409, 'Você já respondeu este formulário.');
+  const comNome = convites.find((c) => c.nome) || convites[0];
+  const token = jwtService.signPesquisasGuest(tokenIdentidade(identity));
+  return { token, nome: comNome.nome || null };
+}
+
+async function publicoMinhas(req) {
+  const slug = parseSlug(req.params.slug);
+  const form = await repo.findFormularioBySlug(slug);
+  if (!form || form.publicoAlvo !== 'externos') {
+    throw httpError(404, 'Formulário não encontrado.');
   }
-  const token = jwtService.signPesquisasGuest({
-    convidadoId: guest.id,
-    formId: form.id,
-    slug: form.slug,
-  });
-  return { token, nome: guest.nome || null };
+  if (!req.guest) {
+    throw httpError(401, 'Confirme sua identidade para continuar.');
+  }
+  const convites = await repo.findConvidadosByIdentidade(req.guest.cpfHash, req.guest.email);
+  if (!convites.length) {
+    throw httpError(401, 'CPF, CNPJ ou e-mail não conferem.');
+  }
+  const porSlug = new Map();
+  let nome = '';
+  for (const row of convites) {
+    if (row.nome && !nome) nome = row.nome;
+    if (!row.slug) continue;
+    const prev = porSlug.get(row.slug);
+    if (!prev || (row.respondidoEm && !prev.respondidoEm)) {
+      porSlug.set(row.slug, row);
+    }
+  }
+  const pendentes = [];
+  const respondidas = [];
+  for (const row of porSlug.values()) {
+    if (row.respondidoEm) {
+      respondidas.push(itemPortal(row));
+      continue;
+    }
+    if (row.status === 'publicado' && row.eventoAtivo && !janelaFora(row)) {
+      pendentes.push(itemPortal(row));
+    }
+  }
+  return { nome: nome || null, pendentes, respondidas };
 }
 
 async function publicoFormulario(req) {
@@ -1561,10 +1704,8 @@ async function publicoFormulario(req) {
   const form = await repo.findFormularioBySlug(slug);
   assertFormularioPublicoAberto(form);
   if (form.exigirIdentidade) {
-    if (!req.guest || req.guest.formId !== form.id || req.guest.slug !== form.slug) {
-      throw httpError(401, 'Confirme sua identidade para continuar.');
-    }
-    const ja = await repo.findRespostaDoConvidado(form.id, req.guest.convidadoId);
+    const guest = await resolveGuestDoForm(form, req.guest);
+    const ja = await repo.findRespostaDoConvidado(form.id, guest.id);
     if (ja) throw httpError(409, 'Você já respondeu este formulário.');
   }
   const perguntas = await repo.listPerguntas(form.id);
@@ -1594,9 +1735,7 @@ async function lookupBasePublico(req) {
   const form = await repo.findFormularioBySlug(slug);
   assertFormularioPublicoAberto(form);
   if (form.exigirIdentidade) {
-    if (!req.guest || req.guest.formId !== form.id || req.guest.slug !== form.slug) {
-      throw httpError(401, 'Confirme sua identidade para continuar.');
-    }
+    await resolveGuestDoForm(form, req.guest);
   }
   const keys = lookupKeysFromValor(req.body?.valor);
   if (!keys.chaveDoc && !keys.chaveEmail) return { campos: {} };
@@ -1610,10 +1749,8 @@ async function publicoResponder(req) {
   assertFormularioPublicoAberto(form);
   let convidadoId = null;
   if (form.exigirIdentidade) {
-    if (!req.guest || req.guest.formId !== form.id) {
-      throw httpError(401, 'Confirme sua identidade para continuar.');
-    }
-    convidadoId = req.guest.convidadoId;
+    const guest = await resolveGuestDoForm(form, req.guest);
+    convidadoId = guest.id;
     const ja = await repo.findRespostaDoConvidado(form.id, convidadoId);
     if (ja) throw httpError(409, 'Você já respondeu este formulário.');
   }
@@ -1777,6 +1914,168 @@ async function removerCapa(req) {
   return getFormularioPorId(id, { includeConvidados: true });
 }
 
+const MAX_PORTAL_SLIDES = 20;
+
+function parseAtivo(raw, fallback = true) {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  if (raw === true || raw === 1 || raw === '1' || raw === 'true') return true;
+  if (raw === false || raw === 0 || raw === '0' || raw === 'false') return false;
+  return fallback;
+}
+
+function unlinkTmp(file) {
+  if (!file?.path) return;
+  try {
+    fs.unlinkSync(file.path);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function resolveSlideImagemUrl(slide) {
+  if (slide.container && slide.blob) {
+    try {
+      const sas = await blobService.gerarSasLeitura(slide.container, slide.blob);
+      return sas.url;
+    } catch {
+      return null;
+    }
+  }
+  const url = String(slide.imagemUrl || '').trim();
+  return url || null;
+}
+
+async function toAdminSlide(slide) {
+  return {
+    id: slide.id,
+    ordem: slide.ordem,
+    titulo: slide.titulo || '',
+    imagemUrl: await resolveSlideImagemUrl(slide),
+    temArquivo: !!(slide.container && slide.blob),
+    ativo: slide.ativo,
+  };
+}
+
+async function listAdminCarrossel(req) {
+  const q = str(req.query.q, 80).toLowerCase();
+  const rows = await repo.listPortalSlides();
+  const mapped = [];
+  for (const row of rows) {
+    if (q && !(row.titulo || '').toLowerCase().includes(q)) continue;
+    mapped.push(await toAdminSlide(row));
+  }
+  return mapped;
+}
+
+async function listPublicoCarrossel() {
+  const rows = await repo.listPortalSlidesAtivos();
+  const slides = [];
+  for (const row of rows) {
+    const imagemUrl = await resolveSlideImagemUrl(row);
+    if (!imagemUrl) continue;
+    slides.push({
+      titulo: String(row.titulo || '').slice(0, 200),
+      imagemUrl,
+      dataTexto: '',
+    });
+  }
+  return { slides };
+}
+
+async function uploadSlideBlob(file) {
+  const container = await blobService.garantirContainer(env.pesquisasContainer);
+  const blobName = blobService.novoBlobName(file.originalname);
+  try {
+    await blobService.enviarArquivo(container, file.path, blobName, file.mimetype);
+  } finally {
+    unlinkTmp(file);
+  }
+  return { container, blob: blobName, nome: file.originalname };
+}
+
+async function criarPortalSlide(req) {
+  if (!req.file) throw httpError(400, 'Envie uma imagem JPEG, PNG ou WebP.');
+  const n = await repo.countPortalSlides();
+  if (n >= MAX_PORTAL_SLIDES) {
+    throw httpError(409, 'Limite de 20 imagens no carrossel.');
+  }
+  const titulo = str(req.body?.titulo, 200);
+  const ativo = parseAtivo(req.body?.ativo, true);
+  const stored = await uploadSlideBlob(req.file);
+  const ordem = await repo.nextPortalSlideOrdem();
+  const id = await repo.insertPortalSlide({
+    ordem,
+    titulo: titulo || null,
+    imagemUrl: null,
+    container: stored.container,
+    blob: stored.blob,
+    nome: stored.nome,
+    ativo,
+  });
+  return toAdminSlide(await repo.findPortalSlideById(id));
+}
+
+async function atualizarPortalSlide(req) {
+  const id = parseId(req.params.id);
+  const existing = await repo.findPortalSlideById(id);
+  if (!existing) throw httpError(404, 'Imagem não encontrada.');
+  const titulo = str(req.body?.titulo, 200);
+  const ativo = parseAtivo(req.body?.ativo, existing.ativo);
+  let stored = null;
+  if (req.file) {
+    stored = await uploadSlideBlob(req.file);
+  }
+  await repo.updatePortalSlide(id, {
+    titulo: titulo || null,
+    ativo,
+    ...(stored
+      ? {
+          imagemUrl: null,
+          container: stored.container,
+          blob: stored.blob,
+          nome: stored.nome,
+        }
+      : {}),
+  });
+  if (stored && existing.container && existing.blob) {
+    try {
+      await blobService.removerBlob(existing.container, existing.blob);
+    } catch {
+      /* ignore */
+    }
+  }
+  return toAdminSlide(await repo.findPortalSlideById(id));
+}
+
+async function excluirPortalSlide(req) {
+  const id = parseId(req.params.id);
+  const existing = await repo.findPortalSlideById(id);
+  if (!existing) throw httpError(404, 'Imagem não encontrada.');
+  await repo.deletePortalSlide(id);
+  if (existing.container && existing.blob) {
+    try {
+      await blobService.removerBlob(existing.container, existing.blob);
+    } catch {
+      /* ignore */
+    }
+  }
+  return { ok: true };
+}
+
+async function moverPortalSlide(req) {
+  const id = parseId(req.params.id);
+  const direcao = str(req.body?.direcao, 8);
+  if (direcao !== 'up' && direcao !== 'down') {
+    throw httpError(400, 'Informe a direção up ou down.');
+  }
+  const existing = await repo.findPortalSlideById(id);
+  if (!existing) throw httpError(404, 'Imagem não encontrada.');
+  const vizinho = await repo.findPortalSlideNeighbor(existing.ordem, direcao);
+  if (!vizinho) return toAdminSlide(existing);
+  await repo.swapPortalSlideOrdem(existing.id, existing.ordem, vizinho.id, vizinho.ordem);
+  return toAdminSlide(await repo.findPortalSlideById(id));
+}
+
 module.exports = {
   APROVADOR_ROTULOS,
   resumo,
@@ -1805,6 +2104,7 @@ module.exports = {
   departamentos,
   publicoMeta,
   publicoVerificar,
+  publicoMinhas,
   publicoFormulario,
   lookupBasePublico,
   publicoResponder,
@@ -1817,4 +2117,10 @@ module.exports = {
   uploadCapa,
   removerCapa,
   sincronizarComunicadosJanela,
+  listAdminCarrossel,
+  listPublicoCarrossel,
+  criarPortalSlide,
+  atualizarPortalSlide,
+  excluirPortalSlide,
+  moverPortalSlide,
 };

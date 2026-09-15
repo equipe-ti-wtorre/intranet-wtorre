@@ -792,6 +792,21 @@ async function replaceConvidados(formularioId, convidados) {
   }
 }
 
+function identidadeWhere(cpfHash, email) {
+  const hash = cpfHash ? String(cpfHash) : null;
+  const mail = email ? String(email).trim().toLowerCase() : '';
+  if (hash && mail) {
+    return { sql: 'c.cpf_hash = ? AND LOWER(c.email) = ?', params: [hash, mail] };
+  }
+  if (hash) {
+    return { sql: 'c.cpf_hash = ?', params: [hash] };
+  }
+  if (mail) {
+    return { sql: 'LOWER(c.email) = ?', params: [mail] };
+  }
+  return null;
+}
+
 async function findConvidadoByHashEmail(formularioId, cpfHash, email) {
   const pool = getPool();
   const [rows] = await pool.execute(
@@ -802,6 +817,56 @@ async function findConvidadoByHashEmail(formularioId, cpfHash, email) {
     [formularioId, cpfHash, String(email || '').trim().toLowerCase()]
   );
   return mapConvidado(rows[0]);
+}
+
+function mapConvitePortal(row) {
+  if (!row) return null;
+  return {
+    convidadoId: row.id,
+    nome: row.nome || '',
+    slug: row.slug || null,
+    titulo: row.titulo,
+    descricao: row.descricao || '',
+    status: row.status,
+    eventoAtivo: row.evento_ativo == null ? true : !!row.evento_ativo,
+    prazoInicio: fromPrazoKey(row.prazo_inicio_key),
+    prazoFim: fromPrazoKey(row.prazo_fim_key),
+    respondidoEm: toIso(row.respondido_em),
+  };
+}
+
+async function findConvidadoByIdentidade(formularioId, cpfHash, email) {
+  const where = identidadeWhere(cpfHash, email);
+  if (!where) return null;
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT c.id, c.formulario_id, c.nome, c.email, c.cpf_mascara
+     FROM pesquisas_convidados c
+     WHERE c.formulario_id = ? AND ${where.sql}
+     LIMIT 1`,
+    [formularioId, ...where.params]
+  );
+  return mapConvidado(rows[0]);
+}
+
+async function findConvidadosByIdentidade(cpfHash, email) {
+  const where = identidadeWhere(cpfHash, email);
+  if (!where) return [];
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT c.id, c.formulario_id, c.nome, c.email, c.cpf_mascara,
+            f.slug, f.titulo, f.descricao, f.status, f.evento_ativo,
+            DATE_FORMAT(f.prazo_inicio, '%Y%m%d%H%i') AS prazo_inicio_key,
+            DATE_FORMAT(f.prazo_fim, '%Y%m%d%H%i') AS prazo_fim_key,
+            r.enviado_em AS respondido_em
+     FROM pesquisas_convidados c
+     INNER JOIN pesquisas_formularios f ON f.id = c.formulario_id
+     LEFT JOIN pesquisas_respostas r ON r.formulario_id = f.id AND r.convidado_id = c.id
+     WHERE f.publico_alvo = 'externos' AND ${where.sql}
+     ORDER BY r.enviado_em IS NULL DESC, f.prazo_fim IS NULL, f.prazo_fim ASC, c.id ASC`,
+    where.params
+  );
+  return rows.map(mapConvitePortal);
 }
 
 async function findConvidadoHash(formularioId, id) {
@@ -869,6 +934,17 @@ async function replaceFormularioBase(formularioId, rows) {
   } finally {
     conn.release();
   }
+}
+
+async function listFormularioBaseDados(formularioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT dados FROM pesquisas_formulario_base
+     WHERE formulario_id = ?
+     ORDER BY id ASC`,
+    [formularioId]
+  );
+  return rows.map((row) => parseDados(row.dados));
 }
 
 async function summarizeFormularioBase(formularioId) {
@@ -986,11 +1062,14 @@ module.exports = {
   countConvidados,
   replaceConvidados,
   findConvidadoByHashEmail,
+  findConvidadoByIdentidade,
+  findConvidadosByIdentidade,
   findConvidadoHash,
   findRespostaDoConvidado,
   copyFormularioBase,
   copyConvidados,
   replaceFormularioBase,
+  listFormularioBaseDados,
   summarizeFormularioBase,
   lookupFormularioBase,
   setFormularioCapa,
@@ -1004,6 +1083,17 @@ module.exports = {
   updateTemplate,
   deleteTemplate,
   countFormulariosPorTemplate,
+  mapPortalSlide,
+  listPortalSlides,
+  listPortalSlidesAtivos,
+  findPortalSlideById,
+  countPortalSlides,
+  nextPortalSlideOrdem,
+  insertPortalSlide,
+  updatePortalSlide,
+  deletePortalSlide,
+  findPortalSlideNeighbor,
+  swapPortalSlideOrdem,
 };
 
 function mapTemplate(row) {
@@ -1125,4 +1215,123 @@ async function countFormulariosPorTemplate(codigo) {
     [codigo]
   );
   return Number(rows[0]?.n || 0);
+}
+
+function mapPortalSlide(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    ordem: Number(row.ordem) || 0,
+    titulo: row.titulo || '',
+    imagemUrl: row.imagem_url || '',
+    container: row.container || null,
+    blob: row.arquivo_blob || null,
+    nome: row.arquivo_nome || null,
+    ativo: !!row.ativo,
+  };
+}
+
+async function listPortalSlides() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM pesquisas_portal_slides ORDER BY ordem ASC, id ASC'
+  );
+  return rows.map(mapPortalSlide);
+}
+
+async function listPortalSlidesAtivos() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM pesquisas_portal_slides WHERE ativo = 1 ORDER BY ordem ASC, id ASC'
+  );
+  return rows.map(mapPortalSlide);
+}
+
+async function findPortalSlideById(id) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM pesquisas_portal_slides WHERE id = ? LIMIT 1',
+    [id]
+  );
+  return mapPortalSlide(rows[0]);
+}
+
+async function countPortalSlides() {
+  const pool = getPool();
+  const [rows] = await pool.execute('SELECT COUNT(*) AS n FROM pesquisas_portal_slides');
+  return Number(rows[0]?.n || 0);
+}
+
+async function nextPortalSlideOrdem() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT COALESCE(MAX(ordem), -1) + 1 AS n FROM pesquisas_portal_slides'
+  );
+  return Number(rows[0]?.n || 0);
+}
+
+async function insertPortalSlide(data) {
+  const pool = getPool();
+  const [result] = await pool.execute(
+    `INSERT INTO pesquisas_portal_slides
+      (ordem, titulo, imagem_url, container, arquivo_blob, arquivo_nome, ativo)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.ordem ?? 0,
+      data.titulo || null,
+      data.imagemUrl || null,
+      data.container || null,
+      data.blob || null,
+      data.nome || null,
+      data.ativo ? 1 : 0,
+    ]
+  );
+  return result.insertId;
+}
+
+async function updatePortalSlide(id, data) {
+  const pool = getPool();
+  if (data.container !== undefined) {
+    await pool.execute(
+      `UPDATE pesquisas_portal_slides
+       SET titulo = ?, ativo = ?, imagem_url = ?, container = ?, arquivo_blob = ?, arquivo_nome = ?
+       WHERE id = ?`,
+      [
+        data.titulo || null,
+        data.ativo ? 1 : 0,
+        data.imagemUrl || null,
+        data.container,
+        data.blob,
+        data.nome,
+        id,
+      ]
+    );
+    return;
+  }
+  await pool.execute('UPDATE pesquisas_portal_slides SET titulo = ?, ativo = ? WHERE id = ?', [
+    data.titulo || null,
+    data.ativo ? 1 : 0,
+    id,
+  ]);
+}
+
+async function deletePortalSlide(id) {
+  const pool = getPool();
+  await pool.execute('DELETE FROM pesquisas_portal_slides WHERE id = ?', [id]);
+}
+
+async function findPortalSlideNeighbor(ordem, direcao) {
+  const pool = getPool();
+  const sql =
+    direcao === 'up'
+      ? 'SELECT * FROM pesquisas_portal_slides WHERE ordem < ? ORDER BY ordem DESC, id DESC LIMIT 1'
+      : 'SELECT * FROM pesquisas_portal_slides WHERE ordem > ? ORDER BY ordem ASC, id ASC LIMIT 1';
+  const [rows] = await pool.execute(sql, [ordem]);
+  return mapPortalSlide(rows[0]);
+}
+
+async function swapPortalSlideOrdem(idA, ordemA, idB, ordemB) {
+  const pool = getPool();
+  await pool.execute('UPDATE pesquisas_portal_slides SET ordem = ? WHERE id = ?', [ordemB, idA]);
+  await pool.execute('UPDATE pesquisas_portal_slides SET ordem = ? WHERE id = ?', [ordemA, idB]);
 }

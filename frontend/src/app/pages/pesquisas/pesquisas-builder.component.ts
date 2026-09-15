@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { switchMap, of } from 'rxjs';
 import { PesquisasService } from '../../services/pesquisas.service';
+import { MenuService } from '../../services/menu.service';
 import { AlertasService } from '../../services/alertas.service';
 import {
   BlocoTipo,
@@ -25,20 +26,24 @@ import {
   PesquisasGuestFormComponent,
 } from './shared/pesquisas-guest-form.component';
 import {
+  extractGuestsFromRows,
   isChaveHeader,
   lookupLocal,
   lookupPronto,
   matchCampos,
 } from './shared/pesquisas-base.util';
-
-const TPL_WTORRE: PesquisasTemplateVisual = {
-  codigo: 'wtorre',
-  nome: 'WTorre',
-  wordmark: 'WTORRE',
-  corPrimaria: '#0f1e3d',
-  corPrimariaEscura: '#080e1e',
-  raioPx: 10,
-};
+import {
+  digitsDocumento,
+  formatDocumento,
+  isDocumentoValido,
+  maskDocumento,
+} from './shared/pesquisas-documento.util';
+import {
+  PESQUISAS_TPL_WTORRE,
+  PesquisasMarcaLogo,
+  pesquisasLogoSrc,
+  pesquisasMarcasOficiais,
+} from './shared/pesquisas-marca.util';
 
 interface QDraft {
   key: number;
@@ -71,9 +76,13 @@ let gKey = 0;
   standalone: true,
   imports: [FormsModule, PesqIconComponent, PesquisasGuestFormComponent],
   templateUrl: './pesquisas-builder.component.html',
+  host: {
+    '[attr.data-marca]': 'templateCodigo()',
+  },
 })
 export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   private readonly api = inject(PesquisasService);
+  private readonly menu = inject(MenuService);
   private readonly alertas = inject(AlertasService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -101,13 +110,16 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly eventoAtivo = signal(true);
   readonly exigirIdentidade = signal(true);
   readonly convidados = signal<GuestDraft[]>([]);
+  readonly convidadosFonte = signal<'planilha' | 'manual'>('manual');
+  readonly planilhaResumo = signal<{ total: number; ignoradas: number } | null>(null);
+  readonly temBaseSalva = signal(false);
+  readonly temBaseSessao = signal(false);
   readonly guestNome = signal('');
   readonly guestCpf = signal('');
   readonly guestEmail = signal('');
-  readonly pasteOpen = signal(false);
-  readonly pasteText = signal('');
-  readonly templates = signal<PesquisasTemplateVisual[]>([TPL_WTORRE]);
+  readonly templates = signal<PesquisasTemplateVisual[]>([PESQUISAS_TPL_WTORRE]);
   readonly templateCodigo = signal('wtorre');
+  readonly marcasOficiais = signal<PesquisasMarcaLogo[]>(pesquisasMarcasOficiais());
   readonly capaUrl = signal<string | null>(null);
   readonly capaLocalUrl = signal<string | null>(null);
   readonly capaLayout = signal<CapaLayout>('left');
@@ -137,7 +149,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   });
 
   readonly templateAtual = computed(
-    () => this.templates().find((t) => t.codigo === this.templateCodigo()) || this.templates()[0] || TPL_WTORRE
+    () =>
+      this.templates().find((t) => t.codigo === this.templateCodigo()) ||
+      this.templates()[0] ||
+      PESQUISAS_TPL_WTORRE
   );
   readonly capaPreview = computed(() => this.capaLocalUrl() || this.capaUrl());
   readonly previewPerguntas = computed<PesquisasPergunta[]>(() =>
@@ -160,32 +175,17 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       textoEstilo: p.textoEstilo,
     }))
   );
-  readonly janelaDica = computed(() => {
-    const iniData = this.prazoInicioData().trim();
-    const fimData = this.prazoFimData().trim();
-    const iniHora = this.normalizeHora(this.prazoInicioHora()) || (iniData ? '00:00' : '');
-    const fimHora = this.normalizeHora(this.prazoFimHora()) || (fimData ? '23:59' : '');
-    if (!iniData && !fimData) {
-      return 'Sem janela: fica aberto enquanto estiver publicado e ativo.';
-    }
-    const now = this.agoraBrasilia();
-    const ini = iniData ? `${iniData} ${iniHora}:00` : null;
-    const fim = fimData ? `${fimData} ${fimHora}:00` : null;
-    if (ini && now < ini) return `Abre em ${this.rotuloJanela(iniData, iniHora)}.`;
-    if (fim && now > fim) return `Já encerrou em ${this.rotuloJanela(fimData, fimHora)}.`;
-    if (ini && fim) return `Aberto agora — até ${this.rotuloJanela(fimData, fimHora)}.`;
-    if (fim) return `Aberto agora — até ${this.rotuloJanela(fimData, fimHora)}.`;
-    return `Aberto agora — sem data de encerramento.`;
-  });
-
   ngOnInit(): void {
+    this.menu.getTopbarPublic().subscribe({
+      next: (config) => this.marcasOficiais.set(pesquisasMarcasOficiais(config.logos)),
+    });
     this.api.departamentos().subscribe({ next: (d) => this.departamentos.set(d) });
     this.api.listTemplates().subscribe({
       next: (rows) => {
-        this.templates.set(rows.length ? rows : [TPL_WTORRE]);
+        this.templates.set(rows.length ? rows : [PESQUISAS_TPL_WTORRE]);
       },
       error: () => {
-        this.templates.set([TPL_WTORRE]);
+        this.templates.set([PESQUISAS_TPL_WTORRE]);
       },
     });
     this.route.paramMap
@@ -220,6 +220,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.eventoAtivo.set(form.eventoAtivo !== false);
           this.exigirIdentidade.set(form.exigirIdentidade !== false);
           this.convidados.set((form.convidados || []).map((g) => this.fromGuestApi(g)));
+          this.temBaseSalva.set((form.baseResumo?.total || 0) > 0);
+          this.convidadosFonte.set(
+            form.publicoAlvo === 'externos' &&
+              !(form.convidados || []).length &&
+              (form.baseResumo?.total || 0) > 0
+              ? 'planilha'
+              : 'manual'
+          );
           this.perguntas.set((form.perguntas || []).map((p) => this.fromApi(p)));
           this.templateCodigo.set(form.template?.codigo || form.templateCodigo || 'wtorre');
           this.capaUrl.set(form.capaUrl || null);
@@ -241,6 +249,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   escolherTemplate(codigo: string): void {
     this.templateCodigo.set(codigo);
+  }
+
+  logoSrc(codigo: string): string | undefined {
+    return pesquisasLogoSrc(codigo, this.marcasOficiais());
   }
 
   onCapa(ev: Event): void {
@@ -399,6 +411,49 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     }
   }
 
+  async onExcelConvidados(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+      if (!rows.length) {
+        this.alertas.erro('A planilha está vazia.');
+        return;
+      }
+      if (rows.length > 5000) {
+        this.alertas.erro('A planilha pode ter no máximo 5.000 linhas.');
+        return;
+      }
+      const { guests, ignoradas } = extractGuestsFromRows(rows);
+      const existing = new Set(this.convidados().map((g) => digitsDocumento(g.cpf)));
+      const added = guests
+        .filter((g) => !existing.has(digitsDocumento(g.cpf)))
+        .map((g) => this.fromExtractedGuest(g));
+      if (!added.length) {
+        this.alertas.erro(
+          guests.length
+            ? 'Esses convidados já estão na lista.'
+            : 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.'
+        );
+        return;
+      }
+      this.convidados.update((list) => [...list, ...added]);
+      const extra = ignoradas
+        ? ` ${ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
+        : '';
+      this.alertas.sucesso(
+        added.length === 1 ? `1 convidado importado.${extra}` : `${added.length} convidados importados.${extra}`
+      );
+    } catch {
+      this.alertas.erro('Não consegui ler essa planilha.');
+    }
+  }
+
   onListMouseDown(ev: MouseEvent): void {
     const handle = (ev.target as HTMLElement).closest('.block-drag');
     if (!handle) return;
@@ -507,23 +562,108 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   formatCpfInput(raw: string): void {
-    this.guestCpf.set(this.formatCpf(raw));
+    this.guestCpf.set(formatDocumento(raw));
+  }
+
+  onPublicoAlvoChange(value: PublicoAlvo): void {
+    this.publicoAlvo.set(value);
+    if (value === 'externos' && this.baseLinhas?.length) {
+      this.convidadosFonte.set('planilha');
+      this.syncConvidadosDaPlanilha({ toast: true });
+    }
+  }
+
+  async escolherFonteConvidados(fonte: 'planilha' | 'manual'): Promise<void> {
+    if (fonte === this.convidadosFonte()) return;
+    if (fonte === 'planilha') {
+      if (this.convidados().length && this.convidadosFonte() === 'manual') {
+        const ok = await this.alertas.confirmar({
+          titulo: 'Substituir a lista?',
+          texto: 'Os convidados atuais serão substituídos pelas pessoas da planilha importada em Campos.',
+          confirmar: 'Usar planilha',
+        });
+        if (!ok) return;
+      }
+      this.convidadosFonte.set('planilha');
+      this.syncConvidadosDaPlanilha({ toast: true });
+      return;
+    }
+    this.convidadosFonte.set('manual');
+  }
+
+  podeRemoverConvidado(): boolean {
+    return this.convidadosFonte() !== 'planilha' || this.temBaseSessao();
+  }
+
+  private syncConvidadosDaPlanilha(opts?: { toast?: boolean }): boolean {
+    if (!this.baseLinhas?.length) {
+      this.planilhaResumo.set(null);
+      return false;
+    }
+    const { guests, ignoradas } = extractGuestsFromRows(this.baseLinhas);
+    this.convidados.set(guests.map((g) => this.fromExtractedGuest(g)));
+    this.planilhaResumo.set({ total: guests.length, ignoradas });
+    if (opts?.toast) {
+      if (!guests.length) {
+        this.alertas.erro(
+          'A planilha precisa de colunas de CPF/CNPJ e e-mail para cadastrar convidados.'
+        );
+      } else {
+        const extra = ignoradas
+          ? ` ${ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
+          : '';
+        this.alertas.sucesso(
+          guests.length === 1
+            ? `1 convidado cadastrado a partir da planilha.${extra}`
+            : `${guests.length} convidados cadastrados a partir da planilha.${extra}`
+        );
+      }
+    }
+    return guests.length > 0;
+  }
+
+  private fromExtractedGuest(g: { nome: string; cpf: string; email: string }): GuestDraft {
+    gKey += 1;
+    return {
+      key: gKey,
+      nome: g.nome,
+      cpf: formatDocumento(g.cpf),
+      cpfMascara: maskDocumento(g.cpf),
+      email: g.email,
+    };
+  }
+
+  private mergeGuestsFromApi(rows: PesquisasConvidado[]): GuestDraft[] {
+    const prevByEmail = new Map(
+      this.convidados()
+        .filter((g) => g.email)
+        .map((g) => [g.email.toLowerCase(), g])
+    );
+    return rows.map((g) => {
+      const draft = this.fromGuestApi(g);
+      const prev = prevByEmail.get((g.email || '').toLowerCase());
+      if (prev?.cpf && isDocumentoValido(digitsDocumento(prev.cpf))) {
+        draft.cpf = prev.cpf;
+        draft.cpfMascara = prev.cpfMascara || draft.cpfMascara;
+      }
+      return draft;
+    });
   }
 
   addConvidado(): void {
     const nome = this.guestNome().trim();
-    const cpf = this.digits(this.guestCpf());
+    const doc = digitsDocumento(this.guestCpf());
     const email = this.guestEmail().trim().toLowerCase();
-    if (cpf.length !== 11) {
-      this.alertas.erro('Informe um CPF com 11 dígitos.');
+    if (!isDocumentoValido(doc)) {
+      this.alertas.erro('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).');
       return;
     }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       this.alertas.erro('Informe um e-mail válido.');
       return;
     }
-    if (this.convidados().some((g) => this.digits(g.cpf) === cpf && cpf.length === 11)) {
-      this.alertas.erro('Este CPF já está na lista.');
+    if (this.convidados().some((g) => digitsDocumento(g.cpf) === doc && isDocumentoValido(doc))) {
+      this.alertas.erro('Este CPF ou CNPJ já está na lista.');
       return;
     }
     gKey += 1;
@@ -532,8 +672,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       {
         key: gKey,
         nome,
-        cpf: this.formatCpf(cpf),
-        cpfMascara: this.maskCpf(cpf),
+        cpf: formatDocumento(doc),
+        cpfMascara: maskDocumento(doc),
         email,
       },
     ]);
@@ -544,55 +684,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   removeConvidado(key: number): void {
     this.convidados.update((list) => list.filter((g) => g.key !== key));
-  }
-
-  aplicarCola(): void {
-    const lines = this.pasteText()
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    const added: GuestDraft[] = [];
-    for (const line of lines) {
-      const parts = line.split(/[,\t;]/).map((p) => p.trim());
-      if (parts.length < 2) continue;
-      let nome = '';
-      let cpfRaw = '';
-      let email = '';
-      if (parts.length >= 3) {
-        nome = parts[0];
-        cpfRaw = parts[1];
-        email = parts[2].toLowerCase();
-      } else {
-        cpfRaw = parts[0];
-        email = parts[1].toLowerCase();
-      }
-      const cpf = this.digits(cpfRaw);
-      if (cpf.length !== 11 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
-      if (
-        this.convidados().some((g) => this.digits(g.cpf) === cpf) ||
-        added.some((g) => this.digits(g.cpf) === cpf)
-      ) {
-        continue;
-      }
-      gKey += 1;
-      added.push({
-        key: gKey,
-        nome,
-        cpf: this.formatCpf(cpf),
-        cpfMascara: this.maskCpf(cpf),
-        email,
-      });
+    const r = this.planilhaResumo();
+    if (r && this.convidadosFonte() === 'planilha') {
+      this.planilhaResumo.set({ total: Math.max(0, this.convidados().length), ignoradas: r.ignoradas });
     }
-    if (!added.length) {
-      this.alertas.erro('Nenhuma linha válida. Use Nome, CPF, E-mail por linha.');
-      return;
-    }
-    this.convidados.update((list) => [...list, ...added]);
-    this.pasteText.set('');
-    this.pasteOpen.set(false);
-    this.alertas.sucesso(
-      added.length === 1 ? '1 convidado adicionado.' : `${added.length} convidados adicionados.`
-    );
   }
 
   async copiarLink(): Promise<void> {
@@ -631,9 +726,17 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       this.alertas.erro('Inclua ao menos uma pergunta antes de publicar.');
       return;
     }
-    if (publicar && this.publicoAlvo() === 'externos' && !this.convidados().length) {
-      this.alertas.erro('Inclua ao menos um convidado para publicar o formulário externo.');
-      return;
+    if (publicar && this.publicoAlvo() === 'externos') {
+      const temLista = this.convidados().length > 0;
+      const planilhaPendente = this.convidadosFonte() === 'planilha' && this.temBaseSalva();
+      if (!temLista && !planilhaPendente) {
+        this.alertas.erro(
+          this.convidadosFonte() === 'planilha'
+            ? 'Importe a planilha em Campos para cadastrar os convidados antes de publicar.'
+            : 'Inclua ao menos um convidado para publicar o formulário externo.'
+        );
+        return;
+      }
     }
     const body = this.toBody();
     this.salvando.set(true);
@@ -650,8 +753,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.formId.set(form.id);
           this.slug.set(form.slug || null);
           if (form.convidados) {
-            this.convidados.set(form.convidados.map((g) => this.fromGuestApi(g)));
+            this.convidados.set(this.mergeGuestsFromApi(form.convidados));
           }
+          if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
           const file = this.capaPendente;
           if (!file) return of(form);
           return this.api.uploadCapa(form.id, file);
@@ -663,8 +767,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         this.slug.set(form.slug || null);
         this.aplicarJanela(form);
         if (form.convidados) {
-          this.convidados.set(form.convidados.map((g) => this.fromGuestApi(g)));
+          this.convidados.set(this.mergeGuestsFromApi(form.convidados));
         }
+        if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
         if (form.capaUrl) this.capaUrl.set(form.capaUrl);
         if (this.capaPendente) this.clearCapaPendente();
         this.salvando.set(false);
@@ -792,9 +897,34 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       for (const h of headers) out[h] = row[h];
       return out;
     });
-    this.alertas.sucesso(
-      `${created} pergunta(s) e ${rows.length} linha(s) importadas. CPF/e-mail preenchem o resto.`
-    );
+    this.temBaseSessao.set(true);
+    this.temBaseSalva.set(true);
+    const syncGuests =
+      this.publicoAlvo() === 'externos' &&
+      (this.convidadosFonte() === 'planilha' || !this.convidados().length);
+    if (syncGuests) {
+      this.convidadosFonte.set('planilha');
+      const ok = this.syncConvidadosDaPlanilha();
+      const extra = this.planilhaResumo();
+      const guestsPart = extra?.total
+        ? ` ${extra.total} convidado(s) cadastrado(s) da planilha.`
+        : '';
+      const ignoradas = extra?.ignoradas
+        ? ` ${extra.ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
+        : '';
+      this.alertas.sucesso(
+        `${created} pergunta(s) e ${rows.length} linha(s) importadas.${guestsPart}${ignoradas}`
+      );
+      if (!ok) {
+        this.alertas.erro(
+          'A planilha precisa de colunas de CPF/CNPJ e e-mail para cadastrar convidados.'
+        );
+      }
+    } else {
+      this.alertas.sucesso(
+        `${created} pergunta(s) e ${rows.length} linha(s) importadas. CPF/e-mail preenchem o resto.`
+      );
+    }
   }
 
   private fromGuestApi(g: PesquisasConvidado): GuestDraft {
@@ -857,12 +987,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
   }
 
-  private rotuloJanela(date: string, time: string): string {
-    const [y, m, d] = date.split('-');
-    if (!y || !m || !d) return `${date} ${time}`.trim();
-    return `${d}/${m} ${time}`;
-  }
-
   private combineDateTime(date: string, time: string): string | null {
     const d = (date || '').trim();
     const t = this.normalizeHora(time);
@@ -893,12 +1017,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       exigirIdentidade: this.exigirIdentidade(),
       templateCodigo: this.templateCodigo(),
       capaLayout: this.capaLayout(),
+      convidadosFonte: this.convidadosFonte(),
       ...(this.baseLinhas ? { base: this.baseLinhas } : {}),
       convidados: this.convidados().map((g) => ({
         id: g.id,
         nome: g.nome,
         email: g.email,
-        cpf: this.digits(g.cpf) || undefined,
+        cpf: digitsDocumento(g.cpf) || undefined,
       })),
       perguntas: this.perguntas().map((p, idx) => ({
         blocoTipo: p.blocoTipo,
@@ -918,23 +1043,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         logica: null,
       })),
     };
-  }
-
-  private digits(raw: string): string {
-    return String(raw || '').replace(/\D/g, '').slice(0, 11);
-  }
-
-  private formatCpf(raw: string): string {
-    const d = this.digits(raw);
-    if (d.length <= 3) return d;
-    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  }
-
-  private maskCpf(digits: string): string {
-    if (digits.length !== 11) return '';
-    return `***.${digits.slice(3, 6)}.**${digits[8]}-${digits.slice(9)}`;
   }
 
   private enviarCapa(id: number): void {

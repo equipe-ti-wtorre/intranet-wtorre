@@ -21,7 +21,7 @@ INSERT INTO pesquisas_templates (codigo, nome, wordmark, cor_primaria, cor_prima
 SELECT s.codigo, s.nome, s.wordmark, s.cor_primaria, s.cor_primaria_escura, s.raio_px, s.ativo, s.ordem
 FROM (
   SELECT 'wtorre' AS codigo, 'WTorre' AS nome, 'WTORRE' AS wordmark,
-         '#0f1e3d' AS cor_primaria, '#080e1e' AS cor_primaria_escura, 10 AS raio_px, 1 AS ativo, 0 AS ordem
+         '#1d54e6' AS cor_primaria, '#0b2a6b' AS cor_primaria_escura, 10 AS raio_px, 1 AS ativo, 0 AS ordem
   UNION ALL
   SELECT 'nubank', 'Nubank Parque', 'NUBANK PARQUE', '#8a05be', '#63038c', 22, 1, 1
 ) s

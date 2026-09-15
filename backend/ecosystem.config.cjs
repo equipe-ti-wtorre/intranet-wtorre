@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'IntranetWTorreBackend',
       script: 'src/server.js',
-      cwd: '/www/wwwroot/IntranetWTorre/intranet-wtorre/backend',
+      cwd: '/www/wwwroot/IntranetWTorre/backend',
       interpreter: '/www/server/nodejs/v24.16.0/bin/node',
       instances: 1,
       autorestart: true,

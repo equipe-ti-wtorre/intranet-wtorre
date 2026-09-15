@@ -3,6 +3,7 @@ const controller = require('../controllers/pesquisas.controller');
 const requireJwt = require('../middleware/requireJwt.middleware');
 const requireModulo = require('../middleware/requireModulo.middleware');
 const {
+  requirePesquisasGuest,
   optionalPesquisasGuest,
 } = require('../middleware/requirePesquisasGuest.middleware');
 const rateLimitPesquisasPublico = require('../middleware/rateLimitPesquisasPublico.middleware');
@@ -24,8 +25,15 @@ function maybeUploadAnexosResposta(req, res, next) {
   });
 }
 
+router.get('/publico/carrossel', rateLimitPesquisasPublico, controller.publicoCarrossel);
 router.get('/publico/:slug', rateLimitPesquisasPublico, controller.publicoMeta);
 router.post('/publico/:slug/verificar', rateLimitPesquisasPublico, controller.publicoVerificar);
+router.get(
+  '/publico/:slug/minhas',
+  rateLimitPesquisasPublico,
+  requirePesquisasGuest,
+  controller.publicoMinhas
+);
 router.get(
   '/publico/:slug/formulario',
   rateLimitPesquisasPublico,
@@ -103,5 +111,22 @@ router.get('/admin/templates', ...adminGuard, controller.listAdminTemplates);
 router.post('/admin/templates', ...adminGuard, controller.criarTemplate);
 router.put('/admin/templates/:id', ...adminGuard, controller.atualizarTemplate);
 router.delete('/admin/templates/:id', ...adminGuard, controller.excluirTemplate);
+router.get('/admin/carrossel', ...adminGuard, controller.listAdminCarrossel);
+router.post(
+  '/admin/carrossel',
+  ...adminGuard,
+  uploadPesquisasCapa.single('imagem'),
+  handlePesquisasMulterError,
+  controller.criarCarrossel
+);
+router.put(
+  '/admin/carrossel/:id',
+  ...adminGuard,
+  uploadPesquisasCapa.single('imagem'),
+  handlePesquisasMulterError,
+  controller.atualizarCarrossel
+);
+router.patch('/admin/carrossel/:id/ordem', ...adminGuard, controller.moverCarrossel);
+router.delete('/admin/carrossel/:id', ...adminGuard, controller.excluirCarrossel);
 
 module.exports = router;

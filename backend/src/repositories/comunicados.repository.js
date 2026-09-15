@@ -32,6 +32,18 @@ function formatDataPublicacao(value) {
   };
 }
 
+function normalizarDepartamento(valor) {
+  return valor == null ? '' : String(valor).trim();
+}
+
+function ehFormularioSetorVisivel(row, departamentoUsuario) {
+  const alvo = row.pf_publico_alvo;
+  if (alvo !== 'departamento') return true;
+  const deptForm = normalizarDepartamento(row.pf_publico_departamento);
+  const deptUser = normalizarDepartamento(departamentoUsuario);
+  return !!deptForm && deptForm === deptUser;
+}
+
 function mapComunicado(row) {
   if (!row) return null;
   const dataFmt = formatDataPublicacao(row.data_publicacao);
@@ -71,35 +83,59 @@ function nowSaoPauloSql() {
   return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
 }
 
-async function listarPublicos(limite = 20) {
+async function listarPublicos({ departamento, limite = 20 } = {}) {
   const pool = getPool();
   const limitNum = Math.min(Math.max(Number(limite) || 20, 1), 100);
   const agora = nowSaoPauloSql();
+  const dept = normalizarDepartamento(departamento);
   const [rows] = await pool.execute(
-    `${SELECT_BASE}
-     LEFT JOIN pesquisas_formularios pf
-       ON c.origem = 'pesquisas_formulario' AND c.origem_id = pf.id
-     WHERE cat.ativo = 1
-       AND (
-         (
-           (c.origem IS NULL OR c.origem <> 'pesquisas_formulario')
-           AND c.ativo = 1
-         )
-         OR (
-           c.origem = 'pesquisas_formulario'
-           AND pf.id IS NOT NULL
-           AND pf.status = 'publicado'
-           AND (pf.evento_ativo IS NULL OR pf.evento_ativo = 1)
-           AND (pf.publico_alvo IS NULL OR pf.publico_alvo <> 'externos')
-           AND (pf.prazo_inicio IS NULL OR pf.prazo_inicio <= ?)
-           AND (pf.prazo_fim IS NULL OR pf.prazo_fim >= ?)
-         )
-       )
-     ORDER BY c.data_publicacao DESC, c.ordem IS NULL, c.ordem ASC, c.id DESC
-     LIMIT ${limitNum}`,
-    [agora, agora]
+    `SELECT c.*,
+            cat.nome AS cat_nome,
+            cat.slug AS cat_slug,
+            cat.cor AS cat_cor,
+            pf.publico_alvo AS pf_publico_alvo,
+            pf.publico_departamento AS pf_publico_departamento
+       FROM comunicados c
+      INNER JOIN comunicado_categorias cat ON cat.id = c.categoria_id
+      LEFT JOIN pesquisas_formularios pf
+        ON pf.id = COALESCE(
+          IF(c.origem = 'pesquisas_formulario', c.origem_id, NULL),
+          IF(
+            c.link_path LIKE '/pesquisas/formulario/%/responder',
+            CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(c.link_path, '/', 4), '/', -1) AS UNSIGNED),
+            NULL
+          )
+        )
+      WHERE cat.ativo = 1
+        AND (
+          (
+            (c.origem IS NULL OR c.origem <> 'pesquisas_formulario')
+            AND (c.link_path IS NULL OR c.link_path NOT LIKE '/pesquisas/formulario/%')
+            AND c.ativo = 1
+          )
+          OR (
+            pf.id IS NOT NULL
+            AND (
+              c.origem = 'pesquisas_formulario'
+              OR c.link_path LIKE '/pesquisas/formulario/%'
+            )
+            AND pf.status = 'publicado'
+            AND (pf.evento_ativo IS NULL OR pf.evento_ativo = 1)
+            AND (pf.publico_alvo IS NULL OR pf.publico_alvo <> 'externos')
+            AND (pf.prazo_inicio IS NULL OR pf.prazo_inicio <= ?)
+            AND (pf.prazo_fim IS NULL OR pf.prazo_fim >= ?)
+            AND (
+              pf.publico_alvo IS NULL
+              OR pf.publico_alvo <> 'departamento'
+              OR TRIM(pf.publico_departamento) = ?
+            )
+          )
+        )
+      ORDER BY c.data_publicacao DESC, c.ordem IS NULL, c.ordem ASC, c.id DESC
+      LIMIT ${limitNum}`,
+    [agora, agora, dept]
   );
-  return rows.map(mapComunicado);
+  return rows.filter((row) => ehFormularioSetorVisivel(row, dept)).map(mapComunicado);
 }
 
 async function listarAdmin({ busca } = {}) {

@@ -186,6 +186,14 @@ async function publicoVerificar(req, res) {
   }
 }
 
+async function publicoMinhas(req, res) {
+  try {
+    res.json(await service.publicoMinhas(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function publicoFormulario(req, res) {
   try {
     res.json(await service.publicoFormulario(req));
@@ -340,6 +348,60 @@ async function removerCapa(req, res) {
   }
 }
 
+async function publicoCarrossel(req, res) {
+  try {
+    res.json(await service.listPublicoCarrossel());
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function listAdminCarrossel(req, res) {
+  try {
+    res.json(await service.listAdminCarrossel(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function criarCarrossel(req, res) {
+  try {
+    const rec = await service.criarPortalSlide(req);
+    await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_CARROSSEL_CRIAR' });
+    res.status(201).json(rec);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function atualizarCarrossel(req, res) {
+  try {
+    const rec = await service.atualizarPortalSlide(req);
+    await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_CARROSSEL_ATUALIZAR' });
+    res.json(rec);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function excluirCarrossel(req, res) {
+  try {
+    const out = await service.excluirPortalSlide(req);
+    await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_CARROSSEL_EXCLUIR' });
+    res.json(out);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function moverCarrossel(req, res) {
+  try {
+    res.json(await service.moverPortalSlide(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 module.exports = {
   resumo,
   departamentos,
@@ -361,6 +423,7 @@ module.exports = {
   atualizarEvento,
   publicoMeta,
   publicoVerificar,
+  publicoMinhas,
   publicoFormulario,
   publicoLookupBase,
   publicoResponder,
@@ -379,4 +442,10 @@ module.exports = {
   excluirTemplate,
   uploadCapa,
   removerCapa,
+  publicoCarrossel,
+  listAdminCarrossel,
+  criarCarrossel,
+  atualizarCarrossel,
+  excluirCarrossel,
+  moverCarrossel,
 };

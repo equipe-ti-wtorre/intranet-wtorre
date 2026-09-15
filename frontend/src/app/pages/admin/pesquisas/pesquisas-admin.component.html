@@ -2,7 +2,7 @@
   <header class="page-head">
     <div>
       <h1>Central de Pesquisas</h1>
-      <p class="page-subtitle">Acompanhe formulários e templates visuais.</p>
+      <p class="page-subtitle">Acompanhe formulários, templates visuais e as imagens da porta pública.</p>
     </div>
   </header>
 
@@ -14,19 +14,31 @@
       <button type="button" class="admin-tab" [class.active]="aba() === 'templates'" (click)="selecionarAba('templates')">
         <span class="tab-label">Templates</span>
       </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'carrossel'" (click)="selecionarAba('carrossel')">
+        <span class="tab-label">Carrossel</span>
+      </button>
     </nav>
 
     <div class="pane-head">
       <div class="search">
         <input
           type="search"
-          [placeholder]="aba() === 'templates' ? 'Buscar por nome, código ou wordmark…' : 'Buscar por título, categoria ou autor…'"
+          [placeholder]="
+            aba() === 'templates'
+              ? 'Buscar por nome, código ou wordmark…'
+              : aba() === 'carrossel'
+                ? 'Buscar por título…'
+                : 'Buscar por título, categoria ou autor…'
+          "
           [value]="q()"
           (input)="onBusca($any($event.target).value)"
         />
       </div>
       @if (aba() === 'templates') {
         <button type="button" class="btn btn-primary" (click)="novoTemplate()">Novo template</button>
+      }
+      @if (aba() === 'carrossel') {
+        <button type="button" class="btn btn-primary" (click)="novaImagem()">Nova imagem</button>
       }
     </div>
 
@@ -69,6 +81,61 @@
                     @if (t.codigo !== 'wtorre') {
                       <button type="button" class="iact danger" title="Excluir" (click)="excluirTemplate(t)">Excluir</button>
                     }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    } @else if (aba() === 'carrossel') {
+      @if (loading()) {
+        <p class="empty">Carregando…</p>
+      } @else if (!slides().length) {
+        <p class="empty">Nenhuma imagem no carrossel ainda.</p>
+      } @else {
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Imagem</th>
+                <th>Título</th>
+                <th>Ordem</th>
+                <th>Status</th>
+                <th class="col-acoes">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (s of slides(); track s.id; let i = $index) {
+                <tr>
+                  <td>
+                    <span
+                      class="slide-thumb"
+                      [style.background-image]="s.imagemUrl ? 'url(' + s.imagemUrl + ')' : 'none'"
+                    ></span>
+                  </td>
+                  <td>
+                    <strong>{{ s.titulo || '—' }}</strong>
+                  </td>
+                  <td>{{ i + 1 }}</td>
+                  <td>
+                    <span class="badge-status" [class.off]="!s.ativo">{{ s.ativo ? 'Ativo' : 'Inativo' }}</span>
+                  </td>
+                  <td class="actions">
+                    <button type="button" class="iact" title="Subir" [disabled]="i === 0" (click)="moverSlide(s, 'up')">
+                      Subir
+                    </button>
+                    <button
+                      type="button"
+                      class="iact"
+                      title="Descer"
+                      [disabled]="i === slides().length - 1"
+                      (click)="moverSlide(s, 'down')"
+                    >
+                      Descer
+                    </button>
+                    <button type="button" class="iact" title="Editar" (click)="editarSlide(s)">Editar</button>
+                    <button type="button" class="iact danger" title="Excluir" (click)="excluirSlide(s)">Excluir</button>
                   </td>
                 </tr>
               }
@@ -209,6 +276,58 @@
       </div>
       <label class="switch">
         <input type="checkbox" formControlName="ativo" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </form>
+</app-admin-modal>
+
+<app-admin-modal
+  [open]="modalSlideAberto()"
+  [title]="tituloModalSlide()"
+  subtitle="Imagem de fundo da tela de identificação do convidado."
+  icon="folder"
+  [salvando]="salvandoSlide()"
+  [saveDisabled]="slideSaveDisabled()"
+  [saveLabel]="salvandoSlide() ? 'Salvando…' : 'Salvar'"
+  (save)="salvarSlide()"
+  (cancel)="fecharModalSlide()"
+>
+  <form (ngSubmit)="salvarSlide()">
+    <div class="field">
+      <label for="slide-imagem">{{ editandoSlideId() ? 'Trocar imagem' : 'Imagem *' }}</label>
+      @if (slidePreviewUrl()) {
+        <div class="slide-preview" [style.background-image]="'url(' + slidePreviewUrl() + ')'"></div>
+      }
+      <input
+        id="slide-imagem"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        (change)="onSlideFile($event)"
+      />
+      <div class="help">JPEG, PNG ou WebP. {{ editandoSlideId() ? 'Deixe em branco para manter a atual.' : '' }}</div>
+      @if (slideErroArquivo()) {
+        <div class="help err">{{ slideErroArquivo() }}</div>
+      }
+    </div>
+    <div class="field">
+      <label for="slide-titulo">Título</label>
+      <input
+        id="slide-titulo"
+        type="text"
+        maxlength="200"
+        [value]="slideTitulo()"
+        (input)="slideTitulo.set($any($event.target).value)"
+      />
+      <div class="help">Opcional. Aparece sobre a foto na porta pública.</div>
+    </div>
+    <div class="toggle-field">
+      <div>
+        <div class="tt">Ativo</div>
+        <div class="ts">Imagens inativas não aparecem na porta pública.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" [checked]="slideAtivo()" (change)="slideAtivo.set($any($event.target).checked)" />
         <span class="slider"></span>
       </label>
     </div>

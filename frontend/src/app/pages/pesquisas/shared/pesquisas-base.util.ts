@@ -14,8 +14,54 @@ export function isEmailHeader(raw: string): boolean {
   return ['email', 'e mail', 'mail', 'correio'].includes(normHeader(raw));
 }
 
+export function isNomeHeader(raw: string): boolean {
+  return ['nome', 'nome completo', 'name', 'razao social', 'razão social'].includes(normHeader(raw));
+}
+
 export function isChaveHeader(raw: string): boolean {
   return isDocHeader(raw) || isEmailHeader(raw);
+}
+
+export interface ExtractedGuest {
+  nome: string;
+  cpf: string;
+  email: string;
+}
+
+export interface ExtractGuestsResult {
+  guests: ExtractedGuest[];
+  ignoradas: number;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function extractGuestsFromRows(rows: Record<string, unknown>[] | null | undefined): ExtractGuestsResult {
+  const guests: ExtractedGuest[] = [];
+  const seen = new Set<string>();
+  const list = Array.isArray(rows) ? rows : [];
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue;
+    let nome = '';
+    let cpf = '';
+    let email = '';
+    for (const [k, v] of Object.entries(row)) {
+      const cell = String(v ?? '').trim();
+      if (!cell) continue;
+      if (!nome && isNomeHeader(k)) nome = cell.slice(0, 200);
+      if (!cpf && isDocHeader(k)) {
+        const digits = cell.replace(/\D/g, '');
+        if (digits.length === 11 || digits.length === 14) cpf = digits;
+      }
+      if (!email && isEmailHeader(k)) {
+        const e = cell.toLowerCase();
+        if (EMAIL_RE.test(e)) email = e.slice(0, 200);
+      }
+    }
+    if (!cpf || !email || seen.has(cpf)) continue;
+    seen.add(cpf);
+    guests.push({ nome, cpf, email });
+  }
+  return { guests, ignoradas: Math.max(0, list.length - guests.length) };
 }
 
 export function lookupPronto(valor: string): boolean {

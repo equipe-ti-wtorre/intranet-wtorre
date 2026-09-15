@@ -5,10 +5,10 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AlertasService } from '../../../services/alertas.service';
 import { PesquisasService } from '../../../services/pesquisas.service';
-import { PesquisasListItem, PesquisasTemplateVisual, STATUS_LABEL } from '../../../models/pesquisas.model';
+import { PesquisasListItem, PesquisasPortalSlide, PesquisasTemplateVisual, STATUS_LABEL } from '../../../models/pesquisas.model';
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
 
-type Aba = 'formularios' | 'templates';
+type Aba = 'formularios' | 'templates' | 'carrossel';
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 const CODIGO = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -35,6 +35,7 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
   readonly loading = signal(true);
   readonly items = signal<PesquisasListItem[]>([]);
   readonly templates = signal<PesquisasTemplateVisual[]>([]);
+  readonly slides = signal<PesquisasPortalSlide[]>([]);
   readonly q = signal('');
   readonly statusLabel = STATUS_LABEL;
 
@@ -47,12 +48,22 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
     codigo: ['', [Validators.required, Validators.pattern(CODIGO)]],
     nome: ['', [Validators.required, Validators.maxLength(80)]],
     wordmark: ['', [Validators.required, Validators.maxLength(80)]],
-    corPrimaria: ['#0f1e3d', [Validators.required, Validators.pattern(HEX)]],
-    corPrimariaEscura: ['#080e1e', [Validators.required, Validators.pattern(HEX)]],
+    corPrimaria: ['#1d54e6', [Validators.required, Validators.pattern(HEX)]],
+    corPrimariaEscura: ['#0b2a6b', [Validators.required, Validators.pattern(HEX)]],
     raioPx: [10, [Validators.required, Validators.min(0), Validators.max(40)]],
     ordem: [0, [Validators.min(0), Validators.max(999)]],
     ativo: [true],
   });
+
+  readonly modalSlideAberto = signal(false);
+  readonly salvandoSlide = signal(false);
+  readonly editandoSlideId = signal<number | null>(null);
+  readonly slideTitulo = signal('');
+  readonly slideAtivo = signal(true);
+  readonly slideFile = signal<File | null>(null);
+  readonly slidePreviewUrl = signal<string | null>(null);
+  readonly slideErroArquivo = signal('');
+  private slideObjectUrl: string | null = null;
 
   ngOnInit(): void {
     this.carregar();
@@ -60,6 +71,7 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+    this.revokeSlidePreview();
   }
 
   selecionarAba(aba: Aba): void {
@@ -82,6 +94,19 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
         },
         error: (err: HttpErrorResponse) => {
           this.alertas.erro(err.error?.mensagem || 'Erro ao carregar os templates.');
+          this.loading.set(false);
+        },
+      });
+      return;
+    }
+    if (this.aba() === 'carrossel') {
+      this.api.adminCarrossel(this.q()).subscribe({
+        next: (rows) => {
+          this.slides.set(rows);
+          this.loading.set(false);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.alertas.erro(err.error?.mensagem || 'Erro ao carregar o carrossel.');
           this.loading.set(false);
         },
       });
@@ -147,8 +172,8 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
       codigo: '',
       nome: '',
       wordmark: '',
-      corPrimaria: '#0f1e3d',
-      corPrimariaEscura: '#080e1e',
+      corPrimaria: '#1d54e6',
+      corPrimariaEscura: '#0b2a6b',
       raioPx: 10,
       ordem: 0,
       ativo: true,
@@ -241,5 +266,127 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível excluir o template.');
       },
     });
+  }
+
+  novaImagem(): void {
+    this.editandoSlideId.set(null);
+    this.slideTitulo.set('');
+    this.slideAtivo.set(true);
+    this.slideFile.set(null);
+    this.slideErroArquivo.set('');
+    this.revokeSlidePreview();
+    this.slidePreviewUrl.set(null);
+    this.modalSlideAberto.set(true);
+  }
+
+  editarSlide(s: PesquisasPortalSlide): void {
+    this.editandoSlideId.set(s.id);
+    this.slideTitulo.set(s.titulo || '');
+    this.slideAtivo.set(s.ativo);
+    this.slideFile.set(null);
+    this.slideErroArquivo.set('');
+    this.revokeSlidePreview();
+    this.slidePreviewUrl.set(s.imagemUrl);
+    this.modalSlideAberto.set(true);
+  }
+
+  fecharModalSlide(): void {
+    this.modalSlideAberto.set(false);
+    this.editandoSlideId.set(null);
+    this.slideFile.set(null);
+    this.slideErroArquivo.set('');
+    this.revokeSlidePreview();
+    this.slidePreviewUrl.set(null);
+  }
+
+  tituloModalSlide(): string {
+    return this.editandoSlideId() ? 'Editar imagem' : 'Nova imagem';
+  }
+
+  slideSaveDisabled(): boolean {
+    if (this.salvandoSlide()) return true;
+    if (!this.editandoSlideId() && !this.slideFile()) return true;
+    return !!this.slideErroArquivo();
+  }
+
+  onSlideFile(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.slideErroArquivo.set('');
+    if (!file) {
+      this.slideFile.set(null);
+      return;
+    }
+    const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+    if (!ok) {
+      this.slideFile.set(null);
+      this.slideErroArquivo.set('Use JPEG, PNG ou WebP.');
+      input.value = '';
+      return;
+    }
+    this.slideFile.set(file);
+    this.revokeSlidePreview();
+    this.slideObjectUrl = URL.createObjectURL(file);
+    this.slidePreviewUrl.set(this.slideObjectUrl);
+  }
+
+  salvarSlide(): void {
+    if (this.slideSaveDisabled()) return;
+    const editId = this.editandoSlideId();
+    const payload = {
+      titulo: this.slideTitulo().trim(),
+      ativo: this.slideAtivo(),
+      imagem: this.slideFile() || undefined,
+    };
+    if (!editId && !payload.imagem) return;
+    this.salvandoSlide.set(true);
+    const req$ = editId
+      ? this.api.atualizarCarrosselSlide(editId, payload)
+      : this.api.criarCarrosselSlide({ titulo: payload.titulo, ativo: payload.ativo, imagem: payload.imagem as File });
+    req$.subscribe({
+      next: () => {
+        this.alertas.sucesso(editId ? 'Imagem atualizada.' : 'Imagem adicionada.');
+        this.salvandoSlide.set(false);
+        this.fecharModalSlide();
+        this.carregar();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível salvar a imagem.');
+        this.salvandoSlide.set(false);
+      },
+    });
+  }
+
+  async excluirSlide(s: PesquisasPortalSlide): Promise<void> {
+    const ok = await this.alertas.confirmarExclusao({
+      titulo: `Excluir ${s.titulo ? `“${s.titulo}”` : 'esta imagem'}?`,
+      texto: 'Ela deixa de aparecer na porta pública.',
+    });
+    if (!ok) return;
+    this.api.excluirCarrosselSlide(s.id).subscribe({
+      next: () => {
+        this.alertas.sucesso('Imagem excluída.');
+        this.carregar();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível excluir.');
+      },
+    });
+  }
+
+  moverSlide(s: PesquisasPortalSlide, direcao: 'up' | 'down'): void {
+    this.api.moverCarrosselSlide(s.id, direcao).subscribe({
+      next: () => this.carregar(),
+      error: (err: HttpErrorResponse) => {
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível reordenar.');
+      },
+    });
+  }
+
+  private revokeSlidePreview(): void {
+    if (this.slideObjectUrl) {
+      URL.revokeObjectURL(this.slideObjectUrl);
+      this.slideObjectUrl = null;
+    }
   }
 }

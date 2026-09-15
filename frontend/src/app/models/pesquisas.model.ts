@@ -250,6 +250,35 @@ export interface PesquisasPublicoMeta {
   capaLayout?: CapaLayout;
 }
 
+export interface PesquisasPortalItem {
+  slug: string;
+  titulo: string;
+  descricao: string;
+  prazoFim?: string | null;
+  respondidoEm?: string | null;
+}
+
+export interface PesquisasPortal {
+  nome: string | null;
+  pendentes: PesquisasPortalItem[];
+  respondidas: PesquisasPortalItem[];
+}
+
+export interface PesquisasEventoDestaque {
+  titulo: string;
+  imagemUrl: string;
+  dataTexto: string;
+}
+
+export interface PesquisasPortalSlide {
+  id: number;
+  ordem: number;
+  titulo: string;
+  imagemUrl: string | null;
+  temArquivo: boolean;
+  ativo: boolean;
+}
+
 export const PESQUISAS_CATEGORIAS = [
   'Satisfação geral',
   'Clima organizacional',

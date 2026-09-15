@@ -19,9 +19,11 @@
       (mouseup)="disableDrag(canvasBlocks)"
     >
       <div class="canvas-title-block">
-        <div class="canvas-wordmark">
-          <span class="wm-dot"></span>{{ tpl().wordmark }}
-        </div>
+        <app-pesquisas-marca-logos
+          [codigo]="tpl().codigo"
+          [wordmark]="tpl().wordmark"
+          [nome]="tpl().nome"
+        />
         <h3 class="canvas-title">{{ titulo().trim() || 'Título do formulário' }}</h3>
         @if (descricao().trim()) {
           <p class="guest-q-help" style="margin-top: 6px">{{ descricao() }}</p>

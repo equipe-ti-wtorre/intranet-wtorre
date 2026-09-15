@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -6,17 +7,28 @@ import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
 import {
   PesquisasPergunta,
+  PesquisasPortal,
+  PesquisasPortalItem,
+  PesquisasEventoDestaque,
   PesquisasPublicoMeta,
   PesquisasResponderPayload,
   PesquisasTemplateVisual,
 } from '../../models/pesquisas.model';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
+import { PesquisasMarcaLogosComponent } from './shared/pesquisas-marca-logos.component';
+import { PesqIconComponent } from './shared/pesq-icon.component';
 import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
+import { formatDocumento } from './shared/pesquisas-documento.util';
+import { PESQUISAS_TPL_WTORRE } from './shared/pesquisas-marca.util';
+
+type PassoPublico = 'gate' | 'portal' | 'form';
+
+const GUEST_TOKEN_KEY = 'pesquisas.guestToken';
 
 @Component({
   selector: 'app-pesquisas-publico',
   standalone: true,
-  imports: [FormsModule, PesquisasGuestFormComponent],
+  imports: [FormsModule, NgTemplateOutlet, PesquisasGuestFormComponent, PesquisasMarcaLogosComponent, PesqIconComponent],
   templateUrl: './pesquisas-publico.component.html',
   encapsulation: ViewEncapsulation.None,
 })
@@ -28,33 +40,29 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   readonly loading = signal(true);
   readonly enviando = signal(false);
   readonly verificando = signal(false);
+  readonly passo = signal<PassoPublico>('gate');
   readonly meta = signal<PesquisasPublicoMeta | null>(null);
+  readonly portal = signal<PesquisasPortal | null>(null);
   readonly payload = signal<PesquisasResponderPayload | null>(null);
   readonly respostas = signal<Record<number, string>>({});
   readonly anexos = signal<Record<number, File>>({});
-  readonly cpf = signal('');
-  readonly email = signal('');
-  readonly enviado = signal(false);
+  readonly identificador = signal('');
+  readonly slides = signal<PesquisasEventoDestaque[]>([]);
+  readonly slideAtivo = signal(0);
+  readonly temSlides = computed(() => this.slides().length > 0);
   readonly respostasGuest = computed(() => {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(this.respostas())) out[k] = v;
     return out;
   });
   readonly tpl = computed<PesquisasTemplateVisual>(
-    () =>
-      this.payload()?.template ||
-      this.meta()?.template || {
-        codigo: 'wtorre',
-        nome: 'WTorre',
-        wordmark: 'WTORRE',
-        corPrimaria: '#0f1e3d',
-        corPrimariaEscura: '#080e1e',
-        raioPx: 10,
-      }
+    () => this.payload()?.template || this.meta()?.template || PESQUISAS_TPL_WTORRE
   );
+  readonly capaUrl = computed(() => this.payload()?.capaUrl || this.meta()?.capaUrl || null);
   private guestToken: string | null = null;
   private lookupTimer: ReturnType<typeof setTimeout> | null = null;
   private lookupSeq = 0;
+  private carouselTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly visiveis = computed(() => {
     const p = this.payload();
@@ -64,14 +72,24 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    this.carregarDestaques();
     const slug = this.route.snapshot.paramMap.get('token') || this.route.snapshot.paramMap.get('slug') || '';
     this.api.publicoMeta(slug).subscribe({
       next: (m) => {
         this.meta.set(m);
-        this.loading.set(false);
-        if (!this.bloqueado() && !m.exigirIdentidade) {
-          this.carregarFormulario();
+        if (!m.exigirIdentidade) {
+          this.loading.set(false);
+          if (!this.bloqueado()) this.carregarFormulario(m.slug);
+          return;
         }
+        const saved = this.lerToken();
+        if (saved) {
+          this.guestToken = saved;
+          this.carregarPainel();
+          return;
+        }
+        this.passo.set('gate');
+        this.loading.set(false);
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Formulário não encontrado.');
@@ -82,31 +100,81 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.lookupTimer) clearTimeout(this.lookupTimer);
+    this.pararCarrossel();
   }
 
-  formatCpfInput(raw: string): void {
-    const d = String(raw || '').replace(/\D/g, '').slice(0, 11);
-    if (d.length <= 3) this.cpf.set(d);
-    else if (d.length <= 6) this.cpf.set(`${d.slice(0, 3)}.${d.slice(3)}`);
-    else if (d.length <= 9) this.cpf.set(`${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`);
-    else this.cpf.set(`${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`);
+  private carregarDestaques(): void {
+    this.api.publicoCarrossel().subscribe({
+      next: (out) => {
+        const list = (out.slides || []).filter((s) => !!s.imagemUrl);
+        this.slides.set(list);
+        this.slideAtivo.set(0);
+        if (this.passo() === 'gate') this.iniciarCarrossel();
+      },
+      error: () => {
+        this.slides.set([]);
+        this.pararCarrossel();
+      },
+    });
+  }
+
+  private iniciarCarrossel(): void {
+    this.pararCarrossel();
+    if (this.slides().length < 2) return;
+    this.carouselTimer = setInterval(() => {
+      const n = this.slides().length;
+      if (n < 2) return;
+      this.slideAtivo.update((i) => (i + 1) % n);
+    }, 5000);
+  }
+
+  private pararCarrossel(): void {
+    if (this.carouselTimer) {
+      clearInterval(this.carouselTimer);
+      this.carouselTimer = null;
+    }
+  }
+
+  formatIdentificador(raw: string): void {
+    if (raw.includes('@') || /[a-zA-Z]/.test(raw)) {
+      this.identificador.set(raw);
+      return;
+    }
+    this.identificador.set(formatDocumento(raw));
   }
 
   verificar(): void {
     const m = this.meta();
     if (!m) return;
+    const valor = this.identificador().trim();
+    if (!valor) {
+      this.alertas.erro('Informe um CPF, CNPJ ou e-mail cadastrado.');
+      return;
+    }
     this.verificando.set(true);
-    this.api.publicoVerificar(m.slug, { cpf: this.cpf(), email: this.email() }).subscribe({
+    this.api.publicoVerificar(m.slug, { valor }).subscribe({
       next: (out) => {
         this.guestToken = out.token;
+        this.gravarToken(out.token);
         this.verificando.set(false);
-        this.carregarFormulario();
+        this.carregarPainel();
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível confirmar a identidade.');
         this.verificando.set(false);
       },
     });
+  }
+
+  abrirPendente(item: PesquisasPortalItem): void {
+    this.carregarFormulario(item.slug);
+  }
+
+  voltarPainel(): void {
+    this.payload.set(null);
+    this.respostas.set({});
+    this.anexos.set({});
+    this.passo.set('portal');
   }
 
   setValor(id: number, valor: string): void {
@@ -134,8 +202,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
 
   enviar(): void {
     const p = this.payload();
-    const m = this.meta();
-    if (!p || !m) return;
+    if (!p?.slug) return;
     const itens = this.visiveis()
       .filter((q) => q.id && q.blocoTipo !== 'texto')
       .map((q) => ({
@@ -143,11 +210,15 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
         valor: q.blocoTipo === 'anexo' ? '' : this.respostas()[q.id as number] || '',
       }));
     this.enviando.set(true);
-    this.api.publicoResponder(m.slug, itens, this.guestToken || undefined, this.anexos()).subscribe({
+    this.api.publicoResponder(p.slug, itens, this.guestToken || undefined, this.anexos()).subscribe({
       next: () => {
         this.enviando.set(false);
-        this.enviado.set(true);
         this.alertas.sucesso('Resposta enviada com sucesso.');
+        this.payload.set(null);
+        this.respostas.set({});
+        this.anexos.set({});
+        this.passo.set('portal');
+        this.carregarPainel();
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível enviar a resposta.');
@@ -169,36 +240,44 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     return null;
   }
 
-  private agoraBrasilia(): string {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(new Date());
-    const g = (t: string) => parts.find((p) => p.type === t)?.value || '';
-    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
-  }
-
-  private toSqlDateTime(iso?: string | null): string | null {
-    if (!iso) return null;
-    const m = String(iso)
-      .replace(' ', 'T')
-      .match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
-    return m ? `${m[1]} ${m[2]}:00` : null;
-  }
-
-  private carregarFormulario(): void {
+  private carregarPainel(): void {
+    this.pararCarrossel();
     const m = this.meta();
-    if (!m) return;
+    const token = this.guestToken;
+    if (!m || !token) {
+      this.passo.set('gate');
+      this.loading.set(false);
+      this.carregarDestaques();
+      return;
+    }
     this.loading.set(true);
-    this.api.publicoFormulario(m.slug, this.guestToken || undefined).subscribe({
+    this.api.publicoMinhas(m.slug, token).subscribe({
+      next: (painel) => {
+        this.portal.set(painel);
+        this.passo.set('portal');
+        this.loading.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.limparToken();
+        this.guestToken = null;
+        this.portal.set(null);
+        this.passo.set('gate');
+        this.loading.set(false);
+        if (err.status !== 401) {
+          this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar seus formulários.');
+        }
+      },
+    });
+  }
+
+  private carregarFormulario(slug: string): void {
+    this.loading.set(true);
+    this.api.publicoFormulario(slug, this.guestToken || undefined).subscribe({
       next: (p) => {
         this.payload.set(p);
+        this.respostas.set({});
+        this.anexos.set({});
+        this.passo.set('form');
         this.loading.set(false);
       },
       error: (err: HttpErrorResponse) => {
@@ -210,15 +289,15 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
 
   private agendarLookup(id: number, valor: string): void {
     const p = this.payload();
-    const m = this.meta();
-    if (!p?.temBase || !m) return;
+    const slug = p?.slug;
+    if (!p?.temBase || !slug) return;
     const q = p.perguntas.find((x) => x.id === id);
     if (!q || !isChaveHeader(q.texto)) return;
     if (this.lookupTimer) clearTimeout(this.lookupTimer);
     this.lookupTimer = setTimeout(() => {
       if (!lookupPronto(valor)) return;
       const seq = ++this.lookupSeq;
-      this.api.publicoLookupBase(m.slug, valor, this.guestToken || undefined).subscribe({
+      this.api.publicoLookupBase(slug, valor, this.guestToken || undefined).subscribe({
         next: (out) => {
           if (seq !== this.lookupSeq) return;
           const fill = matchCampos(out.campos || {}, p.perguntas, id);
@@ -245,5 +324,52 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     if (c === 'nao') return valor === 'Não';
     if (c === 'escala_gte_4') return Number(valor) >= 4;
     return true;
+  }
+
+  private agoraBrasilia(): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const g = (t: string) => parts.find((p) => p.type === t)?.value || '';
+    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
+  }
+
+  private toSqlDateTime(iso?: string | null): string | null {
+    if (!iso) return null;
+    const m = String(iso)
+      .replace(' ', 'T')
+      .match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    return m ? `${m[1]} ${m[2]}:00` : null;
+  }
+
+  private lerToken(): string | null {
+    try {
+      return sessionStorage.getItem(GUEST_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  private gravarToken(token: string): void {
+    try {
+      sessionStorage.setItem(GUEST_TOKEN_KEY, token);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private limparToken(): void {
+    try {
+      sessionStorage.removeItem(GUEST_TOKEN_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 }

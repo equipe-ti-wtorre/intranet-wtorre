@@ -9,6 +9,9 @@ import {
   PesquisasListItem,
   PesquisasRequisicao,
   PesquisasMinhaResposta,
+  PesquisasPortal,
+  PesquisasEventoDestaque,
+  PesquisasPortalSlide,
   PesquisasPublicoMeta,
   PesquisasResponderPayload,
   PesquisasResultados,
@@ -152,6 +155,38 @@ export class PesquisasService {
     return this.http.delete<{ ok: boolean }>(this.api(`/admin/templates/${id}`));
   }
 
+  adminCarrossel(q = ''): Observable<PesquisasPortalSlide[]> {
+    const params = q ? new HttpParams().set('q', q) : undefined;
+    return this.http.get<PesquisasPortalSlide[]>(this.api('/admin/carrossel'), { params });
+  }
+
+  criarCarrosselSlide(body: { titulo: string; ativo: boolean; imagem: File }): Observable<PesquisasPortalSlide> {
+    const fd = new FormData();
+    fd.append('titulo', body.titulo);
+    fd.append('ativo', String(body.ativo));
+    fd.append('imagem', body.imagem);
+    return this.http.post<PesquisasPortalSlide>(this.api('/admin/carrossel'), fd);
+  }
+
+  atualizarCarrosselSlide(
+    id: number,
+    body: { titulo: string; ativo: boolean; imagem?: File | null }
+  ): Observable<PesquisasPortalSlide> {
+    const fd = new FormData();
+    fd.append('titulo', body.titulo);
+    fd.append('ativo', String(body.ativo));
+    if (body.imagem) fd.append('imagem', body.imagem);
+    return this.http.put<PesquisasPortalSlide>(this.api(`/admin/carrossel/${id}`), fd);
+  }
+
+  moverCarrosselSlide(id: number, direcao: 'up' | 'down'): Observable<PesquisasPortalSlide> {
+    return this.http.patch<PesquisasPortalSlide>(this.api(`/admin/carrossel/${id}/ordem`), { direcao });
+  }
+
+  excluirCarrosselSlide(id: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(this.api(`/admin/carrossel/${id}`));
+  }
+
   uploadCapa(id: number, file: File): Observable<PesquisasFormulario> {
     const fd = new FormData();
     fd.append('capa', file);
@@ -168,12 +203,22 @@ export class PesquisasService {
 
   publicoVerificar(
     slug: string,
-    body: { cpf: string; email: string }
+    body: { valor: string }
   ): Observable<{ token: string; nome: string | null }> {
     return this.http.post<{ token: string; nome: string | null }>(
       this.api(`/publico/${encodeURIComponent(slug)}/verificar`),
       body
     );
+  }
+
+  publicoMinhas(slug: string, token: string): Observable<PesquisasPortal> {
+    return this.http.get<PesquisasPortal>(this.api(`/publico/${encodeURIComponent(slug)}/minhas`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  publicoCarrossel(): Observable<{ slides: PesquisasEventoDestaque[] }> {
+    return this.http.get<{ slides: PesquisasEventoDestaque[] }>(this.api('/publico/carrossel'));
   }
 
   publicoFormulario(slug: string, token?: string): Observable<PesquisasResponderPayload> {
