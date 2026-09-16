@@ -7,6 +7,7 @@ import { AlertasService } from '../../../services/alertas.service';
 import { PesquisasService } from '../../../services/pesquisas.service';
 import { PesquisasListItem, PesquisasPortalSlide, PesquisasTemplateVisual, STATUS_LABEL } from '../../../models/pesquisas.model';
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
+import { pesquisasResultadosPath } from '../../pesquisas/shared/pesquisas-public-url';
 
 type Aba = 'formularios' | 'templates' | 'carrossel';
 
@@ -126,7 +127,7 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
   }
 
   ver(item: PesquisasListItem): void {
-    void this.router.navigate(['/pesquisas/formulario', item.id, 'resultados']);
+    void this.router.navigate(pesquisasResultadosPath(item));
   }
 
   async encerrar(item: PesquisasListItem): Promise<void> {

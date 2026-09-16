@@ -33,7 +33,7 @@ export const GRUPO_LOGOS_LOGIN: GrupoLogo[] = [
   {
     id: 'nubank',
     nome: 'Nubank Parque',
-    logoSrc: '/logos/nubank-parque.png',
+    logoSrc: '/logos/login/nubank-parque.png',
     alt: 'Nubank Parque',
   },
   {

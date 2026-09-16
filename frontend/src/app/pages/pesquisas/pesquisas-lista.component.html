@@ -11,7 +11,7 @@
     <app-pesq-icon name="search" [size]="16" />
     <input
       type="search"
-      placeholder="Buscar por título ou categoria..."
+      placeholder="Buscar por título..."
       [value]="q()"
       (input)="onBusca($any($event.target).value)"
     />
@@ -45,8 +45,6 @@
         <div class="row-main">
           <p class="row-title">{{ it.title }}</p>
           <div class="row-meta">
-            <span>{{ it.category }}</span>
-            <span>·</span>
             <span>{{ it.date }}</span>
           </div>
         </div>

@@ -21,6 +21,8 @@ import {
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
+import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
+import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
 import {
   GuestReorderEvent,
   PesquisasGuestFormComponent,
@@ -74,7 +76,7 @@ let gKey = 0;
 @Component({
   selector: 'app-pesquisas-builder',
   standalone: true,
-  imports: [FormsModule, PesqIconComponent, PesquisasGuestFormComponent],
+  imports: [FormsModule, PesqIconComponent, PesquisasGuestFormComponent, PesquisasQrCardComponent],
   templateUrl: './pesquisas-builder.component.html',
   host: {
     '[attr.data-marca]': 'templateCodigo()',
@@ -126,6 +128,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly passo = signal<'layout' | 'builder'>('layout');
   readonly menuAddOpen = signal(false);
   readonly previewExpandido = signal(false);
+  readonly qrAberto = signal(false);
   readonly previewRespostas = signal<Record<string, string>>({});
   private capaPendente: File | null = null;
   private baseLinhas: Record<string, unknown>[] | null = null;
@@ -155,6 +158,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       PESQUISAS_TPL_WTORRE
   );
   readonly capaPreview = computed(() => this.capaLocalUrl() || this.capaUrl());
+  readonly qrDataLabel = computed(() => pesquisasQrDataLabel(this.prazoInicioData()));
   readonly previewPerguntas = computed<PesquisasPergunta[]>(() =>
     this.perguntas().map((p, idx) => ({
       id: p.key,

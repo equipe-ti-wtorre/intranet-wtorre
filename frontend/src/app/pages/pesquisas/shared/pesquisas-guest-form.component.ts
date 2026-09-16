@@ -42,12 +42,23 @@ export class PesquisasGuestFormComponent {
   readonly rows = computed(() => this.groupRows(this.perguntas()));
 
   readonly tpl = computed(() => this.template() || PESQUISAS_TPL_WTORRE);
+  readonly capaQuebrouUrl = signal<string | null>(null);
+  readonly capaSrc = computed(() => (this.capaUrl() || '').trim() || null);
+  readonly mostraCapa = computed(() => {
+    const url = this.capaSrc();
+    return !!url && this.capaQuebrouUrl() !== url;
+  });
 
   private lastDrop: { targetKey: number; insertBefore: boolean; joinRow: boolean } | null = null;
   private dragKey: number | null = null;
   readonly dropHint = signal<{ targetKey: number; insertBefore: boolean; joinRow: boolean } | null>(
     null
   );
+
+  onCapaError(): void {
+    const url = this.capaSrc();
+    if (url) this.capaQuebrouUrl.set(url);
+  }
 
   keyOf(q: PesquisasPergunta, idx = 0): string {
     return String(q.id ?? `p${idx}`);

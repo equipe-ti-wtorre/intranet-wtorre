@@ -10,6 +10,7 @@ import {
   PesquisasResumo,
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
+import { pesquisasResultadosPath } from './shared/pesquisas-public-url';
 
 @Component({
   selector: 'app-pesquisas-home',
@@ -56,11 +57,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
     const q = this.busca().trim().toLowerCase();
     return this.criados().filter((it) => {
       if (it.kind !== 'formulario') return false;
-      return (
-        !q ||
-        it.title.toLowerCase().includes(q) ||
-        (it.category || '').toLowerCase().includes(q)
-      );
+      return !q || it.title.toLowerCase().includes(q);
     });
   });
 
@@ -139,7 +136,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
   }
 
   abrirDashboard(item: PesquisasListItem): void {
-    void this.router.navigate(['/pesquisas/formulario', item.id, 'resultados']);
+    void this.router.navigate(pesquisasResultadosPath(item));
   }
 
   criarFormulario(): void {

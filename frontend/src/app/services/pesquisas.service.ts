@@ -116,8 +116,10 @@ export class PesquisasService {
     );
   }
 
-  resultados(id: number): Observable<PesquisasResultados> {
-    return this.http.get<PesquisasResultados>(this.api(`/formularios/${id}/resultados`));
+  resultados(ref: string | number): Observable<PesquisasResultados> {
+    return this.http.get<PesquisasResultados>(
+      this.api(`/formularios/${encodeURIComponent(String(ref))}/resultados`)
+    );
   }
 
   minhaResposta(id: number): Observable<PesquisasMinhaResposta> {

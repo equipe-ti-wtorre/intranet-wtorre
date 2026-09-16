@@ -78,7 +78,7 @@
       <app-pesq-icon name="search" [size]="16" />
       <input
         type="search"
-        placeholder="Buscar por título ou categoria..."
+        placeholder="Buscar por título..."
         [value]="busca()"
         (input)="onBusca($any($event.target).value)"
       />
@@ -103,8 +103,6 @@
               <p class="row-title">{{ item.title }}</p>
               <div class="row-meta">
                 <span>Formulário</span>
-                <span>·</span>
-                <span>{{ item.category }}</span>
                 <span>·</span>
                 <span>{{ janelaRotulo(item) }}</span>
                 @if (item.publicoAlvo === 'externos') {

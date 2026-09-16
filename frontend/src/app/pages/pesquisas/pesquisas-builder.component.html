@@ -212,10 +212,17 @@
             @if (linkPublico()) {
               <div class="link-copy-row">
                 <input type="text" [value]="linkPublico()" readonly />
-                <button type="button" class="btn-secondary" (click)="copiarLink()">
-                  <app-pesq-icon name="link" [size]="15" />
-                  Copiar
-                </button>
+                <div class="link-copy-actions">
+                  <button type="button" class="btn-secondary" (click)="copiarLink()">
+                    <app-pesq-icon name="link" [size]="15" />
+                    Copiar
+                  </button>
+                  <app-pesquisas-qr-card
+                    modo="botao"
+                    [url]="linkPublico()"
+                    (abertoChange)="qrAberto.set($event)"
+                  />
+                </div>
               </div>
             } @else {
               <p class="page-sub" style="margin: 0">Salve o rascunho para gerar o link público.</p>
@@ -477,4 +484,15 @@
       />
     </aside>
   </div>
+}
+
+@if (qrAberto() && linkPublico()) {
+  <app-pesquisas-qr-card
+    modo="dialogo"
+    [url]="linkPublico()"
+    [titulo]="titulo()"
+    [dataLabel]="qrDataLabel()"
+    [template]="templateAtual()"
+    (abertoChange)="qrAberto.set($event)"
+  />
 }

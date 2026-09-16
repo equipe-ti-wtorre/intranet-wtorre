@@ -1,9 +1,26 @@
-<div
-  class="pesq-app pesq-public"
-  [class.pesq-public-bid]="passo() === 'gate' && temSlides()"
->
+<div class="pesq-app pesq-public" [class.pesq-public-bid]="usaCarrossel()">
   <div class="cn">
-    @if (loading() && passo() !== 'form') {
+    @if (usaCarrossel()) {
+      <div
+        class="portal-bid"
+        [style.--tpl-primary]="tpl().corPrimaria"
+        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+        [style.--tpl-radius.px]="tpl().raioPx"
+      >
+        <ng-container *ngTemplateOutlet="carrosselStage" />
+        <div class="portal-bid-panel" [class.portal-bid-panel-gate]="passo() === 'gate'">
+          @if (loading() && passo() !== 'form') {
+            <p class="page-sub portal-bid-loading">Carregando…</p>
+          } @else if (passo() === 'form' && payload(); as p) {
+            <ng-container *ngTemplateOutlet="formCard; context: { $implicit: p }" />
+          } @else if (meta()?.exigirIdentidade && passo() === 'gate') {
+            <ng-container *ngTemplateOutlet="gateCard" />
+          } @else if (meta()?.exigirIdentidade && passo() === 'portal') {
+            <ng-container *ngTemplateOutlet="portalCard" />
+          }
+        </div>
+      </div>
+    } @else if (loading() && passo() !== 'form') {
       <p class="page-sub">Carregando…</p>
     } @else if (!meta()) {
       <div class="form-card" style="max-width: 520px; margin: 48px auto">
@@ -30,158 +47,34 @@
         </div>
       </div>
     } @else if (passo() === 'form' && payload(); as p) {
-      <div class="portal-form-wrap">
-        @if (meta()?.exigirIdentidade) {
-          <button type="button" class="btn-back" (click)="voltarPainel()">
-            <app-pesq-icon name="arrow-left" [size]="14" />
-            Voltar
-          </button>
-        }
-        <app-pesquisas-guest-form
-          mode="answer"
-          [titulo]="p.titulo"
-          [descricao]="p.descricao"
-          [capaUrl]="p.capaUrl || null"
-          [capaLayout]="p.capaLayout || 'top'"
-          [template]="p.template || tpl()"
-          [perguntas]="visiveis()"
-          [secoes]="!!p.secoes"
-          [respostas]="respostasGuest()"
-          [enviando]="enviando()"
-          (valorChange)="onGuestValor($event)"
-          (arquivoChange)="onGuestArquivo($event)"
-          (enviar)="enviar()"
-        />
-      </div>
-    } @else if (meta()?.exigirIdentidade && passo() === 'gate' && temSlides()) {
-      <div
-        class="portal-bid"
-        [style.--tpl-primary]="tpl().corPrimaria"
-        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
-        [style.--tpl-radius.px]="tpl().raioPx"
-      >
-        <div class="portal-bid-stage" aria-hidden="true">
-          @for (s of slides(); track s.imagemUrl; let i = $index) {
-            <div class="portal-bid-slide" [class.on]="slideAtivo() === i">
-              <div class="portal-bid-bg" [style.background-image]="'url(' + s.imagemUrl + ')'"></div>
-              @if (s.titulo) {
-                <div class="portal-bid-ct">
-                  <h2>{{ s.titulo }}</h2>
-                  @if (s.dataTexto) {
-                    <p>{{ s.dataTexto }}</p>
-                  }
-                </div>
-              }
-            </div>
-          }
-        </div>
-        <div class="portal-bid-panel">
-          <ng-container *ngTemplateOutlet="gateCard" />
-        </div>
-      </div>
+      <ng-container *ngTemplateOutlet="formCard; context: { $implicit: p }" />
     } @else if (meta()?.exigirIdentidade && passo() === 'gate') {
       <ng-container *ngTemplateOutlet="gateCard" />
     } @else if (meta()?.exigirIdentidade && passo() === 'portal') {
-      <div
-        class="guest-frame"
-        [style.--tpl-primary]="tpl().corPrimaria"
-        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
-        [style.--tpl-radius.px]="tpl().raioPx"
-      >
-        <div class="frame-middle">
-          <div class="zone-left is-on">
-            @if (capaUrl(); as capa) {
-              <img [src]="capa" alt="" />
-            } @else {
-              <div class="guest-photo-placeholder"><span>Sem imagem</span></div>
-            }
-          </div>
-          <div class="canvas-white">
-            <div class="canvas-title-block">
-              <app-pesquisas-marca-logos
-                [codigo]="tpl().codigo"
-                [wordmark]="tpl().wordmark"
-                [nome]="tpl().nome"
-              />
-              <h3 class="canvas-title">Seus formulários</h3>
-            </div>
-            @if (portal(); as painel) {
-              <div class="portal-body">
-                <p class="portal-welcome">
-                  Olá, <b>{{ painel.nome || 'convidado' }}</b> — aqui estão os formulários vinculados ao seu
-                  cadastro.
-                </p>
-
-                <div class="portal-section">
-                  <div class="portal-section-title">
-                    Para responder
-                    <span class="portal-count">{{ painel.pendentes.length }}</span>
-                  </div>
-                  @if (!painel.pendentes.length) {
-                    <p class="portal-empty">Nenhum formulário pendente — tudo em dia.</p>
-                  } @else {
-                    @for (item of painel.pendentes; track item.slug) {
-                      <div class="portal-card">
-                        <div class="portal-card-info">
-                          <h4>{{ item.titulo }}</h4>
-                          @if (item.descricao) {
-                            <p>{{ item.descricao }}</p>
-                          }
-                          <span class="badge pending">Pendente</span>
-                        </div>
-                        <button type="button" class="guest-submit portal-card-action" (click)="abrirPendente(item)">
-                          Responder
-                        </button>
-                      </div>
-                    }
-                  }
-                </div>
-
-                <div class="portal-section">
-                  <div class="portal-section-title done">
-                    Já respondido
-                    <span class="portal-count">{{ painel.respondidas.length }}</span>
-                  </div>
-                  @if (!painel.respondidas.length) {
-                    <p class="portal-empty">Ainda não há formulários respondidos.</p>
-                  } @else {
-                    @for (item of painel.respondidas; track item.slug) {
-                      <div class="portal-card">
-                        <div class="portal-card-info">
-                          <h4>{{ item.titulo }}</h4>
-                          @if (item.descricao) {
-                            <p>{{ item.descricao }}</p>
-                          }
-                          <span class="badge done">Respondido</span>
-                        </div>
-                      </div>
-                    }
-                  }
-                </div>
-              </div>
-            }
-          </div>
-        </div>
-      </div>
+      <ng-container *ngTemplateOutlet="portalCard" />
     } @else if (payload(); as p) {
-      <app-pesquisas-guest-form
-        mode="answer"
-        [titulo]="p.titulo"
-        [descricao]="p.descricao"
-        [capaUrl]="p.capaUrl || null"
-        [capaLayout]="p.capaLayout || 'top'"
-        [template]="p.template || tpl()"
-        [perguntas]="visiveis()"
-        [secoes]="!!p.secoes"
-        [respostas]="respostasGuest()"
-        [enviando]="enviando()"
-        (valorChange)="onGuestValor($event)"
-        (arquivoChange)="onGuestArquivo($event)"
-        (enviar)="enviar()"
-      />
+      <ng-container *ngTemplateOutlet="formCard; context: { $implicit: p }" />
     }
   </div>
 </div>
+
+<ng-template #carrosselStage>
+  <div class="portal-bid-stage" aria-hidden="true">
+    @for (s of slides(); track s.imagemUrl; let i = $index) {
+      <div class="portal-bid-slide" [class.on]="slideAtivo() === i">
+        <div class="portal-bid-bg" [style.background-image]="'url(' + s.imagemUrl + ')'"></div>
+        @if (s.titulo) {
+          <div class="portal-bid-ct">
+            <h2>{{ s.titulo }}</h2>
+            @if (s.dataTexto) {
+              <p>{{ s.dataTexto }}</p>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</ng-template>
 
 <ng-template #gateCard>
   <div
@@ -222,5 +115,120 @@
         </button>
       </div>
     </div>
+  </div>
+</ng-template>
+
+<ng-template #portalCard>
+  <div
+    class="guest-frame"
+    [style.--tpl-primary]="tpl().corPrimaria"
+    [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+    [style.--tpl-radius.px]="tpl().raioPx"
+  >
+    @if (mostraCapa() && capaLayout() === 'top') {
+      <div class="zone-top is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
+    }
+    <div class="frame-middle">
+      @if (mostraCapa() && capaLayout() === 'left') {
+        <div class="zone-left is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
+      }
+      <div class="canvas-white">
+        <div class="canvas-title-block">
+          <app-pesquisas-marca-logos
+            [codigo]="tpl().codigo"
+            [wordmark]="tpl().wordmark"
+            [nome]="tpl().nome"
+          />
+          <h3 class="canvas-title">Seus formulários</h3>
+        </div>
+        @if (portal(); as painel) {
+          <div class="portal-body">
+            <p class="portal-welcome">
+              Olá, <b>{{ painel.nome || 'convidado' }}</b> — aqui estão os formulários vinculados ao seu
+              cadastro.
+            </p>
+
+            <div class="portal-section">
+              <div class="portal-section-title">
+                Para responder
+                <span class="portal-count">{{ painel.pendentes.length }}</span>
+              </div>
+              @if (!painel.pendentes.length) {
+                <p class="portal-empty">Nenhum formulário pendente — tudo em dia.</p>
+              } @else {
+                @for (item of painel.pendentes; track item.slug) {
+                  <div class="portal-card">
+                    <div class="portal-card-info">
+                      <h4>{{ item.titulo }}</h4>
+                      @if (item.descricao) {
+                        <p>{{ item.descricao }}</p>
+                      }
+                      <span class="badge pending">Pendente</span>
+                    </div>
+                    <button type="button" class="guest-submit portal-card-action" (click)="abrirPendente(item)">
+                      Responder
+                    </button>
+                  </div>
+                }
+              }
+            </div>
+
+            <div class="portal-section">
+              <div class="portal-section-title done">
+                Já respondido
+                <span class="portal-count">{{ painel.respondidas.length }}</span>
+              </div>
+              @if (!painel.respondidas.length) {
+                <p class="portal-empty">Ainda não há formulários respondidos.</p>
+              } @else {
+                @for (item of painel.respondidas; track item.slug) {
+                  <div class="portal-card">
+                    <div class="portal-card-info">
+                      <h4>{{ item.titulo }}</h4>
+                      @if (item.descricao) {
+                        <p>{{ item.descricao }}</p>
+                      }
+                      <span class="badge done">Respondido</span>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+      @if (mostraCapa() && capaLayout() === 'right') {
+        <div class="zone-right is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
+      }
+    </div>
+    @if (mostraCapa() && capaLayout() === 'bottom') {
+      <div class="zone-bottom is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
+    }
+  </div>
+</ng-template>
+
+<ng-template #formCard let-p>
+  <div class="portal-form-wrap">
+    @if (meta()?.exigirIdentidade) {
+      <button type="button" class="btn-back" (click)="voltarPainel()">
+        <app-pesq-icon name="arrow-left" [size]="14" />
+        Voltar
+      </button>
+    }
+    <app-pesquisas-guest-form
+      mode="answer"
+      [titulo]="p.titulo"
+      [descricao]="p.descricao"
+      [capaUrl]="p.capaUrl || capaUrl()"
+      [capaLayout]="p.capaLayout || capaLayout()"
+      [template]="p.template || tpl()"
+      [perguntas]="visiveis()"
+      [secoes]="!!p.secoes"
+      [respostas]="respostasGuest()"
+      [enviando]="enviando()"
+      (valorChange)="onGuestValor($event)"
+      (arquivoChange)="onGuestArquivo($event)"
+      (enviar)="enviar()"
+    />
   </div>
 </ng-template>

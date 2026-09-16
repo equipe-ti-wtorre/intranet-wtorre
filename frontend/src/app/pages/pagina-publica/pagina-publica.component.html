@@ -11,13 +11,15 @@
         <a routerLink="/inicio" class="btn-link">Voltar ao início</a>
       </div>
     } @else if (pagina(); as p) {
-      <div class="page-head">
-        <h1>{{ p.titulo }}</h1>
-        @if (p.descricao) {
-          <p class="descricao">{{ p.descricao }}</p>
-        }
-      </div>
-      <div class="conteudo">
+      @if (!ocultarCabecalho(p.slug)) {
+        <div class="page-head">
+          <h1>{{ p.titulo }}</h1>
+          @if (p.descricao) {
+            <p class="descricao">{{ p.descricao }}</p>
+          }
+        </div>
+      }
+      <div class="conteudo" [class.conteudo--sem-cabecalho]="ocultarCabecalho(p.slug)">
         <app-pagina-blocos-renderer [blocos]="p.blocos" [tituloPagina]="p.titulo" />
       </div>
     }

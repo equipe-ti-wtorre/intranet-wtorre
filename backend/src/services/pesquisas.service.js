@@ -647,12 +647,22 @@ function stripCapaSecrets(form) {
 
 async function resolveCapaUrl(form) {
   if (!form.capaContainer || !form.capaBlob) return null;
-  try {
-    const sas = await blobService.gerarSasLeitura(form.capaContainer, form.capaBlob);
-    return sas.url;
-  } catch {
-    return null;
+  let lastErr = null;
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const sas = await blobService.gerarSasLeitura(form.capaContainer, form.capaBlob);
+      if (sas?.url) return sas.url;
+    } catch (err) {
+      lastErr = err;
+    }
   }
+  console.error(
+    '[pesquisas] falha ao gerar SAS da capa:',
+    lastErr?.message || lastErr,
+    form.capaContainer,
+    form.capaBlob
+  );
+  return null;
 }
 
 function templateVisual(t) {
@@ -1270,13 +1280,30 @@ async function enviarResposta(req) {
   return { ok: true };
 }
 
-async function resultados(req) {
-  const id = parseId(req.params.id);
-  const form = await repo.findFormularioById(id);
+async function findFormularioByRef(raw) {
+  const s = String(raw ?? '').trim();
+  if (/^\d+$/.test(s)) {
+    const id = Number(s);
+    if (Number.isInteger(id) && id >= 1) {
+      const byId = await repo.findFormularioById(id);
+      if (byId) return byId;
+    }
+    if (s.length < 8) {
+      throw httpError(404, 'Formulário não encontrado.');
+    }
+  }
+  const slug = parseSlug(s);
+  const form = await repo.findFormularioBySlug(slug);
   if (!form) throw httpError(404, 'Formulário não encontrado.');
+  return form;
+}
+
+async function resultados(req) {
+  const form = await findFormularioByRef(req.params.id);
   if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
     throw httpError(403, 'Você não pode ver os resultados deste formulário.');
   }
+  const id = form.id;
   const perguntas = await repo.listPerguntas(id);
   const respostas = await repo.listRespostasDetalhadas(id);
   const convidados = form.publicoAlvo === 'externos' ? await repo.listConvidados(id) : [];

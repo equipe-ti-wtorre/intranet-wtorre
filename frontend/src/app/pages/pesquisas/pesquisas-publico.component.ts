@@ -6,6 +6,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
 import {
+  CapaLayout,
   PesquisasPergunta,
   PesquisasPortal,
   PesquisasPortalItem,
@@ -50,6 +51,12 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   readonly slides = signal<PesquisasEventoDestaque[]>([]);
   readonly slideAtivo = signal(0);
   readonly temSlides = computed(() => this.slides().length > 0);
+  readonly usaCarrossel = computed(() => {
+    const m = this.meta();
+    if (!this.temSlides() || !m) return false;
+    if (!m.exigirIdentidade && this.bloqueado()) return false;
+    return true;
+  });
   readonly respostasGuest = computed(() => {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(this.respostas())) out[k] = v;
@@ -58,7 +65,18 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   readonly tpl = computed<PesquisasTemplateVisual>(
     () => this.payload()?.template || this.meta()?.template || PESQUISAS_TPL_WTORRE
   );
-  readonly capaUrl = computed(() => this.payload()?.capaUrl || this.meta()?.capaUrl || null);
+  readonly capaUrl = computed(() => {
+    const raw = this.payload()?.capaUrl || this.meta()?.capaUrl || '';
+    return raw.trim() || null;
+  });
+  readonly capaLayout = computed<CapaLayout>(
+    () => this.payload()?.capaLayout || this.meta()?.capaLayout || 'top'
+  );
+  readonly capaQuebrouUrl = signal<string | null>(null);
+  readonly mostraCapa = computed(() => {
+    const url = this.capaUrl();
+    return !!url && this.capaQuebrouUrl() !== url;
+  });
   private guestToken: string | null = null;
   private lookupTimer: ReturnType<typeof setTimeout> | null = null;
   private lookupSeq = 0;
@@ -70,6 +88,11 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     const map = new Map(Object.entries(this.respostas()).map(([k, v]) => [Number(k), v]));
     return p.perguntas.filter((q) => this.visivel(q, p.perguntas, map));
   });
+
+  onCapaError(): void {
+    const url = this.capaUrl();
+    if (url) this.capaQuebrouUrl.set(url);
+  }
 
   ngOnInit(): void {
     this.carregarDestaques();
@@ -109,7 +132,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
         const list = (out.slides || []).filter((s) => !!s.imagemUrl);
         this.slides.set(list);
         this.slideAtivo.set(0);
-        if (this.passo() === 'gate') this.iniciarCarrossel();
+        this.iniciarCarrossel();
       },
       error: () => {
         this.slides.set([]);
@@ -241,7 +264,6 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   }
 
   private carregarPainel(): void {
-    this.pararCarrossel();
     const m = this.meta();
     const token = this.guestToken;
     if (!m || !token) {

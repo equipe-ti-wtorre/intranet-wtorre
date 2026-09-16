@@ -1,0 +1,88 @@
+@if (modo() === 'botao') {
+  <button type="button" class="btn-secondary" (click)="abrir()">
+    <app-pesq-icon name="printer" [size]="15" />
+    QR Code
+  </button>
+} @else {
+  <div class="modal-overlay" (click)="fechar()">
+    <div class="modal-card pesq-qr-modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title">QR Code</h3>
+          <p class="modal-sub">Imprima ou baixe para enviar ao convidado</p>
+        </div>
+        <button type="button" class="btn-close" (click)="fechar()" aria-label="Fechar">
+          <app-pesq-icon name="x" [size]="15" />
+        </button>
+      </div>
+
+      <div class="pesq-qr-block">
+        <div class="pesq-qr-actions">
+          <button type="button" class="btn-secondary" [disabled]="exportando()" (click)="imprimir()">
+            <app-pesq-icon name="printer" [size]="15" />
+            {{ exportando() ? 'Gerando…' : 'Imprimir' }}
+          </button>
+          <button type="button" class="btn-secondary" [disabled]="exportando()" (click)="baixarPdf()">
+            <app-pesq-icon name="download" [size]="15" />
+            {{ exportando() ? 'Gerando…' : 'Baixar PDF' }}
+          </button>
+        </div>
+
+        <div
+          class="table-tent"
+          [attr.data-marca]="tpl().codigo"
+          [style.--tpl-primary]="marcaCores().primaria"
+          [style.--tpl-primary-dark]="marcaCores().primariaEscura"
+          [style.--tpl-header]="marcaCores().header"
+          [style.--tpl-header-dark]="marcaCores().headerEscura"
+          [style.--tpl-body]="marcaCores().corpo"
+          [style.--tpl-body-text]="marcaCores().texto"
+          [style.--tpl-body-muted]="marcaCores().muted"
+          [style.--tpl-radius.px]="tpl().raioPx"
+        >
+          <div class="tent-header">
+            <div class="logo-slot">
+              @if (headerLogo(); as logo) {
+                <img [src]="logo.src" [alt]="tpl().nome" [class.logo-invert]="logo.invert" />
+              }
+            </div>
+          </div>
+          <div class="tent-body">
+            <p class="tent-instruction">
+              Obrigado por estar aqui! Conte como foi <b>sua experiência</b>.
+            </p>
+            <div class="qr-frame">
+              <span class="qr-corner tl"></span>
+              <span class="qr-corner tr"></span>
+              <span class="qr-corner bl"></span>
+              <span class="qr-corner br"></span>
+              <canvas #qrCanvas class="qr-box" width="170" height="170"></canvas>
+            </div>
+            <div class="scan-hint">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect
+                  x="3.5"
+                  y="6.5"
+                  width="17"
+                  height="12"
+                  rx="2.5"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                />
+                <circle cx="12" cy="12.5" r="3" stroke="currentColor" stroke-width="1.7" />
+                <path
+                  d="M8 6.5V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1.5"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+              </svg>
+              Aponte a câmera e escaneie
+            </div>
+            <div class="tent-footer">Sua opinião é importante pra gente</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+}

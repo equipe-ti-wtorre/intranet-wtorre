@@ -9,6 +9,9 @@ import { ContentRefreshService } from '../../services/content-refresh.service';
 import { Pagina } from '../../models/pagina.model';
 import { PaginaBlocosRendererComponent } from '../../shared/paginas/pagina-blocos-renderer.component';
 
+/** Páginas CMS que não exibem o título/descrição no topo (o conteúdo já se apresenta). */
+const SLUGS_SEM_CABECALHO = new Set(['agenda-rh', 'agenda_rh']);
+
 @Component({
   selector: 'app-pagina-publica',
   standalone: true,
@@ -24,6 +27,10 @@ export class PaginaPublicaComponent implements OnInit {
   readonly pagina = signal<Pagina | null>(null);
   readonly carregando = signal(true);
   readonly naoEncontrada = signal(false);
+
+  ocultarCabecalho(slug: string): boolean {
+    return SLUGS_SEM_CABECALHO.has(slug);
+  }
 
   constructor() {
     this.contentRefresh.paginasChanged$

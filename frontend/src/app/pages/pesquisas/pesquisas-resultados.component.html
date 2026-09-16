@@ -60,10 +60,19 @@
         <label>Link público</label>
         <div class="link-copy-row">
           <input type="text" [value]="linkPublico()" readonly />
-          <button type="button" class="btn-secondary" (click)="copiarLink()">
-            <app-pesq-icon name="link" [size]="15" />
-            Copiar
-          </button>
+          <div class="link-copy-actions">
+            <button type="button" class="btn-secondary" (click)="copiarLink()">
+              <app-pesq-icon name="link" [size]="15" />
+              Copiar
+            </button>
+            @if (linkPublico()) {
+              <app-pesquisas-qr-card
+                modo="botao"
+                [url]="linkPublico()"
+                (abertoChange)="qrAberto.set($event)"
+              />
+            }
+          </div>
         </div>
       </div>
       <p class="page-sub" style="margin-top: 14px">Convidados identificados por CPF ou CNPJ e e-mail.</p>
@@ -228,6 +237,17 @@
       }
     </div>
   </div>
+}
+
+@if (qrAberto() && linkPublico() && data(); as d) {
+  <app-pesquisas-qr-card
+    modo="dialogo"
+    [url]="linkPublico()"
+    [titulo]="d.formulario.titulo"
+    [dataLabel]="qrDataLabel(d.formulario)"
+    [template]="d.formulario.template || null"
+    (abertoChange)="qrAberto.set($event)"
+  />
 }
 
 @if (answerModal(); as modal) {

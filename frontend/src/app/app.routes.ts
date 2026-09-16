@@ -201,7 +201,7 @@ export const routes: Routes = [
           ),
       },
       {
-        path: 'formulario/:id/resultados',
+        path: 'formulario/:slug/resultados',
         loadComponent: () =>
           import('./pages/pesquisas/pesquisas-resultados.component').then(
             (m) => m.PesquisasResultadosComponent

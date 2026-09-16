@@ -11,6 +11,7 @@ import {
   STATUS_LABEL,
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
+import { pesquisasResultadosPath } from './shared/pesquisas-public-url';
 
 const LISTAS: ListaTipo[] = [
   'form-pending',
@@ -90,7 +91,7 @@ export class PesquisasListaComponent implements OnInit, OnDestroy {
       if (item.formStatus === 'rascunho') {
         void this.router.navigate(['/pesquisas/formulario', item.id, 'editar']);
       } else {
-        void this.router.navigate(['/pesquisas/formulario', item.id, 'resultados']);
+        void this.router.navigate(pesquisasResultadosPath(item));
       }
       return;
     }

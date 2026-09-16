@@ -21,6 +21,44 @@ export const PESQUISAS_TPL_WTORRE: PesquisasTemplateVisual = {
   raioPx: 10,
 };
 
+export interface PesquisasMarcaCores {
+  primaria: string;
+  primariaEscura: string;
+  header: string;
+  headerEscura: string;
+  headerDegrade: boolean;
+  corpo: string;
+  texto: string;
+  muted: string;
+}
+
+const MARCA_CORES: Record<string, PesquisasMarcaCores> = {
+  wtorre: {
+    primaria: '#0071CE',
+    primariaEscura: '#022B4C',
+    header: '#022B4C',
+    headerEscura: '#022B4C',
+    headerDegrade: false,
+    corpo: '#F2F2F2',
+    texto: '#022B4C',
+    muted: '#1F597C',
+  },
+  nubank: {
+    primaria: '#8D0DE3',
+    primariaEscura: '#420465',
+    header: '#8D0DE3',
+    headerEscura: '#420465',
+    headerDegrade: true,
+    corpo: '#C9E2BF',
+    texto: '#233240',
+    muted: '#5a6a58',
+  },
+};
+
+export function pesquisasMarcaCores(codigo?: string | null): PesquisasMarcaCores {
+  return MARCA_CORES[marcaId(codigo)] || MARCA_CORES['wtorre'];
+}
+
 function marcaId(codigo?: string | null): string {
   return String(codigo || '').trim().toLowerCase();
 }

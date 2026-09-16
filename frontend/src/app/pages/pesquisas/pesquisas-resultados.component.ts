@@ -10,11 +10,13 @@ import {
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
+import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
+import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
 
 @Component({
   selector: 'app-pesquisas-resultados',
   standalone: true,
-  imports: [PesqIconComponent],
+  imports: [PesqIconComponent, PesquisasQrCardComponent],
   templateUrl: './pesquisas-resultados.component.html',
 })
 export class PesquisasResultadosComponent implements OnInit {
@@ -23,6 +25,7 @@ export class PesquisasResultadosComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
+  readonly qrAberto = signal(false);
   readonly loading = signal(true);
   readonly agindo = signal(false);
   readonly data = signal<PesquisasResultados | null>(null);
@@ -37,12 +40,19 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   carregar(): void {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
+    const ref =
+      this.route.snapshot.paramMap.get('slug') || this.route.snapshot.paramMap.get('id') || '';
     this.loading.set(true);
-    this.api.resultados(id).subscribe({
+    this.api.resultados(ref).subscribe({
       next: (d) => {
         this.data.set(d);
         this.loading.set(false);
+        const slug = d.formulario.slug;
+        if (slug && ref !== slug) {
+          void this.router.navigate(['/pesquisas/formulario', slug, 'resultados'], {
+            replaceUrl: true,
+          });
+        }
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar os resultados.');
@@ -239,6 +249,10 @@ export class PesquisasResultadosComponent implements OnInit {
 
   linkPublico(): string {
     return pesquisasLinkPublico(this.data()?.formulario.slug);
+  }
+
+  qrDataLabel(form: { prazoInicio?: string | null; prazo?: string | null }): string {
+    return pesquisasQrDataLabel(form.prazoInicio || form.prazo);
   }
 
   async copiarLink(): Promise<void> {

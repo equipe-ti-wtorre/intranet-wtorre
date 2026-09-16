@@ -91,6 +91,11 @@ import { Component, Input } from '@angular/core';
           <path d="M12 4v10.5M8.3 11.2 12 14.9l3.7-3.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
           <path d="M4.5 16v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
         }
+        @case ('printer') {
+          <path d="M7 8.5V4h10v4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          <rect x="4.5" y="8.5" width="15" height="8" rx="1.5" stroke="currentColor" stroke-width="1.6" />
+          <path d="M7 15.5h10V20H7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+        }
         @case ('lock') {
           <rect x="5" y="10.5" width="14" height="9.5" rx="2.2" stroke="currentColor" stroke-width="1.7" />
           <path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
