@@ -15,17 +15,8 @@
   </button>
 </div>
 
-<div class="info-banner">
-  <app-pesq-icon name="megaphone" [size]="17" />
-  <span>
-    Ao publicar um formulário interno com <b>evento ativo</b>, o item vai para
-    <b>Comunicados</b> na intranet — é lá que os colaboradores respondem. Formulário
-    desativado não aparece no mural.
-  </span>
-</div>
-
 <div class="stat-row">
-  <div class="stat-chip">
+  <div class="stat-chip" style="--accent-grad: linear-gradient(135deg, #6366f1, #4338ca)">
     <div class="stat-icon" style="background: var(--review-bg); color: var(--review-fg)">
       <app-pesq-icon name="edit" />
     </div>
@@ -34,7 +25,7 @@
       <div class="stat-label">Itens criados</div>
     </div>
   </div>
-  <div class="stat-chip">
+  <div class="stat-chip" style="--accent-grad: linear-gradient(135deg, #22c55e, #15803d)">
     <div class="stat-icon" style="background: var(--done-bg); color: var(--done-fg)">
       <app-pesq-icon name="megaphone" />
     </div>
@@ -43,7 +34,7 @@
       <div class="stat-label">Publicados</div>
     </div>
   </div>
-  <div class="stat-chip">
+  <div class="stat-chip" style="--accent-grad: linear-gradient(135deg, #94a3b8, #54607a)">
     <div class="stat-icon" style="background: var(--draft-bg); color: var(--draft-fg)">
       <app-pesq-icon name="clock" />
     </div>
@@ -52,7 +43,7 @@
       <div class="stat-label">Rascunhos</div>
     </div>
   </div>
-  <div class="stat-chip">
+  <div class="stat-chip" style="--accent-grad: linear-gradient(135deg, #f59e0b, #b45309)">
     <div class="stat-icon" style="background: var(--pending-bg); color: var(--pending-fg)">
       <app-pesq-icon name="check" />
     </div>
@@ -65,9 +56,11 @@
 
 <div class="tabs">
   <button type="button" class="tab-btn" [class.active]="tab() === 'created'" (click)="setTab('created')">
+    <app-pesq-icon name="edit" [size]="14" />
     Criados por mim
   </button>
   <button type="button" class="tab-btn" [class.active]="tab() === 'mine'" (click)="setTab('mine')">
+    <app-pesq-icon name="eye" [size]="14" />
     Respondidos por mim
   </button>
 </div>
@@ -78,11 +71,23 @@
       <app-pesq-icon name="search" [size]="16" />
       <input
         type="search"
-        placeholder="Buscar por título..."
+        placeholder="Buscar por título ou categoria..."
         [value]="busca()"
         (input)="onBusca($any($event.target).value)"
       />
     </div>
+    <button type="button" class="filter-chip" [class.active]="filtroLista() === 'all'" (click)="filtroLista.set('all')">
+      Todos
+    </button>
+    <button type="button" class="filter-chip" [class.active]="filtroLista() === 'publicado'" (click)="filtroLista.set('publicado')">
+      Publicados
+    </button>
+    <button type="button" class="filter-chip" [class.active]="filtroLista() === 'rascunho'" (click)="filtroLista.set('rascunho')">
+      Rascunho
+    </button>
+    <button type="button" class="filter-chip" [class.active]="filtroLista() === 'desativado'" (click)="filtroLista.set('desativado')">
+      Desativado
+    </button>
   </div>
   <div class="list-card">
     @if (loadingLista()) {
@@ -96,6 +101,7 @@
       @for (item of criadosFiltrados(); track item.id) {
         <div class="list-row">
           <button type="button" class="list-row-main" (click)="abrirDashboard(item)">
+            <span class="badge" [class]="statusBadgeClass(item)">{{ statusBadgeText(item) }}</span>
             <div class="row-icon">
               <app-pesq-icon name="file-text" />
             </div>
@@ -106,7 +112,7 @@
                 <span>·</span>
                 <span>{{ janelaRotulo(item) }}</span>
                 @if (item.publicoAlvo === 'externos') {
-                  <span class="badge exec">Externo (sem Comunicados)</span>
+                  <span class="badge exec">Externo</span>
                 }
                 @if (item.eventoAtivo === false) {
                   <span class="badge recusada">Evento desativado</span>
@@ -119,8 +125,6 @@
                 <div class="progress-fill" [style.width.%]="formPct(item)"></div>
               </div>
             </div>
-            <span class="badge" [class]="statusBadgeClass(item)">{{ statusBadgeText(item) }}</span>
-            <span class="chev-right"><app-pesq-icon name="chevron-right" [size]="15" /></span>
           </button>
           <button
             type="button"
@@ -131,6 +135,9 @@
           >
             <app-pesq-icon name="copy" [size]="13" />
             Clonar
+          </button>
+          <button type="button" class="chev-right" (click)="abrirDashboard(item)" aria-label="Abrir resultados">
+            <app-pesq-icon name="chevron-right" [size]="15" />
           </button>
         </div>
       }

@@ -3,11 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
-import {
-  PesquisasResultadoPergunta,
-  PesquisasResultados,
-  PesquisasSerieDia,
-} from '../../models/pesquisas.model';
+import { PesquisasResultadoPergunta, PesquisasResultados } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
@@ -66,9 +62,41 @@ export class PesquisasResultadosComponent implements OnInit {
     return 'Formulário';
   }
 
+  eventoTipoLabel(): string {
+    const form = this.data()?.formulario;
+    if (!form) return '—';
+    if (form.eventoTipo === 'outro') return form.eventoTipoOutro?.trim() || 'Outro';
+    if (form.eventoTipo === 'jogo') return 'Jogo';
+    if (form.eventoTipo === 'show') return 'Show';
+    return form.eventoTipo || '—';
+  }
+
+  totalConvidados(): number {
+    const d = this.data();
+    if (!d) return 0;
+    const lista = d.formulario.convidados?.length || 0;
+    return lista || d.publicoAlvoTotal || 0;
+  }
+
+  deptBreakdown(): { label: string; value: number; pct: number }[] {
+    const d = this.data();
+    if (!d || d.formulario.anonimo) return [];
+    const counts = new Map<string, number>();
+    for (const r of d.respondentes) {
+      const label = (r.dept || '').trim() || 'Outros';
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    const entries = [...counts.entries()]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+    const max = Math.max(1, ...entries.map((e) => e.value));
+    return entries.map((e) => ({ ...e, pct: Math.round((100 * e.value) / max) }));
+  }
+
   statusClass(): string {
     const form = this.data()?.formulario;
     if (form?.status === 'publicado' && form.janela === 'depois') return 'closed';
+    if (form?.status === 'publicado' && form.janela === 'antes') return 'review';
     if (form?.status === 'publicado') return 'done';
     if (form?.status === 'rascunho') return 'draft';
     return 'closed';
@@ -88,47 +116,31 @@ export class PesquisasResultadosComponent implements OnInit {
     return Math.round((count / total) * 100);
   }
 
-  escalaBars(q: PesquisasResultadoPergunta): { label: string; pct: number }[] {
+  escalaBars(q: PesquisasResultadoPergunta): { label: string; pct: number; count: number }[] {
     const dist = q.agregados.dist || [1, 2, 3, 4, 5].map((n) => {
       const found = q.agregados.opcoes?.find((o) => o.valor === String(n));
       return found?.count || 0;
     });
     const total = dist.reduce((a, b) => a + b, 0) || 1;
-    return dist.map((c, i) => ({ label: `Nota ${i + 1}`, pct: Math.round((100 * c) / total) }));
+    return dist.map((c, i) => ({
+      label: `Nota ${i + 1}`,
+      pct: Math.round((100 * c) / total),
+      count: c,
+    }));
   }
 
-  choiceBars(q: PesquisasResultadoPergunta): { label: string; pct: number }[] {
+  choiceBars(q: PesquisasResultadoPergunta): { label: string; pct: number; count: number }[] {
     const ops = q.agregados.opcoes || [];
     const total = ops.reduce((a, o) => a + o.count, 0) || 1;
-    return ops.map((o) => ({ label: o.valor, pct: Math.round((100 * o.count) / total) }));
+    return ops.map((o) => ({
+      label: o.valor,
+      pct: Math.round((100 * o.count) / total),
+      count: o.count,
+    }));
   }
 
   samples(q: PesquisasResultadoPergunta): string[] {
     return q.respostas.map((r) => r.valor).filter(Boolean).slice(0, 8);
-  }
-
-  chartBars(): { x: number; y: number; w: number; h: number; label: string; value: number; op: number }[] {
-    const series: PesquisasSerieDia[] = this.data()?.dailySeries || [];
-    const w = 560;
-    const h = 170;
-    const pad = 26;
-    const max = Math.max(1, ...series.map((s) => s.value));
-    const gap = series.length ? (w - pad * 2) / series.length : 0;
-    const bw = gap * 0.55;
-    return series.map((s, i) => {
-      const bh = Math.round((h - pad * 2) * (s.value / max));
-      const x = pad + i * gap + (gap - bw) / 2;
-      const y = h - pad - Math.max(bh, 2);
-      return {
-        x,
-        y,
-        w: bw,
-        h: Math.max(bh, 2),
-        label: s.label,
-        value: s.value,
-        op: 0.5 + 0.5 * (s.value / max),
-      };
-    });
   }
 
   podeEditar(): boolean {
@@ -140,30 +152,6 @@ export class PesquisasResultadosComponent implements OnInit {
   editar(): void {
     const id = this.data()?.formulario.id;
     if (id) void this.router.navigate(['/pesquisas/formulario', id, 'editar']);
-  }
-
-  async clonar(): Promise<void> {
-    const d = this.data();
-    if (!d || this.agindo()) return;
-    const ok = await this.alertas.confirmar({
-      titulo: `Clonar “${d.formulario.titulo}”?`,
-      texto:
-        'Será criada uma cópia em rascunho com o mesmo layout, perguntas e dados importados. Você poderá editar e publicar.',
-      confirmar: 'Clonar',
-    });
-    if (!ok) return;
-    this.agindo.set(true);
-    this.api.clonarFormulario(d.formulario.id).subscribe({
-      next: (form) => {
-        this.agindo.set(false);
-        this.alertas.sucesso('Cópia criada. Ajuste o que quiser e publique.');
-        void this.router.navigate(['/pesquisas/formulario', form.id, 'editar']);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.agindo.set(false);
-        this.alertas.erro(err.error?.mensagem || 'Não foi possível clonar o formulário.');
-      },
-    });
   }
 
   exportar(): void {

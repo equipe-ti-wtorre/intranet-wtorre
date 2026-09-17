@@ -31,6 +31,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
   readonly loadingLista = signal(true);
   readonly clonandoId = signal<number | null>(null);
   readonly tab = signal<'created' | 'mine'>('created');
+  readonly filtroLista = signal<'all' | 'publicado' | 'rascunho' | 'desativado'>('all');
   readonly busca = signal('');
   readonly criados = signal<PesquisasListItem[]>([]);
   readonly respondidos = signal<PesquisasListItem[]>([]);
@@ -55,9 +56,14 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
 
   readonly criadosFiltrados = computed(() => {
     const q = this.busca().trim().toLowerCase();
+    const filtro = this.filtroLista();
     return this.criados().filter((it) => {
       if (it.kind !== 'formulario') return false;
-      return !q || it.title.toLowerCase().includes(q);
+      if (filtro === 'publicado' && it.formStatus !== 'publicado') return false;
+      if (filtro === 'rascunho' && it.formStatus !== 'rascunho') return false;
+      if (filtro === 'desativado' && it.eventoAtivo !== false) return false;
+      const cat = (it.category || '').toLowerCase();
+      return !q || it.title.toLowerCase().includes(q) || cat.includes(q);
     });
   });
 
@@ -102,6 +108,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
 
   statusBadgeClass(item: PesquisasListItem): string {
     if (item.formStatus === 'publicado' && item.janela === 'depois') return 'closed';
+    if (item.formStatus === 'publicado' && item.janela === 'antes') return 'review';
     if (item.formStatus === 'publicado') return 'done';
     if (item.formStatus === 'rascunho') return 'draft';
     return 'closed';
