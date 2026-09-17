@@ -13,6 +13,8 @@
             <p class="page-sub portal-bid-loading">Carregando…</p>
           } @else if (passo() === 'form' && payload(); as p) {
             <ng-container *ngTemplateOutlet="formCard; context: { $implicit: p }" />
+          } @else if (passo() === 'done') {
+            <ng-container *ngTemplateOutlet="doneCard" />
           } @else if (meta()?.exigirIdentidade && passo() === 'gate') {
             <ng-container *ngTemplateOutlet="gateCard" />
           } @else if (meta()?.exigirIdentidade && passo() === 'portal') {
@@ -50,6 +52,8 @@
       </div>
     } @else if (passo() === 'form' && payload(); as p) {
       <ng-container *ngTemplateOutlet="formCard; context: { $implicit: p }" />
+    } @else if (passo() === 'done') {
+      <ng-container *ngTemplateOutlet="doneCard" />
     } @else if (meta()?.exigirIdentidade && passo() === 'gate') {
       <ng-container *ngTemplateOutlet="gateCard" />
     } @else if (meta()?.exigirIdentidade && passo() === 'portal') {
@@ -183,6 +187,14 @@
         }
       </div>
     </div>
+  </div>
+</ng-template>
+
+<ng-template #doneCard>
+  <div class="guest-frame gate-glass">
+    <h1 class="gate-title">Resposta enviada</h1>
+    <hr class="gate-rule" />
+    <p class="gate-lede">Obrigado. Sua resposta foi registrada.</p>
   </div>
 </ng-template>
 

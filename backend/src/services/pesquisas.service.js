@@ -165,8 +165,9 @@ function isBlocoPergunta(p) {
   return !p.blocoTipo || p.blocoTipo === 'pergunta';
 }
 
-function normalizePerguntas(raw, { logicaOn, secoesOn }) {
+function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
   if (!Array.isArray(raw) || !raw.length) {
+    if (allowEmpty) return [];
     throw httpError(400, 'Inclua ao menos um campo no formulário.');
   }
   return raw.map((p, idx) => {
@@ -255,6 +256,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
   const perguntas = normalizePerguntas(body.perguntas, {
     logicaOn: logicaCondicional,
     secoesOn: secoes,
+    allowEmpty: !!body._allowEmptyPerguntas,
   });
   let eventoTipo = null;
   let eventoTipoOutro = null;
@@ -941,7 +943,7 @@ async function clonarFormulario(req) {
 
 async function salvarFormulario(req, { publicar }) {
   const body = normalizeFormBody(
-    { ...req.body, _allowEmptyTitle: !publicar },
+    { ...req.body, _allowEmptyTitle: !publicar, _allowEmptyPerguntas: !publicar },
     { criadorId: req.user.id }
   );
   body.templateCodigo = await resolveTemplateCodigo(req.body?.templateCodigo);

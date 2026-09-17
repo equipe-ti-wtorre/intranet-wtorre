@@ -928,7 +928,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     return {
       titulo: this.titulo().trim(),
       descricao: this.descricao().trim(),
-      categoria: '',
+      categoria: this.categoria().trim(),
       prazoInicio: this.combineDateTime(this.prazoInicioData(), this.prazoInicioHora()),
       prazoFim: this.combineDateTime(this.prazoFimData(), this.prazoFimHora()),
       prazoInicioData: this.prazoInicioData() || null,
@@ -938,8 +938,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       publicoAlvo: this.publicoAlvo(),
       publicoDepartamento: this.publicoDepartamento(),
       tipo: 'avancado',
-      secoes: false,
-      logicaCondicional: false,
+      secoes: this.secoes(),
+      logicaCondicional: this.logica(),
       anonimo: this.anonimo(),
       eventoTipo: this.eventoTipo(),
       eventoTipoOutro: this.eventoTipoOutro().trim(),
@@ -970,7 +970,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         ajuda: p.ajuda,
         novaLinha: p.novaLinha,
         secaoTitulo: p.secaoTitulo,
-        logica: null,
+        logica:
+          this.logica() && idx > 0
+            ? { perguntaOrdem: idx, condicao: p.logicaCondicao }
+            : null,
       })),
     };
   }

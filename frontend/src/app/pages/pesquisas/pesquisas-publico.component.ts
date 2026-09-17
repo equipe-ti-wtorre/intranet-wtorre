@@ -21,7 +21,7 @@ import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-bas
 import { formatDocumento } from './shared/pesquisas-documento.util';
 import { PESQUISAS_TPL_WTORRE } from './shared/pesquisas-marca.util';
 
-type PassoPublico = 'gate' | 'portal' | 'form';
+type PassoPublico = 'gate' | 'portal' | 'form' | 'done';
 
 const GUEST_TOKEN_KEY = 'pesquisas.guestToken';
 
@@ -266,8 +266,11 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
         this.payload.set(null);
         this.respostas.set({});
         this.anexos.set({});
-        this.passo.set('portal');
-        this.carregarPainel();
+        const comIdentidade = !!this.meta()?.exigirIdentidade && !!this.guestToken;
+        const passo = comIdentidade ? 'portal' : 'done';
+        this.passo.set(passo);
+        if (comIdentidade) this.carregarPainel();
+        else this.loading.set(false);
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível enviar a resposta.');
@@ -293,6 +296,10 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     const m = this.meta();
     const token = this.guestToken;
     if (!m || !token) {
+      if (this.passo() === 'done') {
+        this.loading.set(false);
+        return;
+      }
       this.passo.set('gate');
       this.loading.set(false);
       this.carregarDestaques();
