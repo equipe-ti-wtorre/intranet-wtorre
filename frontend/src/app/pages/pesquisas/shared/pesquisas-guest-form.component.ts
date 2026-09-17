@@ -38,7 +38,7 @@ export class PesquisasGuestFormComponent {
   readonly blocosReorder = output<GuestReorderEvent>();
   readonly enviar = output<void>();
 
-  readonly escala = [1, 2, 3, 4, 5];
+  readonly escala = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   readonly rows = computed(() => this.groupRows(this.perguntas()));
 
   readonly tpl = computed(() => this.template() || PESQUISAS_TPL_WTORRE);
@@ -107,6 +107,11 @@ export class PesquisasGuestFormComponent {
 
   setValor(key: string, valor: string): void {
     this.valorChange.emit({ key, valor });
+  }
+
+  escalaPintada(key: string, n: number): boolean {
+    const atual = Number(this.respostas()[key]);
+    return Number.isFinite(atual) && atual >= n;
   }
 
   onFile(key: string, ev: Event): void {

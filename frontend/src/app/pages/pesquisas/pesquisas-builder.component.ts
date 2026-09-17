@@ -112,10 +112,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly eventoAtivo = signal(true);
   readonly exigirIdentidade = signal(true);
   readonly convidados = signal<GuestDraft[]>([]);
-  readonly convidadosFonte = signal<'planilha' | 'manual'>('manual');
-  readonly planilhaResumo = signal<{ total: number; ignoradas: number } | null>(null);
   readonly temBaseSalva = signal(false);
-  readonly temBaseSessao = signal(false);
   readonly guestNome = signal('');
   readonly guestCpf = signal('');
   readonly guestEmail = signal('');
@@ -127,7 +124,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly capaLayout = signal<CapaLayout>('left');
   readonly passo = signal<'layout' | 'builder'>('layout');
   readonly menuAddOpen = signal(false);
-  readonly previewExpandido = signal(false);
   readonly qrAberto = signal(false);
   readonly previewRespostas = signal<Record<string, string>>({});
   private capaPendente: File | null = null;
@@ -225,13 +221,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.exigirIdentidade.set(form.exigirIdentidade !== false);
           this.convidados.set((form.convidados || []).map((g) => this.fromGuestApi(g)));
           this.temBaseSalva.set((form.baseResumo?.total || 0) > 0);
-          this.convidadosFonte.set(
-            form.publicoAlvo === 'externos' &&
-              !(form.convidados || []).length &&
-              (form.baseResumo?.total || 0) > 0
-              ? 'planilha'
-              : 'manual'
-          );
           this.perguntas.set((form.perguntas || []).map((p) => this.fromApi(p)));
           this.templateCodigo.set(form.template?.codigo || form.templateCodigo || 'wtorre');
           this.capaUrl.set(form.capaUrl || null);
@@ -296,7 +285,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   onPreviewValor(ev: { key: string; valor: string }): void {
     this.previewRespostas.update((r) => ({ ...r, [ev.key]: ev.valor }));
     const q = this.previewPerguntas().find((p) => String(p.id) === ev.key);
-    if (!q || !isChaveHeader(q.texto) || !this.baseLinhas?.length) return;
+    if (
+      this.publicoAlvo() !== 'externos' ||
+      !q ||
+      !isChaveHeader(q.texto) ||
+      !this.baseLinhas?.length
+    ) {
+      return;
+    }
     if (this.previewLookupTimer) clearTimeout(this.previewLookupTimer);
     this.previewLookupTimer = setTimeout(() => {
       if (!lookupPronto(ev.valor)) return;
@@ -347,11 +343,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   abrirGaleria(): void {
     this.passo.set('layout');
-    this.previewExpandido.set(false);
-  }
-
-  togglePreview(): void {
-    this.previewExpandido.update((v) => !v);
   }
 
   addBloco(tipo: BlocoTipo): void {
@@ -569,61 +560,21 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     this.guestCpf.set(formatDocumento(raw));
   }
 
+  async exportarModeloConvidados(): Promise<void> {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([['CPF/CNPJ', 'Nome', 'Email']]);
+    ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 32 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Convidados');
+    XLSX.writeFile(wb, 'modelo-convidados.xlsx');
+  }
+
   onPublicoAlvoChange(value: PublicoAlvo): void {
     this.publicoAlvo.set(value);
-    if (value === 'externos' && this.baseLinhas?.length) {
-      this.convidadosFonte.set('planilha');
-      this.syncConvidadosDaPlanilha({ toast: true });
+    if (value !== 'externos') {
+      this.baseLinhas = null;
+      this.temBaseSalva.set(false);
     }
-  }
-
-  async escolherFonteConvidados(fonte: 'planilha' | 'manual'): Promise<void> {
-    if (fonte === this.convidadosFonte()) return;
-    if (fonte === 'planilha') {
-      if (this.convidados().length && this.convidadosFonte() === 'manual') {
-        const ok = await this.alertas.confirmar({
-          titulo: 'Substituir a lista?',
-          texto: 'Os convidados atuais serão substituídos pelas pessoas da planilha importada em Campos.',
-          confirmar: 'Usar planilha',
-        });
-        if (!ok) return;
-      }
-      this.convidadosFonte.set('planilha');
-      this.syncConvidadosDaPlanilha({ toast: true });
-      return;
-    }
-    this.convidadosFonte.set('manual');
-  }
-
-  podeRemoverConvidado(): boolean {
-    return this.convidadosFonte() !== 'planilha' || this.temBaseSessao();
-  }
-
-  private syncConvidadosDaPlanilha(opts?: { toast?: boolean }): boolean {
-    if (!this.baseLinhas?.length) {
-      this.planilhaResumo.set(null);
-      return false;
-    }
-    const { guests, ignoradas } = extractGuestsFromRows(this.baseLinhas);
-    this.convidados.set(guests.map((g) => this.fromExtractedGuest(g)));
-    this.planilhaResumo.set({ total: guests.length, ignoradas });
-    if (opts?.toast) {
-      if (!guests.length) {
-        this.alertas.erro(
-          'A planilha precisa de colunas de CPF/CNPJ e e-mail para cadastrar convidados.'
-        );
-      } else {
-        const extra = ignoradas
-          ? ` ${ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
-          : '';
-        this.alertas.sucesso(
-          guests.length === 1
-            ? `1 convidado cadastrado a partir da planilha.${extra}`
-            : `${guests.length} convidados cadastrados a partir da planilha.${extra}`
-        );
-      }
-    }
-    return guests.length > 0;
   }
 
   private fromExtractedGuest(g: { nome: string; cpf: string; email: string }): GuestDraft {
@@ -688,10 +639,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   removeConvidado(key: number): void {
     this.convidados.update((list) => list.filter((g) => g.key !== key));
-    const r = this.planilhaResumo();
-    if (r && this.convidadosFonte() === 'planilha') {
-      this.planilhaResumo.set({ total: Math.max(0, this.convidados().length), ignoradas: r.ignoradas });
-    }
   }
 
   async copiarLink(): Promise<void> {
@@ -711,7 +658,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   voltar(): void {
     if (this.passo() === 'builder' && !this.formId()) {
       this.passo.set('layout');
-      this.previewExpandido.set(false);
       return;
     }
     if (this.passo() === 'layout' && this.formId()) {
@@ -731,14 +677,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       return;
     }
     if (publicar && this.publicoAlvo() === 'externos') {
-      const temLista = this.convidados().length > 0;
-      const planilhaPendente = this.convidadosFonte() === 'planilha' && this.temBaseSalva();
-      if (!temLista && !planilhaPendente) {
-        this.alertas.erro(
-          this.convidadosFonte() === 'planilha'
-            ? 'Importe a planilha em Campos para cadastrar os convidados antes de publicar.'
-            : 'Inclua ao menos um convidado para publicar o formulário externo.'
-        );
+      if (!this.convidados().length) {
+        this.alertas.erro('Inclua ao menos um convidado para publicar o formulário externo.');
         return;
       }
     }
@@ -878,57 +818,43 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   private importRowsIntoForm(rows: Record<string, unknown>[]): void {
     const first = rows[0];
-    const titleFields = ['titulo', 'título', 'nome do evento', 'evento'];
+    const titleHints = new Set(['titulo', 'título', 'nome do evento', 'evento']);
     let created = 0;
     const headers = Object.keys(first).slice(0, 40);
     for (const header of headers) {
-      const norm = header.trim().toLowerCase();
-      if (titleFields.includes(norm)) {
-        if (!this.titulo().trim()) this.titulo.set(String(first[header] ?? '').trim());
-        continue;
+      const label = header.trim();
+      if (!label) continue;
+      const norm = label.toLowerCase();
+      if (titleHints.has(norm) && !this.titulo().trim()) {
+        this.titulo.set(String(first[header] ?? '').trim());
       }
       const exists = this.perguntas().some(
         (p) => p.blocoTipo === 'pergunta' && p.texto.trim().toLowerCase() === norm
       );
       if (exists) continue;
       const card = this.novoBloco('pergunta');
-      card.texto = header;
+      card.texto = label;
       this.perguntas.update((list) => [...list, card]);
       created += 1;
     }
-    this.baseLinhas = rows.map((row) => {
-      const out: Record<string, unknown> = {};
-      for (const h of headers) out[h] = row[h];
-      return out;
-    });
-    this.temBaseSessao.set(true);
-    this.temBaseSalva.set(true);
-    const syncGuests =
-      this.publicoAlvo() === 'externos' &&
-      (this.convidadosFonte() === 'planilha' || !this.convidados().length);
-    if (syncGuests) {
-      this.convidadosFonte.set('planilha');
-      const ok = this.syncConvidadosDaPlanilha();
-      const extra = this.planilhaResumo();
-      const guestsPart = extra?.total
-        ? ` ${extra.total} convidado(s) cadastrado(s) da planilha.`
-        : '';
-      const ignoradas = extra?.ignoradas
-        ? ` ${extra.ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
-        : '';
+    const externo = this.publicoAlvo() === 'externos';
+    if (externo) {
+      this.baseLinhas = rows.map((row) => {
+        const out: Record<string, unknown> = {};
+        for (const h of headers) out[h] = row[h];
+        return out;
+      });
+      this.temBaseSalva.set(true);
       this.alertas.sucesso(
-        `${created} pergunta(s) e ${rows.length} linha(s) importadas.${guestsPart}${ignoradas}`
+        created === 1
+          ? `1 campo e ${rows.length} linha(s) importados.`
+          : `${created} campos e ${rows.length} linha(s) importados.`
       );
-      if (!ok) {
-        this.alertas.erro(
-          'A planilha precisa de colunas de CPF/CNPJ e e-mail para cadastrar convidados.'
-        );
-      }
-    } else {
-      this.alertas.sucesso(
-        `${created} pergunta(s) e ${rows.length} linha(s) importadas. CPF/e-mail preenchem o resto.`
-      );
+      return;
     }
+    this.baseLinhas = null;
+    this.temBaseSalva.set(false);
+    this.alertas.sucesso(created === 1 ? '1 campo importado.' : `${created} campos importados.`);
   }
 
   private fromGuestApi(g: PesquisasConvidado): GuestDraft {
@@ -1021,8 +947,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       exigirIdentidade: this.exigirIdentidade(),
       templateCodigo: this.templateCodigo(),
       capaLayout: this.capaLayout(),
-      convidadosFonte: this.convidadosFonte(),
-      ...(this.baseLinhas ? { base: this.baseLinhas } : {}),
+      convidadosFonte: 'manual',
+      base: this.publicoAlvo() === 'externos' ? this.baseLinhas || undefined : [],
       convidados: this.convidados().map((g) => ({
         id: g.id,
         nome: g.nome,

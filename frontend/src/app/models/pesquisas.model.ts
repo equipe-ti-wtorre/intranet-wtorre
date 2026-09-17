@@ -235,6 +235,7 @@ export interface PesquisasAprovador {
 }
 
 export interface PesquisasPublicoMeta {
+  hub?: boolean;
   slug: string;
   titulo: string;
   descricao: string;
@@ -254,6 +255,7 @@ export interface PesquisasPortalItem {
   slug: string;
   titulo: string;
   descricao: string;
+  marca?: string;
   prazoFim?: string | null;
   respondidoEm?: string | null;
 }

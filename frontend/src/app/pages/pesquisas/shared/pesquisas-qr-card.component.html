@@ -1,7 +1,7 @@
 @if (modo() === 'botao') {
   <button type="button" class="btn-secondary" (click)="abrir()">
     <app-pesq-icon name="printer" [size]="15" />
-    QR Code
+    {{ rotulo() }}
   </button>
 } @else {
   <div class="modal-overlay" (click)="fechar()">
@@ -9,7 +9,7 @@
       <div class="modal-head">
         <div>
           <h3 class="modal-title">QR Code</h3>
-          <p class="modal-sub">Imprima ou baixe para enviar ao convidado</p>
+          <p class="modal-sub">{{ subtitulo() }}</p>
         </div>
         <button type="button" class="btn-close" (click)="fechar()" aria-label="Fechar">
           <app-pesq-icon name="x" [size]="15" />

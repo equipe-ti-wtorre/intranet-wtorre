@@ -101,13 +101,6 @@
   @if (d.formulario.publicoAlvo === 'externos') {
     <div class="form-card">
       <h3><app-pesq-icon name="link" [size]="17" /> Convite para convidados externos</h3>
-      <div class="ext-callout" style="margin-top: 0; margin-bottom: 16px">
-        <app-pesq-icon name="alert" [size]="16" />
-        <span>
-          Público externo · Tipo de evento: <b>{{ eventoTipoLabel() }}</b> — este formulário
-          <b>não</b> aparece no mural de Comunicados da intranet.
-        </span>
-      </div>
       <div class="badge-row" style="margin-bottom: 18px">
         <span class="badge" [class.done]="d.formulario.eventoAtivo !== false" [class.closed]="d.formulario.eventoAtivo === false">
           {{ d.formulario.eventoAtivo === false ? 'Evento desativado' : 'Evento ativo' }}

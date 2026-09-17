@@ -128,7 +128,7 @@
                           @for (n of escala; track n) {
                             <button
                               type="button"
-                              [class.selected]="respostas()[keyOf(q, i)] === '' + n"
+                              [class.selected]="escalaPintada(keyOf(q, i), n)"
                               (click)="setValor(keyOf(q, i), '' + n)"
                             >
                               {{ n }}

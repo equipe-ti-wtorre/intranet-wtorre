@@ -3,9 +3,9 @@
     @if (usaCarrossel()) {
       <div
         class="portal-bid"
-        [style.--tpl-primary]="tpl().corPrimaria"
-        [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
-        [style.--tpl-radius.px]="tpl().raioPx"
+        [style.--tpl-primary]="chromeTpl.corPrimaria"
+        [style.--tpl-primary-dark]="chromeTpl.corPrimariaEscura"
+        [style.--tpl-radius.px]="chromeTpl.raioPx"
       >
         <ng-container *ngTemplateOutlet="carrosselStage" />
         <div class="portal-bid-panel" [class.portal-bid-panel-gate]="passo() === 'gate'">
@@ -18,6 +18,13 @@
           } @else if (meta()?.exigirIdentidade && passo() === 'portal') {
             <ng-container *ngTemplateOutlet="portalCard" />
           }
+        </div>
+        <div class="portal-bid-foot">
+          <div class="portal-bid-brands">
+            <img src="/logos/login/logo_nubankparque.svg" alt="Nubank Parque" />
+            <span class="portal-bid-brands-sep" aria-hidden="true"></span>
+            <img class="portal-bid-brand-wtorre" src="/logos/login/wtorre.svg" alt="WTorre" />
+          </div>
         </div>
       </div>
     } @else if (loading() && passo() !== 'form') {
@@ -36,11 +43,6 @@
       >
         <div class="canvas-white">
           <div class="canvas-title-block">
-            <app-pesquisas-marca-logos
-              [codigo]="tpl().codigo"
-              [wordmark]="tpl().wordmark"
-              [nome]="tpl().nome"
-            />
             <h3 class="canvas-title">{{ meta()?.titulo || 'Formulário' }}</h3>
             <p class="guest-q-help" style="margin-top: 6px">{{ msg }}</p>
           </div>
@@ -77,44 +79,28 @@
 </ng-template>
 
 <ng-template #gateCard>
-  <div
-    class="guest-frame"
-    [style.--tpl-primary]="tpl().corPrimaria"
-    [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
-    [style.--tpl-radius.px]="tpl().raioPx"
-  >
-    <div class="canvas-white">
-      <div class="canvas-title-block">
-        <app-pesquisas-marca-logos
-          [codigo]="tpl().codigo"
-          [wordmark]="tpl().wordmark"
-          [nome]="tpl().nome"
-        />
-        <h3 class="canvas-title">Portal do Convidado</h3>
-      </div>
-      <div class="portal-gate">
-        <p class="portal-welcome">
-          Informe <b>CPF, CNPJ ou e-mail</b> cadastrados para ver seus formulários — qualquer um dos três já
-          libera o acesso.
-        </p>
-        <div class="field" style="margin-top: 0">
-          <label>CPF, CNPJ ou e-mail</label>
-          <input
-            class="guest-input"
-            type="text"
-            [ngModel]="identificador()"
-            (ngModelChange)="formatIdentificador($event)"
-            placeholder="Digite aqui..."
-            autocomplete="off"
-            (keydown.enter)="verificar()"
-          />
-          <p class="portal-hint">Apenas números para CPF/CNPJ, ou o e-mail completo.</p>
-        </div>
-        <button type="button" class="guest-submit" [disabled]="verificando()" (click)="verificar()">
-          Entrar
-        </button>
-      </div>
-    </div>
+  <div class="guest-frame gate-glass">
+    <h1 class="gate-title">Portal do Convidado</h1>
+    <hr class="gate-rule" />
+    <p class="gate-lede">Informe os dados cadastrados para ver seus formulários.</p>
+    <label class="gate-label" for="gateIdInput">CPF, CNPJ ou e-mail</label>
+    <input
+      id="gateIdInput"
+      class="gate-input"
+      type="text"
+      [ngModel]="identificador()"
+      (ngModelChange)="formatIdentificador($event)"
+      placeholder="Digite aqui..."
+      autocomplete="off"
+      (keydown.enter)="verificar()"
+    />
+    <button type="button" class="gate-btn" [disabled]="verificando()" (click)="verificar()">
+      @if (verificando()) {
+        <span class="gate-spin"></span>Verificando
+      } @else {
+        Entrar
+      }
+    </button>
   </div>
 </ng-template>
 
@@ -126,24 +112,12 @@
     </button>
     <div
       class="guest-frame"
-      [style.--tpl-primary]="tpl().corPrimaria"
-      [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
-      [style.--tpl-radius.px]="tpl().raioPx"
+      [style.--tpl-primary]="chromeTpl.corPrimaria"
+      [style.--tpl-primary-dark]="chromeTpl.corPrimariaEscura"
+      [style.--tpl-radius.px]="chromeTpl.raioPx"
     >
-    @if (mostraCapa() && capaLayout() === 'top') {
-      <div class="zone-top is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
-    }
-    <div class="frame-middle">
-      @if (mostraCapa() && capaLayout() === 'left') {
-        <div class="zone-left is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
-      }
       <div class="canvas-white">
         <div class="canvas-title-block">
-          <app-pesquisas-marca-logos
-            [codigo]="tpl().codigo"
-            [wordmark]="tpl().wordmark"
-            [nome]="tpl().nome"
-          />
           <h3 class="canvas-title">Seus formulários</h3>
         </div>
         @if (portal(); as painel) {
@@ -159,12 +133,15 @@
                 <span class="portal-count">{{ painel.pendentes.length }}</span>
               </div>
               @if (!painel.pendentes.length) {
-                <p class="portal-empty">Nenhum formulário pendente — tudo em dia.</p>
+                <p class="portal-empty">Nenhuma pesquisa no momento.</p>
               } @else {
                 @for (item of painel.pendentes; track item.slug) {
                   <div class="portal-card">
                     <div class="portal-card-info">
                       <h4>{{ item.titulo }}</h4>
+                      @if (item.marca) {
+                        <p>{{ item.marca }}</p>
+                      }
                       @if (item.descricao) {
                         <p>{{ item.descricao }}</p>
                       }
@@ -190,6 +167,9 @@
                   <div class="portal-card">
                     <div class="portal-card-info">
                       <h4>{{ item.titulo }}</h4>
+                      @if (item.marca) {
+                        <p>{{ item.marca }}</p>
+                      }
                       @if (item.descricao) {
                         <p>{{ item.descricao }}</p>
                       }
@@ -202,13 +182,6 @@
           </div>
         }
       </div>
-      @if (mostraCapa() && capaLayout() === 'right') {
-        <div class="zone-right is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
-      }
-    </div>
-    @if (mostraCapa() && capaLayout() === 'bottom') {
-      <div class="zone-bottom is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
-    }
     </div>
   </div>
 </ng-template>

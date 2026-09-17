@@ -26,6 +26,14 @@ function maybeUploadAnexosResposta(req, res, next) {
 }
 
 router.get('/publico/carrossel', rateLimitPesquisasPublico, controller.publicoCarrossel);
+router.get('/publico/hub', rateLimitPesquisasPublico, controller.publicoHubMeta);
+router.post('/publico/hub/verificar', rateLimitPesquisasPublico, controller.publicoHubVerificar);
+router.get(
+  '/publico/hub/minhas',
+  rateLimitPesquisasPublico,
+  requirePesquisasGuest,
+  controller.publicoHubMinhas
+);
 router.get('/publico/:slug', rateLimitPesquisasPublico, controller.publicoMeta);
 router.post('/publico/:slug/verificar', rateLimitPesquisasPublico, controller.publicoVerificar);
 router.get(

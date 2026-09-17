@@ -17,6 +17,7 @@ import {
 } from './guards/tablet.guard';
 import { ramalAuthGuard, ramalGuestGuard, ramalAdminGuard } from './guards/ramal.guard';
 import { rustdeskGuard, rustdeskRouteMatch } from './guards/rustdesk.guard';
+import { pesquisasPublicoTokenMatch } from './pages/pesquisas/shared/pesquisas-public-url';
 
 export const routes: Routes = [
   {
@@ -154,14 +155,11 @@ export const routes: Routes = [
   },
   {
     path: 'f/:token',
-    loadComponent: () =>
-      import('./pages/pesquisas/pesquisas-publico.component').then(
-        (m) => m.PesquisasPublicoComponent
-      ),
+    redirectTo: ({ params }) => `/${params['token']}`,
   },
   {
     path: 'pesquisas/e/:slug',
-    redirectTo: ({ params }) => `/f/${params['slug']}`,
+    redirectTo: ({ params }) => `/${params['slug']}`,
   },
   {
     path: 'pesquisas',
@@ -525,5 +523,12 @@ export const routes: Routes = [
     ],
   },
   { path: '', redirectTo: 'inicio', pathMatch: 'full' },
+  {
+    matcher: pesquisasPublicoTokenMatch,
+    loadComponent: () =>
+      import('./pages/pesquisas/pesquisas-publico.component').then(
+        (m) => m.PesquisasPublicoComponent
+      ),
+  },
   { path: '**', redirectTo: 'inicio' },
 ];

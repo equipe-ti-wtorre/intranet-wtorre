@@ -43,6 +43,8 @@ export class PesquisasQrCardComponent implements OnInit {
   private readonly qrCanvas = viewChild<ElementRef<HTMLCanvasElement>>('qrCanvas');
 
   readonly modo = input<PesquisasQrModo>('botao');
+  readonly rotulo = input('QR Code');
+  readonly subtitulo = input('Imprima ou baixe para enviar ao convidado');
   readonly url = input('');
   readonly titulo = input('');
   readonly dataLabel = input('');

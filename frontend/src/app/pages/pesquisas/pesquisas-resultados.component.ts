@@ -62,15 +62,6 @@ export class PesquisasResultadosComponent implements OnInit {
     return 'Formulário';
   }
 
-  eventoTipoLabel(): string {
-    const form = this.data()?.formulario;
-    if (!form) return '—';
-    if (form.eventoTipo === 'outro') return form.eventoTipoOutro?.trim() || 'Outro';
-    if (form.eventoTipo === 'jogo') return 'Jogo';
-    if (form.eventoTipo === 'show') return 'Show';
-    return form.eventoTipo || '—';
-  }
-
   totalConvidados(): number {
     const d = this.data();
     if (!d) return 0;
@@ -117,7 +108,7 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   escalaBars(q: PesquisasResultadoPergunta): { label: string; pct: number; count: number }[] {
-    const dist = q.agregados.dist || [1, 2, 3, 4, 5].map((n) => {
+    const dist = q.agregados.dist || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => {
       const found = q.agregados.opcoes?.find((o) => o.valor === String(n));
       return found?.count || 0;
     });

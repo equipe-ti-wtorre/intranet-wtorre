@@ -172,6 +172,30 @@ async function atualizarEvento(req, res) {
   }
 }
 
+async function publicoHubMeta(req, res) {
+  try {
+    res.json(await service.publicoHubMeta(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function publicoHubVerificar(req, res) {
+  try {
+    res.json(await service.publicoHubVerificar(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function publicoHubMinhas(req, res) {
+  try {
+    res.json(await service.publicoHubMinhas(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function publicoMeta(req, res) {
   try {
     res.json(await service.publicoMeta(req));
@@ -424,8 +448,11 @@ module.exports = {
   despublicar,
   atualizarEvento,
   publicoMeta,
+  publicoHubMeta,
   publicoVerificar,
+  publicoHubVerificar,
   publicoMinhas,
+  publicoHubMinhas,
   publicoFormulario,
   publicoLookupBase,
   publicoResponder,

@@ -818,19 +818,87 @@ async function replaceConvidados(formularioId, convidados) {
   }
 }
 
-function identidadeWhere(cpfHash, email) {
-  const hash = cpfHash ? String(cpfHash) : null;
-  const mail = email ? String(email).trim().toLowerCase() : '';
-  if (hash && mail) {
-    return { sql: 'c.cpf_hash = ? AND LOWER(c.email) = ?', params: [hash, mail] };
+const IDENTIDADE_LIMITE = 20;
+
+function normalizeHashes(hashes) {
+  const raw = Array.isArray(hashes) ? hashes : hashes ? [hashes] : [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const h = String(item || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(h) || seen.has(h)) continue;
+    seen.add(h);
+    out.push(h);
+    if (out.length >= IDENTIDADE_LIMITE) break;
   }
-  if (hash) {
-    return { sql: 'c.cpf_hash = ?', params: [hash] };
+  return out;
+}
+
+function normalizeEmails(emails) {
+  const raw = Array.isArray(emails) ? emails : emails ? [emails] : [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const e = String(item || '').trim().toLowerCase().slice(0, 200);
+    if (!e.includes('@') || seen.has(e)) continue;
+    seen.add(e);
+    out.push(e);
+    if (out.length >= IDENTIDADE_LIMITE) break;
   }
-  if (mail) {
-    return { sql: 'LOWER(c.email) = ?', params: [mail] };
+  return out;
+}
+
+function identidadeWhere(cpfHashes, emails) {
+  const hashes = normalizeHashes(cpfHashes);
+  const mails = normalizeEmails(emails);
+  const parts = [];
+  const params = [];
+  if (hashes.length) {
+    parts.push(`c.cpf_hash IN (${hashes.map(() => '?').join(',')})`);
+    params.push(...hashes);
   }
-  return null;
+  if (mails.length) {
+    parts.push(`LOWER(c.email) IN (${mails.map(() => '?').join(',')})`);
+    params.push(...mails);
+  }
+  if (!parts.length) return null;
+  return { sql: `(${parts.join(' OR ')})`, params };
+}
+
+async function expandIdentidades(cpfHashes, emails) {
+  let hashes = normalizeHashes(cpfHashes);
+  let mails = normalizeEmails(emails);
+  const pool = getPool();
+  for (let i = 0; i < 2; i += 1) {
+    const where = identidadeWhere(hashes, mails);
+    if (!where) break;
+    const [rows] = await pool.execute(
+      `SELECT c.cpf_hash, LOWER(TRIM(c.email)) AS email
+       FROM pesquisas_convidados c
+       INNER JOIN pesquisas_formularios f ON f.id = c.formulario_id
+       WHERE f.publico_alvo = 'externos' AND ${where.sql}`,
+      where.params
+    );
+    const nextH = new Set(hashes);
+    const nextE = new Set(mails);
+    let grew = false;
+    for (const row of rows) {
+      const h = String(row.cpf_hash || '').trim().toLowerCase();
+      if (/^[a-f0-9]{64}$/.test(h) && !nextH.has(h) && nextH.size < IDENTIDADE_LIMITE) {
+        nextH.add(h);
+        grew = true;
+      }
+      const e = String(row.email || '').trim().toLowerCase();
+      if (e.includes('@') && !nextE.has(e) && nextE.size < IDENTIDADE_LIMITE) {
+        nextE.add(e);
+        grew = true;
+      }
+    }
+    hashes = [...nextH];
+    mails = [...nextE];
+    if (!grew) break;
+  }
+  return { cpfHashes: hashes, emails: mails };
 }
 
 async function findConvidadoByHashEmail(formularioId, cpfHash, email) {
@@ -857,12 +925,13 @@ function mapConvitePortal(row) {
     eventoAtivo: row.evento_ativo == null ? true : !!row.evento_ativo,
     prazoInicio: fromPrazoKey(row.prazo_inicio_key),
     prazoFim: fromPrazoKey(row.prazo_fim_key),
+    templateCodigo: row.template_codigo || 'wtorre',
     respondidoEm: toIso(row.respondido_em),
   };
 }
 
-async function findConvidadoByIdentidade(formularioId, cpfHash, email) {
-  const where = identidadeWhere(cpfHash, email);
+async function findConvidadoByIdentidade(formularioId, cpfHashes, emails) {
+  const where = identidadeWhere(cpfHashes, emails);
   if (!where) return null;
   const pool = getPool();
   const [rows] = await pool.execute(
@@ -875,13 +944,13 @@ async function findConvidadoByIdentidade(formularioId, cpfHash, email) {
   return mapConvidado(rows[0]);
 }
 
-async function findConvidadosByIdentidade(cpfHash, email) {
-  const where = identidadeWhere(cpfHash, email);
+async function findConvidadosByIdentidade(cpfHashes, emails) {
+  const where = identidadeWhere(cpfHashes, emails);
   if (!where) return [];
   const pool = getPool();
   const [rows] = await pool.execute(
     `SELECT c.id, c.formulario_id, c.nome, c.email, c.cpf_mascara,
-            f.slug, f.titulo, f.descricao, f.status, f.evento_ativo,
+            f.slug, f.titulo, f.descricao, f.status, f.evento_ativo, f.template_codigo,
             DATE_FORMAT(f.prazo_inicio, '%Y%m%d%H%i') AS prazo_inicio_key,
             DATE_FORMAT(f.prazo_fim, '%Y%m%d%H%i') AS prazo_fim_key,
             r.enviado_em AS respondido_em
@@ -1090,6 +1159,7 @@ module.exports = {
   findConvidadoByHashEmail,
   findConvidadoByIdentidade,
   findConvidadosByIdentidade,
+  expandIdentidades,
   findConvidadoHash,
   findRespostaDoConvidado,
   copyFormularioBase,

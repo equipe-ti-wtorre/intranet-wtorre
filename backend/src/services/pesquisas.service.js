@@ -392,7 +392,11 @@ function normalizeBaseRows(raw) {
   return out;
 }
 
-async function maybeReplaceBase(formId, body) {
+async function maybeReplaceBase(formId, body, publicoAlvo) {
+  if (publicoAlvo !== 'externos') {
+    await repo.replaceFormularioBase(formId, []);
+    return;
+  }
   if (!Array.isArray(body?.base)) return;
   await repo.replaceFormularioBase(formId, normalizeBaseRows(body.base));
 }
@@ -976,7 +980,7 @@ async function salvarFormulario(req, { publicar }) {
     if (body.publicoAlvo === 'externos') {
       await removerComunicadoFormulario(idParam);
     }
-    await maybeReplaceBase(idParam, req.body);
+    await maybeReplaceBase(idParam, req.body, body.publicoAlvo);
     return getFormularioPorId(idParam, { includeConvidados: true });
   }
 
@@ -989,7 +993,7 @@ async function salvarFormulario(req, { publicar }) {
   if (publicar && body.publicoAlvo === 'externos' && !(guests && guests.length)) {
     throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
   }
-  await maybeReplaceBase(id, req.body);
+  await maybeReplaceBase(id, req.body, body.publicoAlvo);
   return getFormularioPorId(id, { includeConvidados: true });
 }
 
@@ -1118,7 +1122,7 @@ async function payloadResponder(req) {
     template: visual.template,
     capaUrl: visual.capaUrl,
     capaLayout: form.capaLayout || 'top',
-    temBase: (await baseResumo(id)).total > 0,
+    temBase: false,
   };
 }
 
@@ -1142,10 +1146,7 @@ async function lookupBaseIntranet(req) {
   ) {
     throw httpError(403, 'Este formulário não está disponível para o seu departamento.');
   }
-  const keys = lookupKeysFromValor(req.body?.valor);
-  if (!keys.chaveDoc && !keys.chaveEmail) return { campos: {} };
-  const dados = await repo.lookupFormularioBase(id, keys);
-  return { campos: dados || {} };
+  return { campos: {} };
 }
 
 function parseItensBody(req) {
@@ -1250,8 +1251,8 @@ function montarItensResposta(perguntas, rawItens, anexosPorPergunta = new Map())
     }
     if (p.tipo === 'escala' && valor) {
       const n = Number(valor);
-      if (!Number.isInteger(n) || n < 1 || n > 5) {
-        throw httpError(400, 'A escala deve ser um número de 1 a 5.');
+      if (!Number.isInteger(n) || n < 1 || n > 10) {
+        throw httpError(400, 'A escala deve ser um número de 1 a 10.');
       }
     }
     if (p.tipo === 'sim_nao' && valor && valor !== 'Sim' && valor !== 'Não') {
@@ -1340,10 +1341,10 @@ async function resultados(req) {
       }
       agregados.opcoes = Object.entries(counts).map(([valor, count]) => ({ valor, count }));
       if (p.tipo === 'escala') {
-        const nums = valores.map((v) => Number(v.valor)).filter((n) => n >= 1 && n <= 5);
+        const nums = valores.map((v) => Number(v.valor)).filter((n) => n >= 1 && n <= 10);
         const soma = nums.reduce((a, b) => a + b, 0);
         agregados.media = nums.length ? Math.round((soma / nums.length) * 10) / 10 : 0;
-        agregados.dist = [1, 2, 3, 4, 5].map((n) => counts[String(n)] || 0);
+        agregados.dist = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => counts[String(n)] || 0);
       }
     }
     perguntasOut.push({ ...p, total: valores.length, agregados, respostas: valores });
@@ -1645,10 +1646,20 @@ function parseIdentidadeBody(body) {
   };
 }
 
+function guestIdentidades(guest) {
+  const hashes = guest?.cpfHashes || (guest?.cpfHash ? [guest.cpfHash] : []);
+  const emails = guest?.emails || (guest?.email ? [guest.email] : []);
+  return { cpfHashes: hashes, emails };
+}
+
 function tokenIdentidade(identity) {
+  const hashes = identity.cpfHashes || (identity.cpfHash ? [identity.cpfHash] : []);
+  const emails = identity.emails || (identity.email ? [identity.email] : []);
   const payload = {};
-  if (identity.cpfHash) payload.cpfHash = identity.cpfHash;
-  if (identity.email) payload.email = identity.email;
+  if (hashes[0]) payload.cpfHash = hashes[0];
+  if (emails[0]) payload.email = emails[0];
+  if (hashes.length) payload.cpfHashes = hashes.slice(0, 20);
+  if (emails.length) payload.emails = emails.slice(0, 20);
   return payload;
 }
 
@@ -1656,7 +1667,8 @@ async function resolveGuestDoForm(form, guest) {
   if (!guest) {
     throw httpError(401, 'Confirme sua identidade para continuar.');
   }
-  const row = await repo.findConvidadoByIdentidade(form.id, guest.cpfHash, guest.email);
+  const ids = guestIdentidades(guest);
+  const row = await repo.findConvidadoByIdentidade(form.id, ids.cpfHashes, ids.emails);
   if (!row) {
     throw httpError(401, 'Confirme sua identidade para continuar.');
   }
@@ -1668,37 +1680,40 @@ function itemPortal(row) {
     slug: row.slug,
     titulo: row.titulo,
     descricao: row.descricao || '',
+    marca: marcaRotulo(row.templateCodigo),
     prazoFim: row.prazoFim || null,
     respondidoEm: row.respondidoEm || null,
   };
 }
 
-async function publicoVerificar(req) {
-  const slug = parseSlug(req.params.slug);
-  const form = await repo.findFormularioBySlug(slug);
-  if (!form || form.publicoAlvo !== 'externos') {
-    throw httpError(404, 'Formulário não encontrado.');
-  }
-  const identity = parseIdentidadeBody(req.body);
-  const convites = await repo.findConvidadosByIdentidade(identity.cpfHash, identity.email);
+function marcaRotulo(codigo) {
+  const id = String(codigo || '').trim().toLowerCase();
+  if (id === 'nubank') return 'Nubank Parque';
+  if (id === 'wtorre') return 'WTorre';
+  return '';
+}
+
+async function verificarIdentidade(body) {
+  const identity = parseIdentidadeBody(body);
+  const expanded = await repo.expandIdentidades(
+    identity.cpfHash ? [identity.cpfHash] : [],
+    identity.email ? [identity.email] : []
+  );
+  const convites = await repo.findConvidadosByIdentidade(expanded.cpfHashes, expanded.emails);
   if (!convites.length) {
     throw httpError(401, 'CPF, CNPJ ou e-mail não conferem.');
   }
   const comNome = convites.find((c) => c.nome) || convites[0];
-  const token = jwtService.signPesquisasGuest(tokenIdentidade(identity));
+  const token = jwtService.signPesquisasGuest(tokenIdentidade(expanded));
   return { token, nome: comNome.nome || null };
 }
 
-async function publicoMinhas(req) {
-  const slug = parseSlug(req.params.slug);
-  const form = await repo.findFormularioBySlug(slug);
-  if (!form || form.publicoAlvo !== 'externos') {
-    throw httpError(404, 'Formulário não encontrado.');
-  }
-  if (!req.guest) {
+async function montarPortal(guest) {
+  if (!guest) {
     throw httpError(401, 'Confirme sua identidade para continuar.');
   }
-  const convites = await repo.findConvidadosByIdentidade(req.guest.cpfHash, req.guest.email);
+  const ids = guestIdentidades(guest);
+  const convites = await repo.findConvidadosByIdentidade(ids.cpfHashes, ids.emails);
   if (!convites.length) {
     throw httpError(401, 'CPF, CNPJ ou e-mail não conferem.');
   }
@@ -1724,6 +1739,52 @@ async function publicoMinhas(req) {
     }
   }
   return { nome: nome || null, pendentes, respondidas };
+}
+
+async function publicoHubMeta() {
+  const template = await resolveTemplate('wtorre');
+  return {
+    hub: true,
+    slug: '',
+    titulo: 'Portal do Convidado',
+    descricao: '',
+    status: 'publicado',
+    eventoAtivo: true,
+    exigirIdentidade: true,
+    eventoTipo: null,
+    eventoTipoOutro: null,
+    prazoInicio: null,
+    prazoFim: null,
+    template,
+    capaUrl: null,
+    capaLayout: 'top',
+  };
+}
+
+async function publicoHubVerificar(req) {
+  return verificarIdentidade(req.body);
+}
+
+async function publicoHubMinhas(req) {
+  return montarPortal(req.guest);
+}
+
+async function publicoVerificar(req) {
+  const slug = parseSlug(req.params.slug);
+  const form = await repo.findFormularioBySlug(slug);
+  if (!form || form.publicoAlvo !== 'externos') {
+    throw httpError(404, 'Formulário não encontrado.');
+  }
+  return verificarIdentidade(req.body);
+}
+
+async function publicoMinhas(req) {
+  const slug = parseSlug(req.params.slug);
+  const form = await repo.findFormularioBySlug(slug);
+  if (!form || form.publicoAlvo !== 'externos') {
+    throw httpError(404, 'Formulário não encontrado.');
+  }
+  return montarPortal(req.guest);
 }
 
 async function publicoFormulario(req) {
@@ -2130,8 +2191,11 @@ module.exports = {
   buscarAprovadores,
   departamentos,
   publicoMeta,
+  publicoHubMeta,
   publicoVerificar,
+  publicoHubVerificar,
   publicoMinhas,
+  publicoHubMinhas,
   publicoFormulario,
   lookupBasePublico,
   publicoResponder,

@@ -16,7 +16,6 @@ import {
   PesquisasTemplateVisual,
 } from '../../models/pesquisas.model';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
-import { PesquisasMarcaLogosComponent } from './shared/pesquisas-marca-logos.component';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
 import { formatDocumento } from './shared/pesquisas-documento.util';
@@ -29,7 +28,7 @@ const GUEST_TOKEN_KEY = 'pesquisas.guestToken';
 @Component({
   selector: 'app-pesquisas-publico',
   standalone: true,
-  imports: [FormsModule, NgTemplateOutlet, PesquisasGuestFormComponent, PesquisasMarcaLogosComponent, PesqIconComponent],
+  imports: [FormsModule, NgTemplateOutlet, PesquisasGuestFormComponent, PesqIconComponent],
   templateUrl: './pesquisas-publico.component.html',
   encapsulation: ViewEncapsulation.None,
 })
@@ -62,6 +61,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     for (const [k, v] of Object.entries(this.respostas())) out[k] = v;
     return out;
   });
+  readonly chromeTpl = PESQUISAS_TPL_WTORRE;
   readonly tpl = computed<PesquisasTemplateVisual>(
     () => this.payload()?.template || this.meta()?.template || PESQUISAS_TPL_WTORRE
   );
@@ -96,29 +96,41 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.carregarDestaques();
+    if (this.route.snapshot.data['hub'] || this.route.snapshot.paramMap.get('hub')) {
+      this.api.publicoHubMeta().subscribe({
+        next: (m) => this.aoMeta(m),
+        error: (err: HttpErrorResponse) => {
+          this.alertas.erro(err.error?.mensagem || 'Não foi possível abrir o portal.');
+          this.loading.set(false);
+        },
+      });
+      return;
+    }
     const slug = this.route.snapshot.paramMap.get('token') || this.route.snapshot.paramMap.get('slug') || '';
     this.api.publicoMeta(slug).subscribe({
-      next: (m) => {
-        this.meta.set(m);
-        if (!m.exigirIdentidade) {
-          this.loading.set(false);
-          if (!this.bloqueado()) this.carregarFormulario(m.slug);
-          return;
-        }
-        const saved = this.lerToken();
-        if (saved) {
-          this.guestToken = saved;
-          this.carregarPainel();
-          return;
-        }
-        this.passo.set('gate');
-        this.loading.set(false);
-      },
+      next: (m) => this.aoMeta(m),
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Formulário não encontrado.');
         this.loading.set(false);
       },
     });
+  }
+
+  private aoMeta(m: PesquisasPublicoMeta): void {
+    this.meta.set(m);
+    if (!m.exigirIdentidade) {
+      this.loading.set(false);
+      if (!this.bloqueado() && m.slug) this.carregarFormulario(m.slug);
+      return;
+    }
+    const saved = this.lerToken();
+    if (saved) {
+      this.guestToken = saved;
+      this.carregarPainel();
+      return;
+    }
+    this.passo.set('gate');
+    this.loading.set(false);
   }
 
   ngOnDestroy(): void {
@@ -175,7 +187,10 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
       return;
     }
     this.verificando.set(true);
-    this.api.publicoVerificar(m.slug, { valor }).subscribe({
+    const req$ = m.hub
+      ? this.api.publicoHubVerificar({ valor })
+      : this.api.publicoVerificar(m.slug, { valor });
+    req$.subscribe({
       next: (out) => {
         this.guestToken = out.token;
         this.gravarToken(out.token);
@@ -263,7 +278,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
 
   bloqueado(): string | null {
     const m = this.meta();
-    if (!m) return null;
+    if (!m || m.hub) return null;
     if (m.status !== 'publicado') return 'Este formulário não está aberto para respostas.';
     if (!m.eventoAtivo) return 'Este evento está desativado.';
     const now = this.agoraBrasilia();
@@ -284,7 +299,10 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
       return;
     }
     this.loading.set(true);
-    this.api.publicoMinhas(m.slug, token).subscribe({
+    const req$ = m.hub
+      ? this.api.publicoHubMinhas(token)
+      : this.api.publicoMinhas(m.slug, token);
+    req$.subscribe({
       next: (painel) => {
         this.portal.set(painel);
         this.passo.set('portal');

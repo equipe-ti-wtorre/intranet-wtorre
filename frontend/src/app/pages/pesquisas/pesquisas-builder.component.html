@@ -176,13 +176,6 @@
           </div>
         }
         @if (publicoAlvo() === 'externos') {
-          <div class="ext-callout">
-            <app-pesq-icon name="alert" [size]="16" />
-            <span>
-              Formulário para convidados externos <b>não</b> é enviado ao mural de Comunicados. Quem
-              responde usa o link /f/… (ou o QR), sem login na intranet.
-            </span>
-          </div>
           <div class="field" style="margin-top: 16px">
             <label>Tipo de evento</label>
             <div class="priority-row">
@@ -229,68 +222,44 @@
             }
           </div>
           <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
-          <div class="field" style="margin-top: 12px">
-            <label>Origem dos convidados</label>
-            <div class="priority-row">
-              <button type="button" class="priority-chip" [class.selected]="convidadosFonte() === 'planilha'" [class.media]="convidadosFonte() === 'planilha'" (click)="escolherFonteConvidados('planilha')">Da planilha</button>
-              <button type="button" class="priority-chip" [class.selected]="convidadosFonte() === 'manual'" [class.media]="convidadosFonte() === 'manual'" (click)="escolherFonteConvidados('manual')">Manual</button>
+          <div class="guest-add-grid">
+            <div class="field">
+              <label>Nome (opcional)</label>
+              <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
             </div>
+            <div class="field">
+              <label>CPF ou CNPJ</label>
+              <input type="text" inputmode="numeric" [ngModel]="guestCpf()" (ngModelChange)="formatCpfInput($event)" placeholder="000.000.000-00 ou 00.000.000/0001-00" />
+            </div>
+            <div class="field">
+              <label>E-mail</label>
+              <input type="email" [ngModel]="guestEmail()" (ngModelChange)="guestEmail.set($event)" placeholder="email@exemplo.com" />
+            </div>
+            <button type="button" class="btn-primary guest-add-btn" (click)="addConvidado()">
+              <app-pesq-icon name="plus" [size]="15" />
+              Adicionar
+            </button>
           </div>
-          @if (convidadosFonte() === 'planilha') {
-            @if (!temBaseSessao() && !temBaseSalva()) {
-              <div class="ext-callout ext-callout-info">
-                <app-pesq-icon name="table" [size]="16" />
-                <span>
-                  Próximo passo: importe a planilha em <b>Campos</b>. Os convidados serão cadastrados
-                  automaticamente.
-                </span>
-              </div>
-            } @else if (!temBaseSessao() && temBaseSalva()) {
-              <p class="page-sub" style="margin-top: 12px">Ao salvar, os convidados serão cadastrados a partir da planilha já importada em Campos.</p>
-            } @else if (planilhaResumo(); as r) {
-              <p class="page-sub" style="margin-top: 12px">
-                {{ r.total }} pessoa(s) da planilha.
-                @if (r.ignoradas) {
-                  {{ r.ignoradas }} linha(s) sem CPF/CNPJ ou e-mail ignoradas.
-                }
-              </p>
-            }
-          } @else {
-            <div class="guest-add-grid">
-              <div class="field">
-                <label>Nome (opcional)</label>
-                <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
-              </div>
-              <div class="field">
-                <label>CPF ou CNPJ</label>
-                <input type="text" inputmode="numeric" [ngModel]="guestCpf()" (ngModelChange)="formatCpfInput($event)" placeholder="000.000.000-00 ou 00.000.000/0001-00" />
-              </div>
-              <div class="field">
-                <label>E-mail</label>
-                <input type="email" [ngModel]="guestEmail()" (ngModelChange)="guestEmail.set($event)" placeholder="email@exemplo.com" />
-              </div>
-              <button type="button" class="btn-primary guest-add-btn" (click)="addConvidado()">
-                <app-pesq-icon name="plus" [size]="15" />
-                Adicionar
-              </button>
-            </div>
-            <div class="guest-import-row">
-              <button type="button" class="add-q-btn" (click)="guestsExcelInput.click()">
-                <app-pesq-icon name="table" [size]="15" />
-                Importar CSV ou Excel
-              </button>
-              <input
-                #guestsExcelInput
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                hidden
-                (change)="onExcelConvidados($event)"
-              />
-            </div>
-            <p class="page-sub" style="margin-top: 8px">
-              Use colunas Nome (opcional), CPF ou CNPJ e E-mail. Outras colunas são ignoradas.
-            </p>
-          }
+          <div class="guest-import-row">
+            <button type="button" class="add-q-btn" (click)="exportarModeloConvidados()">
+              <app-pesq-icon name="download" [size]="15" />
+              Baixar modelo Excel
+            </button>
+            <button type="button" class="add-q-btn" (click)="guestsExcelInput.click()">
+              <app-pesq-icon name="table" [size]="15" />
+              Importar CSV ou Excel
+            </button>
+            <input
+              #guestsExcelInput
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              hidden
+              (change)="onExcelConvidados($event)"
+            />
+          </div>
+          <p class="page-sub" style="margin-top: 8px">
+            Baixe o modelo com CPF/CNPJ, Nome e E-mail, preencha e importe. Outras colunas são ignoradas.
+          </p>
           @if (convidados().length) {
             <div class="guest-table">
               @for (g of convidados(); track g.key) {
@@ -298,15 +267,13 @@
                   <span>{{ g.nome || '—' }}</span>
                   <span>{{ g.cpfMascara || g.cpf }}</span>
                   <span>{{ g.email }}</span>
-                  @if (podeRemoverConvidado()) {
-                    <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
-                      <app-pesq-icon name="x" [size]="15" />
-                    </button>
-                  }
+                  <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
+                    <app-pesq-icon name="x" [size]="15" />
+                  </button>
                 </div>
               }
             </div>
-          } @else if (convidadosFonte() === 'manual') {
+          } @else {
             <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
           }
         }
@@ -321,7 +288,7 @@
           </button>
           <input #excelInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onExcel($event)" />
         </div>
-        <p class="hint">Adicione um campo e arraste-o no quadro à direita pra qualquer posição que quiser.</p>
+        <p class="hint">Importar cria um campo por coluna da planilha.</p>
         <div class="add-block-menu-wrap">
           <button type="button" class="add-block-main-btn" (click)="menuAddOpen.set(!menuAddOpen())">
             <app-pesq-icon name="plus" [size]="15" />
@@ -390,7 +357,7 @@
                     <option value="texto_curto">Texto curto</option>
                     <option value="texto_longo">Texto longo</option>
                     <option value="multipla_escolha">Múltipla escolha</option>
-                    <option value="escala">Escala 1–5</option>
+                    <option value="escala">Escala 1–10</option>
                     <option value="sim_nao">Sim / Não</option>
                   </select>
                   <label class="q-req">
@@ -439,7 +406,7 @@
       </div>
     </div>
 
-    <aside class="preview-col" [class.fullscreen]="previewExpandido()">
+    <aside class="preview-col">
       <div class="tpl-switch" role="tablist" aria-label="Template visual">
         @for (t of templates(); track t.codigo) {
           <button
@@ -458,14 +425,6 @@
             }
           </button>
         }
-      </div>
-      <div class="preview-label">
-        <app-pesq-icon name="eye" [size]="14" />
-        <span>Como o convidado vai ver — arraste os campos pelo ícone no canto</span>
-        <button type="button" class="btn-expand-preview" (click)="togglePreview()">
-          <app-pesq-icon [name]="previewExpandido() ? 'collapse' : 'expand'" [size]="14" />
-          {{ previewExpandido() ? 'Fechar' : 'Ampliar' }}
-        </button>
       </div>
       <app-pesquisas-guest-form
         mode="preview"

@@ -1,12 +1,47 @@
 const jwtService = require('../services/jwt.service');
 
+function collectHashes(payload) {
+  const raw = [];
+  if (Array.isArray(payload.cpfHashes)) raw.push(...payload.cpfHashes);
+  if (typeof payload.cpfHash === 'string') raw.push(payload.cpfHash);
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const h = String(item || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(h) || seen.has(h)) continue;
+    seen.add(h);
+    out.push(h);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+function collectEmails(payload) {
+  const raw = [];
+  if (Array.isArray(payload.emails)) raw.push(...payload.emails);
+  if (typeof payload.email === 'string') raw.push(payload.email);
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const e = String(item || '').trim().toLowerCase().slice(0, 200);
+    if (!e.includes('@') || seen.has(e)) continue;
+    seen.add(e);
+    out.push(e);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 function parseGuestIdentity(payload) {
-  const rawHash = typeof payload.cpfHash === 'string' ? payload.cpfHash.trim().toLowerCase() : '';
-  const cpfHash = /^[a-f0-9]{64}$/.test(rawHash) ? rawHash : null;
-  const rawEmail = typeof payload.email === 'string' ? payload.email.trim().toLowerCase().slice(0, 200) : '';
-  const email = rawEmail.includes('@') ? rawEmail : null;
-  if (!cpfHash && !email) return null;
-  return { cpfHash, email };
+  const cpfHashes = collectHashes(payload);
+  const emails = collectEmails(payload);
+  if (!cpfHashes.length && !emails.length) return null;
+  return {
+    cpfHash: cpfHashes[0] || null,
+    email: emails[0] || null,
+    cpfHashes,
+    emails,
+  };
 }
 
 function requirePesquisasGuest(req, res, next) {

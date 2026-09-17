@@ -203,6 +203,10 @@ export class PesquisasService {
     return this.http.get<PesquisasPublicoMeta>(this.api(`/publico/${encodeURIComponent(slug)}`));
   }
 
+  publicoHubMeta(): Observable<PesquisasPublicoMeta> {
+    return this.http.get<PesquisasPublicoMeta>(this.api('/publico/hub'));
+  }
+
   publicoVerificar(
     slug: string,
     body: { valor: string }
@@ -213,8 +217,21 @@ export class PesquisasService {
     );
   }
 
+  publicoHubVerificar(body: { valor: string }): Observable<{ token: string; nome: string | null }> {
+    return this.http.post<{ token: string; nome: string | null }>(
+      this.api('/publico/hub/verificar'),
+      body
+    );
+  }
+
   publicoMinhas(slug: string, token: string): Observable<PesquisasPortal> {
     return this.http.get<PesquisasPortal>(this.api(`/publico/${encodeURIComponent(slug)}/minhas`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  publicoHubMinhas(token: string): Observable<PesquisasPortal> {
+    return this.http.get<PesquisasPortal>(this.api('/publico/hub/minhas'), {
       headers: { Authorization: `Bearer ${token}` },
     });
   }
