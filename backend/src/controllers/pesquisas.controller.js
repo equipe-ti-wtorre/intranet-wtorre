@@ -11,9 +11,11 @@ function auditMeta(req) {
 }
 
 function handleError(res, err) {
-  return res.status(err.status || 500).json({
-    mensagem: err.message || 'Erro ao processar a Central de Pesquisas.',
-  });
+  if (err.status && err.message) {
+    return res.status(err.status).json({ mensagem: err.message });
+  }
+  console.error('[pesquisas]', err.code || err.name, err.message);
+  return res.status(500).json({ mensagem: 'Erro ao processar a Central de Pesquisas.' });
 }
 
 async function resumo(req, res) {

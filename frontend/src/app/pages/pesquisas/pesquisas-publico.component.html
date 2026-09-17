@@ -119,12 +119,17 @@
 </ng-template>
 
 <ng-template #portalCard>
-  <div
-    class="guest-frame"
-    [style.--tpl-primary]="tpl().corPrimaria"
-    [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
-    [style.--tpl-radius.px]="tpl().raioPx"
-  >
+  <div class="portal-form-wrap">
+    <button type="button" class="btn-back" (click)="sair()">
+      <app-pesq-icon name="arrow-left" [size]="14" />
+      Sair
+    </button>
+    <div
+      class="guest-frame"
+      [style.--tpl-primary]="tpl().corPrimaria"
+      [style.--tpl-primary-dark]="tpl().corPrimariaEscura"
+      [style.--tpl-radius.px]="tpl().raioPx"
+    >
     @if (mostraCapa() && capaLayout() === 'top') {
       <div class="zone-top is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
     }
@@ -204,6 +209,7 @@
     @if (mostraCapa() && capaLayout() === 'bottom') {
       <div class="zone-bottom is-on"><img [src]="capaUrl()!" alt="" (error)="onCapaError()" /></div>
     }
+    </div>
   </div>
 </ng-template>
 

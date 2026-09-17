@@ -200,6 +200,17 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     this.passo.set('portal');
   }
 
+  sair(): void {
+    this.limparToken();
+    this.guestToken = null;
+    this.portal.set(null);
+    this.payload.set(null);
+    this.respostas.set({});
+    this.anexos.set({});
+    this.identificador.set('');
+    this.passo.set('gate');
+  }
+
   setValor(id: number, valor: string): void {
     this.respostas.update((r) => ({ ...r, [id]: valor }));
   }

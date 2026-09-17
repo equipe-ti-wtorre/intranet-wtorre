@@ -454,7 +454,33 @@ async function setFormularioStatus(id, status) {
 
 async function deleteFormulario(id) {
   const pool = getPool();
-  await pool.execute('DELETE FROM pesquisas_formularios WHERE id = ?', [id]);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // SET NULL em convidado_id enquanto o form ainda existe — evita o 1452
+    // (fk_pesquisas_respostas_form) no CASCADE form → convidados → respostas.
+    await conn.execute(
+      'UPDATE pesquisas_respostas SET convidado_id = NULL WHERE formulario_id = ?',
+      [id]
+    );
+    await conn.execute(
+      `DELETE i FROM pesquisas_resposta_itens i
+       INNER JOIN pesquisas_respostas r ON r.id = i.resposta_id
+       WHERE r.formulario_id = ?`,
+      [id]
+    );
+    await conn.execute('DELETE FROM pesquisas_respostas WHERE formulario_id = ?', [id]);
+    await conn.execute('DELETE FROM pesquisas_convidados WHERE formulario_id = ?', [id]);
+    await conn.execute('DELETE FROM pesquisas_formulario_base WHERE formulario_id = ?', [id]);
+    await conn.execute('DELETE FROM pesquisas_perguntas WHERE formulario_id = ?', [id]);
+    await conn.execute('DELETE FROM pesquisas_formularios WHERE id = ?', [id]);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function findRespostaDoUsuario(formularioId, usuarioId) {

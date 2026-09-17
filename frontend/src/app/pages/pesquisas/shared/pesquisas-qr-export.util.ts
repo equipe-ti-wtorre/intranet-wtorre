@@ -260,27 +260,6 @@ async function resolveWhiteLogo(codigo: string): Promise<HTMLCanvasElement | nul
   }
 }
 
-function drawCropMarks(doc: jsPDF, x: number, y: number, w: number, h: number): void {
-  const gap = 3;
-  const len = 8;
-  doc.setDrawColor(154, 163, 177);
-  doc.setLineWidth(0.35);
-  doc.setLineDashPattern([], 0);
-  const marks: [number, number, number, number][] = [
-    [x - gap - len, y, x - gap, y],
-    [x, y - gap - len, x, y - gap],
-    [x + w + gap, y, x + w + gap + len, y],
-    [x + w, y - gap - len, x + w, y - gap],
-    [x - gap - len, y + h, x - gap, y + h],
-    [x, y + h + gap, x, y + h + gap + len],
-    [x + w + gap, y + h, x + w + gap + len, y + h],
-    [x + w, y + h + gap, x + w, y + h + gap + len],
-  ];
-  for (const [x1, y1, x2, y2] of marks) {
-    doc.line(x1, y1, x2, y2);
-  }
-}
-
 export async function buildPesquisasQrPdf(
   params: PesquisasQrExportParams
 ): Promise<{ doc: jsPDF; filename: string }> {
@@ -326,13 +305,14 @@ export async function buildPesquisasQrPdf(
     doc.rect(x, y, cardW, headerH, 'F');
   }
 
+  const waveH = 5;
   doc.setFillColor(body[0], body[1], body[2]);
-  doc.ellipse(x + cardW / 2, y + headerH + 3.8, cardW / 2 + 3, 8.5, 'F');
+  doc.ellipse(x + cardW / 2, y + headerH, cardW / 2, waveH, 'F');
 
   doc.setTextColor(texto[0], texto[1], texto[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(17);
-  const instY = y + headerH + 16;
+  const instY = y + headerH + waveH + 12;
   doc.text('Obrigado por estar aqui! Conte como foi', x + cardW / 2, instY, {
     align: 'center',
     maxWidth: cardW - 20,
@@ -373,8 +353,6 @@ export async function buildPesquisasQrPdf(
   doc.text('Sua opinião é importante pra gente', x + cardW / 2, qrY + qrSize + 23, {
     align: 'center',
   });
-
-  drawCropMarks(doc, x, y, cardW, cardH);
 
   return { doc, filename: `qr-${slugify(titulo) || 'formulario'}.pdf` };
 }
