@@ -92,9 +92,11 @@
       <div class="form-card">
         <h3><app-pesq-icon name="image" [size]="16" /> Imagem</h3>
         <p class="hint">{{ zoneHint() }}</p>
-        <button type="button" class="btn-secondary" style="margin-bottom: 12px; padding: 7px 12px; font-size: 12px" (click)="abrirGaleria()">
-          Trocar posição
-        </button>
+        @if (formId()) {
+          <button type="button" class="btn-secondary" style="margin-bottom: 12px; padding: 7px 12px; font-size: 12px" (click)="abrirGaleria()">
+            Trocar posição
+          </button>
+        }
         <input #capaInput type="file" accept="image/jpeg,image/png,image/webp" hidden (change)="onCapa($event)" />
         <div class="cover-upload" role="button" tabindex="0" (click)="capaInput.click()">
           @if (capaPreview()) {
@@ -132,20 +134,20 @@
             placeholder="Explique o objetivo do formulário para quem for responder"
           ></textarea>
         </div>
-        <div class="field-grid" style="margin-top: 16px">
+        <div class="field-grid field-grid-datetime" style="margin-top: 16px">
           <div class="field">
             <label>Data início</label>
             <input type="date" [ngModel]="prazoInicioData()" (ngModelChange)="prazoInicioData.set($event)" />
           </div>
           <div class="field">
-            <label>Data fim</label>
-            <input type="date" [ngModel]="prazoFimData()" (ngModelChange)="prazoFimData.set($event)" />
-          </div>
-        </div>
-        <div class="field-grid" style="margin-top: 16px">
-          <div class="field">
             <label>Horário início</label>
             <input type="time" [ngModel]="prazoInicioHora()" (ngModelChange)="prazoInicioHora.set($event)" />
+          </div>
+        </div>
+        <div class="field-grid field-grid-datetime" style="margin-top: 16px">
+          <div class="field">
+            <label>Data fim</label>
+            <input type="date" [ngModel]="prazoFimData()" (ngModelChange)="prazoFimData.set($event)" />
           </div>
           <div class="field">
             <label>Horário fim</label>
