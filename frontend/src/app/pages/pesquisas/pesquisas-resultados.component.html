@@ -213,11 +213,28 @@
             <p class="page-sub">Ainda sem arquivos.</p>
           } @else {
             @for (r of q.respostas; track $index) {
-              <div class="sample-quote">
+              <div class="anexo-file-row">
+                <div class="anexo-file-icon">
+                  <app-pesq-icon name="file-text" />
+                </div>
+                <div class="anexo-file-main">
+                  <p class="anexo-file-name">{{ r.valor }}</p>
+                  <div class="anexo-file-meta">
+                    <span>{{ anexoAutor(r) }}</span>
+                    @if (formatAnexoData(r.enviadoEm); as dataEnvio) {
+                      <span>·</span>
+                      <span>{{ dataEnvio }}</span>
+                    }
+                  </div>
+                  @if (!r.anexoUrl) {
+                    <p class="anexo-file-warn">Não foi possível gerar o download deste arquivo.</p>
+                  }
+                </div>
                 @if (r.anexoUrl) {
-                  <a [href]="r.anexoUrl" target="_blank" rel="noopener">{{ r.valor }}</a>
-                } @else {
-                  {{ r.valor }}
+                  <a class="row-action" [href]="r.anexoUrl" [attr.download]="r.valor">
+                    <app-pesq-icon name="download" [size]="13" />
+                    Baixar
+                  </a>
                 }
               </div>
             }
@@ -298,7 +315,19 @@
       @for (row of modal.answers; track $index) {
         <div class="review-row">
           <span class="k">{{ row.q }}</span>
-          <span class="v">{{ row.a }}</span>
+          <span class="v">
+            @if (row.anexoUrl) {
+              <span class="anexo-modal-file">
+                <span class="anexo-file-name">{{ row.a }}</span>
+                <a class="row-action" [href]="row.anexoUrl" [attr.download]="row.a">
+                  <app-pesq-icon name="download" [size]="13" />
+                  Baixar
+                </a>
+              </span>
+            } @else {
+              {{ row.a }}
+            }
+          </span>
         </div>
       }
     </div>

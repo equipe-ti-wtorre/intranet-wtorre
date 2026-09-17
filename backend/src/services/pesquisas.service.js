@@ -1322,7 +1322,9 @@ async function resultados(req) {
       let anexoUrl = null;
       if (anexo) {
         try {
-          const sas = await blobService.gerarSasLeitura(anexo.container, anexo.blob);
+          const sas = await blobService.gerarSasLeitura(anexo.container, anexo.blob, {
+            downloadNome: anexo.nome,
+          });
           anexoUrl = sas.url;
         } catch {
           anexoUrl = null;
@@ -1331,7 +1333,10 @@ async function resultados(req) {
       valores.push({
         valor: anexo ? anexo.nome : item.valor,
         anexoUrl,
-        respondente: form.anonimo ? null : { nome: r.nome, email: r.email },
+        respostaId: r.id,
+        respondente: form.anonimo
+          ? null
+          : { nome: r.nome, email: r.email, departamento: r.departamento || '' },
         enviadoEm: r.enviadoEm,
       });
     }

@@ -169,7 +169,8 @@ export interface PesquisasResponderPayload {
 export interface PesquisasResultadoItem {
   valor: string;
   anexoUrl?: string | null;
-  respondente: { nome: string; email: string } | null;
+  respostaId: number;
+  respondente: { nome: string; email: string; departamento?: string } | null;
   enviadoEm: string | null;
 }
 

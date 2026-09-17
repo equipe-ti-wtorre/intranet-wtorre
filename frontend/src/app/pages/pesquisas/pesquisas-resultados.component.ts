@@ -9,6 +9,92 @@ import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
 import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
 
+type LinhaEnvioCsv = {
+  respostaId: number;
+  nome: string;
+  email: string;
+  departamento: string;
+  enviadoEm: string | null;
+  porPergunta: Map<number, string>;
+};
+
+function titulosColunasPerguntas(perguntas: PesquisasResultadoPergunta[]): string[] {
+  const seen = new Map<string, number>();
+  return perguntas.map((q) => {
+    const base = (q.texto || 'Pergunta').trim() || 'Pergunta';
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    return n === 1 ? base : `${base} (${n})`;
+  });
+}
+
+function formatarDataCsv(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+function montarCsvRespostas(d: PesquisasResultados): string[][] {
+  const perguntas = d.perguntas;
+  const titulos = titulosColunasPerguntas(perguntas);
+  const anonimo = d.formulario.anonimo;
+  const envios = new Map<number, LinhaEnvioCsv>();
+
+  for (const q of perguntas) {
+    if (q.id == null) continue;
+    for (const r of q.respostas) {
+      const id = r.respostaId;
+      if (id == null) continue;
+      let row = envios.get(id);
+      if (!row) {
+        row = {
+          respostaId: id,
+          nome: r.respondente?.nome || '',
+          email: r.respondente?.email || '',
+          departamento: r.respondente?.departamento || '',
+          enviadoEm: r.enviadoEm,
+          porPergunta: new Map(),
+        };
+        envios.set(id, row);
+      }
+      row.porPergunta.set(q.id, r.valor ?? '');
+    }
+  }
+
+  const ordenados = [...envios.values()].sort((a, b) => {
+    const ta = a.enviadoEm || '';
+    const tb = b.enviadoEm || '';
+    return ta.localeCompare(tb) || a.respostaId - b.respostaId;
+  });
+
+  const header = anonimo
+    ? ['Resposta', 'Data', ...titulos]
+    : ['Respondente', 'E-mail', 'Departamento', 'Data', ...titulos];
+
+  const lines = [header];
+  ordenados.forEach((row, i) => {
+    const answers = perguntas.map((q) => (q.id != null ? row.porPergunta.get(q.id) || '' : ''));
+    if (anonimo) {
+      lines.push([String(i + 1), formatarDataCsv(row.enviadoEm), ...answers]);
+    } else {
+      lines.push([
+        row.nome,
+        row.email,
+        row.departamento,
+        formatarDataCsv(row.enviadoEm),
+        ...answers,
+      ]);
+    }
+  });
+  return lines;
+}
+
 @Component({
   selector: 'app-pesquisas-resultados',
   standalone: true,
@@ -28,7 +114,7 @@ export class PesquisasResultadosComponent implements OnInit {
   readonly answerModal = signal<{
     title: string;
     sub: string;
-    answers: { q: string; a: string }[];
+    answers: { q: string; a: string; anexoUrl?: string | null }[];
   } | null>(null);
 
   ngOnInit(): void {
@@ -148,21 +234,7 @@ export class PesquisasResultadosComponent implements OnInit {
   exportar(): void {
     const d = this.data();
     if (!d) return;
-    const lines = [['Pergunta', 'Resposta', 'Respondente', 'Data']];
-    for (const q of d.perguntas) {
-      if (!q.respostas.length) {
-        lines.push([q.texto, '', '', '']);
-        continue;
-      }
-      for (const r of q.respostas) {
-        lines.push([
-          q.texto,
-          r.valor,
-          d.formulario.anonimo ? '' : r.respondente?.nome || '',
-          r.enviadoEm || '',
-        ]);
-      }
-    }
+    const lines = montarCsvRespostas(d);
     const csv = lines
       .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
       .join('\n');
@@ -204,12 +276,23 @@ export class PesquisasResultadosComponent implements OnInit {
     this.toggleEvento(d.formulario.eventoAtivo === false);
   }
 
+  formatAnexoData(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('pt-BR');
+  }
+
+  anexoAutor(r: { respondente?: { nome: string } | null }): string {
+    return this.data()?.formulario.anonimo ? 'Anônimo' : r.respondente?.nome || 'Anônimo';
+  }
+
   verRespondente(name: string): void {
     const d = this.data();
     if (!d) return;
     const answers = d.perguntas.map((q) => {
       const r = q.respostas.find((x) => x.respondente?.nome === name);
-      return { q: q.texto, a: r?.valor || '—' };
+      return { q: q.texto, a: r?.valor || '—', anexoUrl: r?.anexoUrl || null };
     });
     this.answerModal.set({
       title: name,

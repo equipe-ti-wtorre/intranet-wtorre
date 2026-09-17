@@ -134,12 +134,23 @@ async function getDelegationKey() {
   return _udkCache.udk;
 }
 
-async function gerarSasLeitura(container, blobName) {
+function contentDispositionAttachment(originalName) {
+  const raw = path.basename(String(originalName || 'arquivo')).replace(/[\r\n]/g, '').trim();
+  const nome = raw.slice(0, 180) || 'arquivo';
+  const ascii = nome.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_') || 'arquivo';
+  const encoded = encodeURIComponent(nome).replace(/['()*]/g, (c) =>
+    `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+async function gerarSasLeitura(container, blobName, opts = {}) {
   return withBlobError(async () => {
     const now = new Date();
     const startsOn = new Date(now.getTime() - 5 * 60 * 1000);
     const expiresOn = new Date(now.getTime() + env.treinamentosSasTtlMin * 60 * 1000);
     const udk = await getDelegationKey();
+    const downloadNome = opts?.downloadNome ? String(opts.downloadNome).trim() : '';
     const sas = generateBlobSASQueryParameters(
       {
         containerName: container,
@@ -148,6 +159,7 @@ async function gerarSasLeitura(container, blobName) {
         startsOn,
         expiresOn,
         protocol: SASProtocol.Https,
+        ...(downloadNome ? { contentDisposition: contentDispositionAttachment(downloadNome) } : {}),
       },
       udk,
       account
