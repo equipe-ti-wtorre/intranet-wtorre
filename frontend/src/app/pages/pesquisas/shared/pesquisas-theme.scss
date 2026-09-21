@@ -1790,6 +1790,13 @@
   color: var(--navy-700);
 }
 
+.pesq-app .guest-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .pesq-app .anexo-file-row {
   display: flex;
   align-items: center;

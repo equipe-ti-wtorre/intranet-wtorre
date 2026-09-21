@@ -840,6 +840,44 @@ async function insertConvidado(formularioId, guest) {
   });
 }
 
+async function insertConvidadosAppend(formularioId, guests) {
+  const list = Array.isArray(guests) ? guests : [];
+  if (!list.length) return { inseridos: 0, duplicados: 0 };
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [existingRows] = await conn.execute(
+      'SELECT cpf_hash FROM pesquisas_convidados WHERE formulario_id = ?',
+      [formularioId]
+    );
+    const existing = new Set(existingRows.map((r) => r.cpf_hash));
+    let inseridos = 0;
+    let duplicados = 0;
+    for (const g of list) {
+      if (existing.has(g.cpfHash)) {
+        duplicados += 1;
+        continue;
+      }
+      await conn.execute(
+        `INSERT INTO pesquisas_convidados
+          (formulario_id, nome, email, cpf_hash, cpf_mascara)
+         VALUES (?, ?, ?, ?, ?)`,
+        [formularioId, g.nome || null, g.email, g.cpfHash, g.cpfMascara]
+      );
+      existing.add(g.cpfHash);
+      inseridos += 1;
+    }
+    await conn.commit();
+    return { inseridos, duplicados };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 async function replaceConvidados(formularioId, convidados) {
   const pool = getPool();
   const conn = await pool.getConnection();
@@ -1324,6 +1362,7 @@ module.exports = {
   countConvidados,
   findConvidadoByCpfHash,
   insertConvidado,
+  insertConvidadosAppend,
   replaceConvidados,
   findConvidadoByHashEmail,
   findConvidadoByIdentidade,

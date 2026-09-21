@@ -6,6 +6,7 @@ import {
   ListaTipo,
   PesquisasAprovador,
   PesquisasConvidado,
+  PesquisasConvidadosLoteResult,
   PesquisasDestinatario,
   PesquisasFormulario,
   PesquisasListItem,
@@ -133,6 +134,16 @@ export class PesquisasService {
     body: { nome?: string; cpf: string; email: string }
   ): Observable<PesquisasConvidado> {
     return this.http.post<PesquisasConvidado>(this.api(`/formularios/${id}/convidados`), body);
+  }
+
+  adicionarConvidadosLote(
+    id: number,
+    convidados: { nome?: string; cpf: string; email: string }[]
+  ): Observable<PesquisasConvidadosLoteResult> {
+    return this.http.post<PesquisasConvidadosLoteResult>(
+      this.api(`/formularios/${id}/convidados/lote`),
+      { convidados }
+    );
   }
 
   minhaResposta(id: number): Observable<PesquisasMinhaResposta> {

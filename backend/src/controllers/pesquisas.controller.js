@@ -162,6 +162,14 @@ async function adicionarConvidado(req, res) {
   }
 }
 
+async function adicionarConvidadosLote(req, res) {
+  try {
+    res.status(201).json(await service.adicionarConvidadosLote(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function minhaResposta(req, res) {
   try {
     res.json(await service.minhaResposta(req));
@@ -462,6 +470,7 @@ module.exports = {
   enviarResposta,
   resultados,
   adicionarConvidado,
+  adicionarConvidadosLote,
   minhaResposta,
   despublicar,
   atualizarEvento,

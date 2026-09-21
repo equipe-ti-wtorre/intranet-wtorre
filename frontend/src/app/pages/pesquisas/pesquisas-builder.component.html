@@ -278,7 +278,7 @@
             />
           </div>
           <p class="page-sub" style="margin-top: 8px">
-            Baixe o modelo com CPF/CNPJ, Nome e E-mail, preencha e importe. Outras colunas são ignoradas.
+            Baixe o modelo com CPF/CNPJ, Nome e E-mail. As demais colunas viram campos do formulário.
           </p>
           @if (convidados().length) {
             <div class="guest-table">
@@ -308,7 +308,11 @@
           </button>
           <input #excelInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onExcel($event)" />
         </div>
-        <p class="hint">Importar cria um campo por coluna da planilha.</p>
+        @if (publicoAlvo() === 'externos') {
+          <p class="hint">A planilha cria um campo por coluna extra e inclui os convidados (CPF/CNPJ e e-mail).</p>
+        } @else {
+          <p class="hint">Importar cria um campo por coluna da planilha.</p>
+        }
         <div class="add-block-menu-wrap">
           <button type="button" class="add-block-main-btn" (click)="menuAddOpen.set(!menuAddOpen())">
             <app-pesq-icon name="plus" [size]="15" />

@@ -1466,6 +1466,31 @@ async function adicionarConvidado(req) {
   return repo.insertConvidado(form.id, guest);
 }
 
+async function adicionarConvidadosLote(req) {
+  const form = await findFormularioByRef(req.params.id);
+  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
+    throw httpError(403, 'Você não pode alterar este formulário.');
+  }
+  if (form.publicoAlvo !== 'externos') {
+    throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
+  }
+  const raw = Array.isArray(req.body?.convidados) ? req.body.convidados : null;
+  if (!raw) {
+    throw httpError(400, 'Informe a lista de convidados.');
+  }
+  if (raw.length > 5000) {
+    throw httpError(400, 'A planilha pode ter no máximo 5.000 linhas.');
+  }
+  if (!raw.length) {
+    throw httpError(400, 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.');
+  }
+  const guests = await normalizeConvidados(raw, form.id);
+  if (!guests.length) {
+    throw httpError(400, 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.');
+  }
+  return repo.insertConvidadosAppend(form.id, guests);
+}
+
 function buildDailySeries(byDay, dias) {
   const out = [];
   const today = new Date();
@@ -2272,6 +2297,7 @@ module.exports = {
   enviarResposta,
   resultados,
   adicionarConvidado,
+  adicionarConvidadosLote,
   minhaResposta,
   listRequisicoes,
   getRequisicao,

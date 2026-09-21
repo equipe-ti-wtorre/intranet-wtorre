@@ -98,6 +98,11 @@ export interface PesquisasConvidado {
   cpfMascara?: string;
 }
 
+export interface PesquisasConvidadosLoteResult {
+  inseridos: number;
+  duplicados: number;
+}
+
 export interface PesquisasDestinatario {
   usuarioId: number;
   nome: string;

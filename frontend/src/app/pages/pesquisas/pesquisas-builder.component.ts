@@ -32,6 +32,9 @@ import {
 import {
   extractGuestsFromRows,
   isChaveHeader,
+  isDocHeader,
+  isEmailHeader,
+  isNomeHeader,
   lookupLocal,
   lookupPronto,
   matchCampos,
@@ -395,30 +398,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   async onExcel(ev: Event): Promise<void> {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
-      if (!rows.length) {
-        this.alertas.erro('A planilha está vazia.');
-        return;
-      }
-      if (rows.length > 5000) {
-        this.alertas.erro('A planilha pode ter no máximo 5.000 linhas.');
-        return;
-      }
-      this.importRowsIntoForm(rows);
-    } catch {
-      this.alertas.erro('Não consegui ler essa planilha.');
-    }
+    await this.lerEImportarPlanilha(ev);
   }
 
   async onExcelConvidados(ev: Event): Promise<void> {
+    await this.lerEImportarPlanilha(ev);
+  }
+
+  private async lerEImportarPlanilha(ev: Event): Promise<void> {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
@@ -436,26 +423,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         this.alertas.erro('A planilha pode ter no máximo 5.000 linhas.');
         return;
       }
-      const { guests, ignoradas } = extractGuestsFromRows(rows);
-      const existing = new Set(this.convidados().map((g) => digitsDocumento(g.cpf)));
-      const added = guests
-        .filter((g) => !existing.has(digitsDocumento(g.cpf)))
-        .map((g) => this.fromExtractedGuest(g));
-      if (!added.length) {
-        this.alertas.erro(
-          guests.length
-            ? 'Esses convidados já estão na lista.'
-            : 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.'
-        );
-        return;
-      }
-      this.convidados.update((list) => [...list, ...added]);
-      const extra = ignoradas
-        ? ` ${ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
-        : '';
-      this.alertas.sucesso(
-        added.length === 1 ? `1 convidado importado.${extra}` : `${added.length} convidados importados.${extra}`
-      );
+      this.importarPlanilha(rows);
     } catch {
       this.alertas.erro('Não consegui ler essa planilha.');
     }
@@ -863,8 +831,55 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     };
   }
 
-  private importRowsIntoForm(rows: Record<string, unknown>[]): void {
+  private importarPlanilha(rows: Record<string, unknown>[]): void {
+    const externo = this.publicoAlvo() === 'externos';
+    const created = this.criarCamposDaPlanilha(rows, { pularIdentidade: externo });
+
+    if (!externo) {
+      this.baseLinhas = null;
+      this.temBaseSalva.set(false);
+      this.alertas.sucesso(created === 1 ? '1 campo importado.' : `${created} campos importados.`);
+      return;
+    }
+
+    const headers = Object.keys(rows[0] || {}).slice(0, 40);
+    this.baseLinhas = rows.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const h of headers) out[h] = row[h];
+      return out;
+    });
+    this.temBaseSalva.set(true);
+
+    const { guests, ignoradas } = extractGuestsFromRows(rows);
+    const existing = new Set(this.convidados().map((g) => digitsDocumento(g.cpf)));
+    const added = guests
+      .filter((g) => !existing.has(digitsDocumento(g.cpf)))
+      .map((g) => this.fromExtractedGuest(g));
+    if (added.length) this.convidados.update((list) => [...list, ...added]);
+
+    if (!created && !added.length) {
+      this.alertas.erro(
+        guests.length
+          ? 'Esses convidados já estão na lista.'
+          : 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail; as demais viram campos.'
+      );
+      return;
+    }
+
+    const extra = ignoradas
+      ? ` ${ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
+      : '';
+    const camposTxt = created === 1 ? '1 campo' : `${created} campos`;
+    const convTxt = added.length === 1 ? '1 convidado' : `${added.length} convidados`;
+    this.alertas.sucesso(`${camposTxt} e ${convTxt} importados.${extra}`);
+  }
+
+  private criarCamposDaPlanilha(
+    rows: Record<string, unknown>[],
+    opts: { pularIdentidade: boolean }
+  ): number {
     const first = rows[0];
+    if (!first) return 0;
     const titleHints = new Set(['titulo', 'título', 'nome do evento', 'evento']);
     let created = 0;
     const headers = Object.keys(first).slice(0, 40);
@@ -872,8 +887,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       const label = header.trim();
       if (!label) continue;
       const norm = label.toLowerCase();
-      if (titleHints.has(norm) && !this.titulo().trim()) {
-        this.titulo.set(String(first[header] ?? '').trim());
+      if (titleHints.has(norm)) {
+        if (!this.titulo().trim()) {
+          this.titulo.set(String(first[header] ?? '').trim());
+        }
+        continue;
+      }
+      if (opts.pularIdentidade && (isDocHeader(label) || isEmailHeader(label) || isNomeHeader(label))) {
+        continue;
       }
       const exists = this.perguntas().some(
         (p) => p.blocoTipo === 'pergunta' && p.texto.trim().toLowerCase() === norm
@@ -884,24 +905,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       this.perguntas.update((list) => [...list, card]);
       created += 1;
     }
-    const externo = this.publicoAlvo() === 'externos';
-    if (externo) {
-      this.baseLinhas = rows.map((row) => {
-        const out: Record<string, unknown> = {};
-        for (const h of headers) out[h] = row[h];
-        return out;
-      });
-      this.temBaseSalva.set(true);
-      this.alertas.sucesso(
-        created === 1
-          ? `1 campo e ${rows.length} linha(s) importados.`
-          : `${created} campos e ${rows.length} linha(s) importados.`
-      );
-      return;
-    }
-    this.baseLinhas = null;
-    this.temBaseSalva.set(false);
-    this.alertas.sucesso(created === 1 ? '1 campo importado.' : `${created} campos importados.`);
+    return created;
   }
 
   private fromGuestApi(g: PesquisasConvidado): GuestDraft {

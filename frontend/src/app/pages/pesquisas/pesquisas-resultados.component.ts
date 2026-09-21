@@ -13,6 +13,7 @@ import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
 import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
 import { PesquisasConvidadoModalComponent } from './shared/pesquisas-convidado-modal.component';
+import { extractGuestsFromRows } from './shared/pesquisas-base.util';
 
 type DestaqueTone = 'avg' | 'ok' | 'warn' | 'pick' | 'notes';
 type DestaqueCard = { k: string; v: string; s: string; icon: string; tone: DestaqueTone };
@@ -117,6 +118,7 @@ export class PesquisasResultadosComponent implements OnInit {
 
   readonly qrAberto = signal(false);
   readonly convidadoModalAberto = signal(false);
+  readonly importandoConvidados = signal(false);
   readonly loading = signal(true);
   readonly agindo = signal(false);
   readonly data = signal<PesquisasResultados | null>(null);
@@ -358,6 +360,80 @@ export class PesquisasResultadosComponent implements OnInit {
   onConvidadoSalvo(): void {
     this.convidadoModalAberto.set(false);
     this.carregar();
+  }
+
+  async onExcelConvidados(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || this.importandoConvidados()) return;
+    const id = this.data()?.formulario?.id;
+    if (!id) {
+      this.alertas.erro('Não foi possível identificar o formulário.');
+      return;
+    }
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+      if (!rows.length) {
+        this.alertas.erro('A planilha está vazia.');
+        return;
+      }
+      if (rows.length > 5000) {
+        this.alertas.erro('A planilha pode ter no máximo 5.000 linhas.');
+        return;
+      }
+      const { guests, ignoradas } = extractGuestsFromRows(rows);
+      if (!guests.length) {
+        this.alertas.erro(
+          'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.'
+        );
+        return;
+      }
+      this.importandoConvidados.set(true);
+      this.api
+        .adicionarConvidadosLote(
+          id,
+          guests.map((g) => ({
+            nome: g.nome || undefined,
+            cpf: g.cpf,
+            email: g.email,
+          }))
+        )
+        .subscribe({
+          next: (res) => {
+            this.importandoConvidados.set(false);
+            if (!res.inseridos) {
+              this.alertas.erro(
+                res.duplicados
+                  ? 'Esses convidados já estão na lista.'
+                  : 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.'
+              );
+              return;
+            }
+            const extras: string[] = [];
+            if (res.duplicados) extras.push(`${res.duplicados} já estavam na lista`);
+            if (ignoradas) {
+              extras.push(`${ignoradas} linha(s) sem documento ou e-mail foram ignoradas`);
+            }
+            const extra = extras.length ? ` ${extras.join('. ')}.` : '';
+            const msg =
+              res.inseridos === 1
+                ? `1 convidado importado.${extra}`
+                : `${res.inseridos} convidados importados.${extra}`;
+            this.alertas.sucesso(msg);
+            this.carregar();
+          },
+          error: (err: HttpErrorResponse) => {
+            this.importandoConvidados.set(false);
+            this.alertas.erro(err.error?.mensagem || 'Não foi possível importar os convidados.');
+          },
+        });
+    } catch {
+      this.alertas.erro('Não consegui ler essa planilha.');
+    }
   }
 
   deptBreakdown(): { label: string; value: number; pct: number }[] {

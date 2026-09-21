@@ -232,10 +232,33 @@
       <p class="page-sub" style="margin-top: 14px">Convidados identificados por CPF ou CNPJ e e-mail.</p>
       <div class="guest-list-head">
         <label>Lista de convidados</label>
-        <button type="button" class="btn-secondary" (click)="abrirConvidadoModal()">
-          <app-pesq-icon name="plus" [size]="14" />
-          Inserir convidados
-        </button>
+        <div class="guest-list-actions">
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="importandoConvidados()"
+            (click)="convidadosExcelInput.click()"
+          >
+            <app-pesq-icon name="table" [size]="14" />
+            Importar planilha
+          </button>
+          <input
+            #convidadosExcelInput
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            hidden
+            (change)="onExcelConvidados($event)"
+          />
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="importandoConvidados()"
+            (click)="abrirConvidadoModal()"
+          >
+            <app-pesq-icon name="plus" [size]="14" />
+            Inserir convidados
+          </button>
+        </div>
       </div>
       <div class="guest-table">
         @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
