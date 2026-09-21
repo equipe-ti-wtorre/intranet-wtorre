@@ -126,6 +126,24 @@
     }
   </div>
 
+  @if (d.perguntas.length) {
+    <div class="form-card">
+      <h3><app-pesq-icon name="layers" [size]="17" /> Destaques</h3>
+      <div class="hl-grid">
+        @for (c of destaques(); track c.k) {
+          <div class="hl-card" [class]="'hl-card hl-card--' + c.tone">
+            <div class="hk">
+              <app-pesq-icon [name]="c.icon" [size]="13" />
+              {{ c.k }}
+            </div>
+            <div class="hv">{{ c.v }}</div>
+            <div class="hs">{{ c.s }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
   <div class="form-card">
     <h3><app-pesq-icon name="users" [size]="17" /> Cobertura do público</h3>
     <div class="goal-head">
@@ -172,24 +190,6 @@
       <div class="trend-labels">
         @for (dia of trendSeries(); track dia.label) {
           <span [class.peak]="isTrendPeak(dia)">{{ dia.label }}</span>
-        }
-      </div>
-    </div>
-  }
-
-  @if (d.perguntas.length) {
-    <div class="form-card">
-      <h3><app-pesq-icon name="layers" [size]="17" /> Destaques</h3>
-      <div class="hl-grid">
-        @for (c of destaques(); track c.k) {
-          <div class="hl-card" [class]="'hl-card hl-card--' + c.tone">
-            <div class="hk">
-              <app-pesq-icon [name]="c.icon" [size]="13" />
-              {{ c.k }}
-            </div>
-            <div class="hv">{{ c.v }}</div>
-            <div class="hs">{{ c.s }}</div>
-          </div>
         }
       </div>
     </div>
