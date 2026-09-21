@@ -1,6 +1,6 @@
 export type FormularioStatus = 'rascunho' | 'publicado' | 'encerrado';
 export type FormularioTipo = 'basico' | 'avancado';
-export type PublicoAlvo = 'todos' | 'departamento' | 'externos';
+export type PublicoAlvo = 'todos' | 'departamento' | 'externos' | 'personalizado';
 export type PerguntaTipo =
   | 'texto_curto'
   | 'texto_longo'
@@ -98,6 +98,14 @@ export interface PesquisasConvidado {
   cpfMascara?: string;
 }
 
+export interface PesquisasDestinatario {
+  usuarioId: number;
+  nome: string;
+  email?: string;
+  cargo?: string | null;
+  departamento?: string | null;
+}
+
 export type EventoTipo = 'show' | 'jogo' | 'outro';
 
 export interface PesquisasFormulario {
@@ -125,8 +133,11 @@ export interface PesquisasFormulario {
   janela?: 'antes' | 'depois' | null;
   totalRespostas?: number;
   totalConvidados?: number;
+  totalDestinatarios?: number;
+  criadoEm?: string | null;
   perguntas?: PesquisasPergunta[];
   convidados?: PesquisasConvidado[];
+  destinatarios?: PesquisasDestinatario[];
   templateCodigo?: string;
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;

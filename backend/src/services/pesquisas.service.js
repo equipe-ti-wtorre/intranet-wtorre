@@ -10,7 +10,7 @@ const cryptoService = require('./crypto.service');
 const jwtService = require('./jwt.service');
 const { env } = require('../config/env');
 
-const PUBLICOS = ['todos', 'departamento', 'externos'];
+const PUBLICOS = ['todos', 'departamento', 'externos', 'personalizado'];
 const EVENTO_TIPOS = ['show', 'jogo', 'outro'];
 const PERGUNTA_TIPOS = ['texto_curto', 'texto_longo', 'multipla_escolha', 'escala', 'sim_nao'];
 const BLOCO_TIPOS = ['pergunta', 'texto', 'anexo'];
@@ -37,6 +37,55 @@ function httpError(status, mensagem) {
 
 function isAdminPesquisas(req) {
   return req.user?.perfil === 'ADMIN' || (req.userModulos || []).includes('pesquisas');
+}
+
+function normalizeUsuarioIds(raw) {
+  const ids = [];
+  const seen = new Set();
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const n = Number(item);
+    if (!Number.isInteger(n) || n < 1 || seen.has(n)) continue;
+    seen.add(n);
+    ids.push(n);
+  }
+  return ids;
+}
+
+async function resolveDestinatarioIds(body, publicoAlvo) {
+  if (publicoAlvo !== 'personalizado') return [];
+  return repo.filterUsuariosAtivos(normalizeUsuarioIds(body?.usuarioIds));
+}
+
+async function persistDestinatarios(formId, publicoAlvo, usuarioIds, { publicar } = {}) {
+  if (publicoAlvo === 'personalizado') {
+    await repo.replaceDestinatarios(formId, usuarioIds);
+    if (publicar && !usuarioIds.length) {
+      throw httpError(
+        400,
+        'Inclua ao menos um colaborador para publicar o formulário personalizado.'
+      );
+    }
+    return;
+  }
+  await repo.replaceDestinatarios(formId, []);
+}
+
+async function assertElegivelIntranet(form, user) {
+  if (form.publicoAlvo === 'externos') {
+    throw httpError(403, 'Este formulário é para convidados externos. Use o link público.');
+  }
+  if (
+    form.publicoAlvo === 'departamento' &&
+    (user.departamento || '') !== (form.publicoDepartamento || '')
+  ) {
+    throw httpError(403, 'Este formulário não está disponível para o seu departamento.');
+  }
+  if (form.publicoAlvo === 'personalizado') {
+    const ok = await repo.isDestinatario(form.id, user.id);
+    if (!ok) {
+      throw httpError(403, 'Este formulário não está disponível para você.');
+    }
+  }
 }
 
 function parseId(raw) {
@@ -637,11 +686,13 @@ async function getFormularioPorId(id, { includeConvidados } = {}) {
   const form = await repo.findFormularioById(id);
   const perguntas = await repo.listPerguntas(id);
   const convidados = includeConvidados ? await repo.listConvidados(id) : undefined;
+  const destinatarios = includeConvidados ? await repo.listDestinatarios(id) : undefined;
   const resumoBase = await baseResumo(id);
   return decorateForm({
     ...form,
     perguntas,
     ...(convidados ? { convidados } : {}),
+    ...(destinatarios ? { destinatarios } : {}),
     baseResumo: resumoBase,
   });
 }
@@ -857,9 +908,11 @@ async function listFormularios(req) {
       it.publicoAlvoTotal =
         form.publicoAlvo === 'externos'
           ? form.totalConvidados || 0
-          : form.publicoAlvo === 'departamento'
-            ? depts.get(form.publicoDepartamento) || 0
-            : all;
+          : form.publicoAlvo === 'personalizado'
+            ? form.totalDestinatarios || 0
+            : form.publicoAlvo === 'departamento'
+              ? depts.get(form.publicoDepartamento) || 0
+              : all;
     }
   }
 
@@ -875,8 +928,9 @@ async function getFormulario(req) {
   if (!owner && !admin) throw httpError(403, 'Você não pode editar este formulário.');
   const perguntas = await repo.listPerguntas(id);
   const convidados = await repo.listConvidados(id);
+  const destinatarios = await repo.listDestinatarios(id);
   const resumoBase = await baseResumo(id);
-  return decorateForm({ ...form, perguntas, convidados, baseResumo: resumoBase });
+  return decorateForm({ ...form, perguntas, convidados, destinatarios, baseResumo: resumoBase });
 }
 
 function tituloCopia(titulo) {
@@ -933,6 +987,7 @@ async function clonarFormulario(req) {
   await repo.replacePerguntas(novoId, perguntas);
   await repo.copyFormularioBase(id, novoId);
   await repo.copyConvidados(id, novoId);
+  await repo.copyDestinatarios(id, novoId);
   try {
     await copiarCapaFormulario(id, novoId);
   } catch {
@@ -953,6 +1008,7 @@ async function salvarFormulario(req, { publicar }) {
   const status = publicar ? 'publicado' : 'rascunho';
   const idParam = req.params.id ? parseId(req.params.id) : null;
   const guests = await resolveConvidadosFromBody(req.body, idParam);
+  const usuarioIds = await resolveDestinatarioIds(req.body, body.publicoAlvo);
 
   if (idParam) {
     const existing = await repo.findFormularioById(idParam);
@@ -970,6 +1026,7 @@ async function salvarFormulario(req, { publicar }) {
     } else if (body.publicoAlvo !== 'externos') {
       await repo.replaceConvidados(idParam, []);
     }
+    await persistDestinatarios(idParam, body.publicoAlvo, usuarioIds, { publicar });
     if (!existing.slug) {
       await repo.setFormularioSlug(idParam, await uniquePublicToken());
     }
@@ -992,6 +1049,7 @@ async function salvarFormulario(req, { publicar }) {
   if (guests && guests.length) {
     await repo.replaceConvidados(id, guests);
   }
+  await persistDestinatarios(id, body.publicoAlvo, usuarioIds, { publicar });
   if (publicar && body.publicoAlvo === 'externos' && !(guests && guests.length)) {
     throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
   }
@@ -1015,6 +1073,15 @@ async function publicarFormulario(req) {
       const n = await repo.countConvidados(idParam);
       if (!n) {
         throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
+      }
+    }
+    if (existing.publicoAlvo === 'personalizado') {
+      const n = await repo.countDestinatarios(idParam);
+      if (!n) {
+        throw httpError(
+          400,
+          'Inclua ao menos um colaborador para publicar o formulário personalizado.'
+        );
       }
     }
     if (!existing.slug) {
@@ -1099,12 +1166,7 @@ async function payloadResponder(req) {
     throw httpError(403, 'Este formulário é para convidados externos. Use o link público.');
   }
   assertJanelaAberta(form);
-  if (
-    form.publicoAlvo === 'departamento' &&
-    (req.user.departamento || '') !== (form.publicoDepartamento || '')
-  ) {
-    throw httpError(403, 'Este formulário não está disponível para o seu departamento.');
-  }
+  await assertElegivelIntranet(form, req.user);
   const ja = await repo.findRespostaDoUsuario(id, req.user.id);
   if (ja) throw httpError(409, 'Você já respondeu este formulário.');
   const perguntas = await repo.listPerguntas(id);
@@ -1142,12 +1204,7 @@ async function lookupBaseIntranet(req) {
     throw httpError(403, 'Este formulário é para convidados externos. Use o link público.');
   }
   assertJanelaAberta(form);
-  if (
-    form.publicoAlvo === 'departamento' &&
-    (req.user.departamento || '') !== (form.publicoDepartamento || '')
-  ) {
-    throw httpError(403, 'Este formulário não está disponível para o seu departamento.');
-  }
+  await assertElegivelIntranet(form, req.user);
   return { campos: {} };
 }
 
@@ -1310,6 +1367,8 @@ async function resultados(req) {
   const perguntas = await repo.listPerguntas(id);
   const respostas = await repo.listRespostasDetalhadas(id);
   const convidados = form.publicoAlvo === 'externos' ? await repo.listConvidados(id) : [];
+  const destinatarios =
+    form.publicoAlvo === 'personalizado' ? await repo.listDestinatarios(id) : [];
 
   const perguntasOut = [];
   for (const p of perguntas) {
@@ -1360,15 +1419,17 @@ async function resultados(req) {
   const publicoAlvoTotal =
     form.publicoAlvo === 'externos'
       ? form.totalConvidados || 0
-      : form.publicoAlvo === 'departamento' && form.publicoDepartamento
-        ? await repo.countUsuariosAtivos(form.publicoDepartamento)
-        : await repo.countUsuariosAtivos();
+      : form.publicoAlvo === 'personalizado'
+        ? form.totalDestinatarios || (await repo.countDestinatarios(id))
+        : form.publicoAlvo === 'departamento' && form.publicoDepartamento
+          ? await repo.countUsuariosAtivos(form.publicoDepartamento)
+          : await repo.countUsuariosAtivos();
   const pendentes = Math.max(publicoAlvoTotal - respostas.length, 0);
   const taxa = publicoAlvoTotal ? Math.round((100 * respostas.length) / publicoAlvoTotal) : 0;
   const series = await repo.seriesRespostasDiarias(id, 7);
 
   return {
-    formulario: await decorateForm({ ...form, convidados }),
+    formulario: await decorateForm({ ...form, convidados, destinatarios }),
     total: respostas.length,
     perguntas: perguntasOut,
     publicoAlvoTotal,
@@ -1383,6 +1444,26 @@ async function resultados(req) {
           date: formatBrDateTime(r.enviadoEm) || '',
         })),
   };
+}
+
+async function adicionarConvidado(req) {
+  const form = await findFormularioByRef(req.params.id);
+  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
+    throw httpError(403, 'Você não pode alterar este formulário.');
+  }
+  if (form.publicoAlvo !== 'externos') {
+    throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
+  }
+  const guests = await normalizeConvidados([req.body], form.id);
+  if (!guests.length) {
+    throw httpError(400, 'Informe os dados do convidado.');
+  }
+  const guest = guests[0];
+  const duplicado = await repo.findConvidadoByCpfHash(form.id, guest.cpfHash);
+  if (duplicado) {
+    throw httpError(409, 'Este CPF ou CNPJ já está na lista.');
+  }
+  return repo.insertConvidado(form.id, guest);
 }
 
 function buildDailySeries(byDay, dias) {
@@ -1584,6 +1665,10 @@ async function buscarAprovadores(req) {
 
 async function departamentos() {
   return repo.listDepartamentos();
+}
+
+async function listDestinatariosCandidatos() {
+  return repo.listDestinatariosCandidatos();
 }
 
 function parseSlug(raw) {
@@ -2186,6 +2271,7 @@ module.exports = {
   lookupBaseIntranet,
   enviarResposta,
   resultados,
+  adicionarConvidado,
   minhaResposta,
   listRequisicoes,
   getRequisicao,
@@ -2197,6 +2283,7 @@ module.exports = {
   listAdminRequisicoes,
   buscarAprovadores,
   departamentos,
+  listDestinatariosCandidatos,
   publicoMeta,
   publicoHubMeta,
   publicoVerificar,

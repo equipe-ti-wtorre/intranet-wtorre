@@ -13,12 +13,14 @@ import {
   LogicaCondicao,
   PerguntaTipo,
   PesquisasConvidado,
+  PesquisasDestinatario,
   PesquisasFormulario,
   PesquisasPergunta,
   PesquisasTemplateVisual,
   PublicoAlvo,
   TextoEstilo,
 } from '../../models/pesquisas.model';
+import { PesquisasDestinatariosModalComponent } from './shared/pesquisas-destinatarios-modal.component';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
@@ -76,7 +78,13 @@ let gKey = 0;
 @Component({
   selector: 'app-pesquisas-builder',
   standalone: true,
-  imports: [FormsModule, PesqIconComponent, PesquisasGuestFormComponent, PesquisasQrCardComponent],
+  imports: [
+    FormsModule,
+    PesqIconComponent,
+    PesquisasGuestFormComponent,
+    PesquisasQrCardComponent,
+    PesquisasDestinatariosModalComponent,
+  ],
   templateUrl: './pesquisas-builder.component.html',
   host: {
     '[attr.data-marca]': 'templateCodigo()',
@@ -102,6 +110,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly prazoFimHora = signal('');
   readonly publicoAlvo = signal<PublicoAlvo>('todos');
   readonly publicoDepartamento = signal('');
+  readonly destinatarios = signal<PesquisasDestinatario[]>([]);
+  readonly destinatariosModalAberto = signal(false);
+  private publicoAntesPersonalizado: PublicoAlvo = 'todos';
   readonly secoes = signal(false);
   readonly logica = signal(false);
   readonly anonimo = signal(false);
@@ -211,6 +222,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.aplicarJanela(form);
           this.publicoAlvo.set(form.publicoAlvo);
           this.publicoDepartamento.set(form.publicoDepartamento || '');
+          this.destinatarios.set(form.destinatarios || []);
           this.secoes.set(!!form.secoes);
           this.logica.set(!!form.logicaCondicional);
           this.anonimo.set(!!form.anonimo);
@@ -570,11 +582,34 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   onPublicoAlvoChange(value: PublicoAlvo): void {
+    const anterior = this.publicoAlvo();
     this.publicoAlvo.set(value);
+    if (value === 'personalizado') {
+      if (anterior !== 'personalizado') this.publicoAntesPersonalizado = anterior;
+      this.destinatariosModalAberto.set(true);
+    }
     if (value !== 'externos') {
       this.baseLinhas = null;
       this.temBaseSalva.set(false);
     }
+  }
+
+  confirmarDestinatarios(lista: PesquisasDestinatario[]): void {
+    this.destinatarios.set(lista);
+    this.destinatariosModalAberto.set(false);
+    this.publicoAlvo.set('personalizado');
+  }
+
+  cancelarDestinatarios(): void {
+    this.destinatariosModalAberto.set(false);
+    if (!this.destinatarios().length) {
+      const fallback = this.publicoAntesPersonalizado;
+      this.publicoAlvo.set(fallback === 'personalizado' ? 'todos' : fallback);
+    }
+  }
+
+  abrirDestinatarios(): void {
+    this.destinatariosModalAberto.set(true);
   }
 
   private fromExtractedGuest(g: { nome: string; cpf: string; email: string }): GuestDraft {
@@ -682,6 +717,12 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    if (publicar && this.publicoAlvo() === 'personalizado') {
+      if (!this.destinatarios().length) {
+        this.alertas.erro('Inclua ao menos um colaborador para publicar o formulário personalizado.');
+        return;
+      }
+    }
     const body = this.toBody();
     this.salvando.set(true);
     const id = this.formId();
@@ -699,6 +740,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           if (form.convidados) {
             this.convidados.set(this.mergeGuestsFromApi(form.convidados));
           }
+          if (form.destinatarios) {
+            this.destinatarios.set(form.destinatarios);
+          }
           if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
           const file = this.capaPendente;
           if (!file) return of(form);
@@ -712,6 +756,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         this.aplicarJanela(form);
         if (form.convidados) {
           this.convidados.set(this.mergeGuestsFromApi(form.convidados));
+        }
+        if (form.destinatarios) {
+          this.destinatarios.set(form.destinatarios);
         }
         if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
         if (form.capaUrl) this.capaUrl.set(form.capaUrl);
@@ -937,6 +984,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       prazoFimHora: this.prazoFimHora() || null,
       publicoAlvo: this.publicoAlvo(),
       publicoDepartamento: this.publicoDepartamento(),
+      usuarioIds: this.destinatarios().map((p) => p.usuarioId),
       tipo: 'avancado',
       secoes: this.secoes(),
       logicaCondicional: this.logica(),

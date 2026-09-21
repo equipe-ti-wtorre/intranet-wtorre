@@ -3,11 +3,19 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
-import { PesquisasResultadoPergunta, PesquisasResultados } from '../../models/pesquisas.model';
+import {
+  PesquisasResultadoPergunta,
+  PesquisasResultados,
+  PesquisasSerieDia,
+} from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
 import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
+import { PesquisasConvidadoModalComponent } from './shared/pesquisas-convidado-modal.component';
+
+type DestaqueTone = 'avg' | 'ok' | 'warn' | 'pick' | 'notes';
+type DestaqueCard = { k: string; v: string; s: string; icon: string; tone: DestaqueTone };
 
 type LinhaEnvioCsv = {
   respostaId: number;
@@ -98,7 +106,7 @@ function montarCsvRespostas(d: PesquisasResultados): string[][] {
 @Component({
   selector: 'app-pesquisas-resultados',
   standalone: true,
-  imports: [PesqIconComponent, PesquisasQrCardComponent],
+  imports: [PesqIconComponent, PesquisasQrCardComponent, PesquisasConvidadoModalComponent],
   templateUrl: './pesquisas-resultados.component.html',
 })
 export class PesquisasResultadosComponent implements OnInit {
@@ -108,6 +116,7 @@ export class PesquisasResultadosComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly qrAberto = signal(false);
+  readonly convidadoModalAberto = signal(false);
   readonly loading = signal(true);
   readonly agindo = signal(false);
   readonly data = signal<PesquisasResultados | null>(null);
@@ -145,7 +154,7 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   tipoLabel(): string {
-    return 'Formulário';
+    return this.data()?.formulario.tipo === 'avancado' ? 'Formulário avançado' : 'Formulário básico';
   }
 
   totalConvidados(): number {
@@ -153,6 +162,203 @@ export class PesquisasResultadosComponent implements OnInit {
     if (!d) return 0;
     const lista = d.formulario.convidados?.length || 0;
     return lista || d.publicoAlvoTotal || 0;
+  }
+
+  formatBrDate(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    const raw = iso.slice(0, 10);
+    const [y, m, day] = raw.split('-');
+    if (y && m && day && y.length === 4) return `${day}/${m}/${y}`;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('pt-BR');
+  }
+
+  publicoLabel(): string {
+    const form = this.data()?.formulario;
+    if (!form) return '—';
+    if (form.publicoAlvo === 'todos') return 'Todos os colaboradores';
+    if (form.publicoAlvo === 'departamento') return form.publicoDepartamento || 'Departamento específico';
+    if (form.publicoAlvo === 'personalizado') return 'Personalizado';
+    if (form.publicoAlvo === 'externos') return 'Convidados externos';
+    return '—';
+  }
+
+  prazoIso(): string | null {
+    const form = this.data()?.formulario;
+    return form?.prazoFim || form?.prazo || null;
+  }
+
+  prazoVencido(): boolean {
+    return this.data()?.formulario.janela === 'depois';
+  }
+
+  prazoLabel(): string {
+    const iso = this.prazoIso();
+    if (!iso) return 'Sem prazo';
+    return this.formatBrDate(iso);
+  }
+
+  deadlineText(): string {
+    const form = this.data()?.formulario;
+    if (!form) return '—';
+    if (form.janela === 'depois') return 'Encerrado';
+    const iso = this.prazoIso();
+    if (!iso) return '—';
+    const d = this.parseDate(iso);
+    if (!d) return this.formatBrDate(iso);
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    const n = Math.round((d.getTime() - t.getTime()) / 86400000);
+    if (n < 0) return 'Encerrado';
+    if (n === 0) return 'Último dia';
+    return `${n} dia${n > 1 ? 's' : ''}`;
+  }
+
+  prazoOverdue(): boolean {
+    const text = this.deadlineText();
+    return text === 'Encerrado';
+  }
+
+  audienceSize(): number {
+    const d = this.data();
+    if (!d) return 0;
+    if (d.formulario.publicoAlvo === 'externos') return this.totalConvidados();
+    return d.publicoAlvoTotal || 0;
+  }
+
+  audienceNoun(): string {
+    return this.data()?.formulario.publicoAlvo === 'externos'
+      ? 'convidados'
+      : 'pessoas no público-alvo';
+  }
+
+  metaCells(): { k: string; v: string | number; warn?: boolean }[] {
+    const d = this.data();
+    if (!d) return [];
+    return [
+      { k: 'Criado em', v: this.formatBrDate(d.formulario.criadoEm) },
+      { k: 'Prazo', v: this.prazoLabel(), warn: this.prazoVencido() },
+      { k: 'Público', v: this.publicoLabel() },
+      { k: 'Perguntas', v: d.perguntas.length },
+      { k: 'Identificação', v: d.formulario.anonimo ? 'Anônima' : 'Identificada' },
+    ];
+  }
+
+  trendSeries(): PesquisasSerieDia[] {
+    return this.data()?.dailySeries || [];
+  }
+
+  trendMax(): number {
+    return Math.max(0, ...this.trendSeries().map((d) => d.value));
+  }
+
+  trendTotal(): number {
+    return this.trendSeries().reduce((a, d) => a + d.value, 0);
+  }
+
+  trendPeak(): PesquisasSerieDia | null {
+    const s = this.trendSeries();
+    if (!s.length) return null;
+    return s.reduce((a, d) => (d.value > a.value ? d : a), s[0]);
+  }
+
+  trendHeight(value: number): number {
+    const max = this.trendMax();
+    if (!max) return 3;
+    return Math.max(Math.round((100 * value) / max), 3);
+  }
+
+  isTrendPeak(item: PesquisasSerieDia): boolean {
+    const peak = this.trendPeak();
+    return !!this.trendTotal() && !!peak && item.value === peak.value;
+  }
+
+  destaques(): DestaqueCard[] {
+    const d = this.data();
+    if (!d?.perguntas.length) return [];
+    const cards: DestaqueCard[] = [];
+    const scales = d.perguntas.filter((q) => q.tipo === 'escala');
+    const hasScaleData = scales.some((q) => (q.agregados.media || 0) > 0 || q.total > 0);
+    const mediaNum = scales.length
+      ? scales.reduce((a, q) => a + (q.agregados.media || 0), 0) / scales.length
+      : 0;
+    cards.push({
+      k: 'Média geral',
+      v: `${mediaNum ? mediaNum.toFixed(1) : '0'} / 5`,
+      s: scales.length ? `${scales.length} pergunta(s) de escala` : 'Ainda sem respostas',
+      icon: 'bar',
+      tone: 'avg',
+    });
+
+    const best = scales.length
+      ? scales.reduce((a, q) => ((q.agregados.media || 0) > (a.agregados.media || 0) ? q : a))
+      : null;
+    cards.push({
+      k: 'Melhor avaliada',
+      v: best && hasScaleData ? `${best.agregados.media ?? 0} / 5` : '—',
+      s: best?.texto || 'Ainda sem respostas',
+      icon: 'check',
+      tone: 'ok',
+    });
+
+    const worst =
+      scales.length > 1
+        ? scales.reduce((a, q) => ((q.agregados.media || 0) < (a.agregados.media || 0) ? q : a))
+        : null;
+    cards.push({
+      k: 'Ponto de atenção',
+      v: worst && hasScaleData ? `${worst.agregados.media ?? 0} / 5` : '—',
+      s: worst?.texto || 'Ainda sem respostas',
+      icon: 'alert',
+      tone: 'warn',
+    });
+
+    const choices = d.perguntas.filter(
+      (q) => q.tipo === 'sim_nao' || q.tipo === 'multipla_escolha'
+    );
+    let top: { pct: number; label: string; q: string } | null = null;
+    for (const q of choices) {
+      const ops = q.agregados.opcoes || [];
+      const total = ops.reduce((a, o) => a + o.count, 0);
+      if (!total) continue;
+      for (const o of ops) {
+        const pct = Math.round((100 * o.count) / total);
+        if (!top || pct > top.pct) top = { pct, label: o.valor, q: q.texto };
+      }
+    }
+    cards.push({
+      k: 'Resposta mais escolhida',
+      v: top ? `${top.label} · ${top.pct}%` : '—',
+      s: top?.q || choices[0]?.texto || 'Ainda sem respostas',
+      icon: 'list-checks',
+      tone: 'pick',
+    });
+
+    const textos = d.perguntas
+      .filter((q) => q.tipo === 'texto_curto' || q.tipo === 'texto_longo')
+      .reduce((a, q) => a + q.respostas.length, 0);
+    cards.push({
+      k: 'Comentários',
+      v: String(textos),
+      s: 'Respostas de texto livre para ler',
+      icon: 'file-text',
+      tone: 'notes',
+    });
+    return cards;
+  }
+
+  abrirConvidadoModal(): void {
+    this.convidadoModalAberto.set(true);
+  }
+
+  fecharConvidadoModal(): void {
+    this.convidadoModalAberto.set(false);
+  }
+
+  onConvidadoSalvo(): void {
+    this.convidadoModalAberto.set(false);
+    this.carregar();
   }
 
   deptBreakdown(): { label: string; value: number; pct: number }[] {
@@ -166,8 +372,17 @@ export class PesquisasResultadosComponent implements OnInit {
     const entries = [...counts.entries()]
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value);
-    const max = Math.max(1, ...entries.map((e) => e.value));
-    return entries.map((e) => ({ ...e, pct: Math.round((100 * e.value) / max) }));
+    const total = entries.reduce((a, e) => a + e.value, 0) || 1;
+    return entries.map((e) => ({ ...e, pct: Math.round((100 * e.value) / total) }));
+  }
+
+  private parseDate(iso: string): Date | null {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setHours(0, 0, 0, 0);
+    return d;
   }
 
   statusClass(): string {

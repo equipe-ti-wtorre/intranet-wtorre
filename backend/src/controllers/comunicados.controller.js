@@ -110,6 +110,7 @@ async function listarPublicos(req, res) {
   try {
     const lista = await comunicadosRepo.listarPublicos({
       departamento: String(req.user?.departamento || '').trim(),
+      usuarioId: req.user?.id,
     });
     return res.json(lista);
   } catch (err) {

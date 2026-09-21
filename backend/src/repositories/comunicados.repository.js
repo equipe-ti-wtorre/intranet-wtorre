@@ -83,11 +83,12 @@ function nowSaoPauloSql() {
   return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
 }
 
-async function listarPublicos({ departamento, limite = 20 } = {}) {
+async function listarPublicos({ departamento, usuarioId, limite = 20 } = {}) {
   const pool = getPool();
   const limitNum = Math.min(Math.max(Number(limite) || 20, 1), 100);
   const agora = nowSaoPauloSql();
   const dept = normalizarDepartamento(departamento);
+  const uid = Number(usuarioId) || 0;
   const [rows] = await pool.execute(
     `SELECT c.*,
             cat.nome AS cat_nome,
@@ -129,11 +130,19 @@ async function listarPublicos({ departamento, limite = 20 } = {}) {
               OR pf.publico_alvo <> 'departamento'
               OR TRIM(pf.publico_departamento) = ?
             )
+            AND (
+              pf.publico_alvo IS NULL
+              OR pf.publico_alvo <> 'personalizado'
+              OR EXISTS (
+                SELECT 1 FROM pesquisas_formulario_destinatarios d
+                WHERE d.formulario_id = pf.id AND d.usuario_id = ?
+              )
+            )
           )
         )
       ORDER BY c.data_publicacao DESC, c.ordem IS NULL, c.ordem ASC, c.id DESC
       LIMIT ${limitNum}`,
-    [agora, agora, dept]
+    [agora, agora, dept, uid]
   );
   return rows.filter((row) => ehFormularioSetorVisivel(row, dept)).map(mapComunicado);
 }

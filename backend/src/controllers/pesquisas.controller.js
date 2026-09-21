@@ -34,6 +34,14 @@ async function departamentos(req, res) {
   }
 }
 
+async function listDestinatarios(req, res) {
+  try {
+    res.json(await service.listDestinatariosCandidatos());
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function buscarAprovadores(req, res) {
   try {
     res.json(await service.buscarAprovadores(req));
@@ -141,6 +149,14 @@ async function enviarResposta(req, res) {
 async function resultados(req, res) {
   try {
     res.json(await service.resultados(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function adicionarConvidado(req, res) {
+  try {
+    res.status(201).json(await service.adicionarConvidado(req));
   } catch (err) {
     handleError(res, err);
   }
@@ -431,6 +447,7 @@ async function moverCarrossel(req, res) {
 module.exports = {
   resumo,
   departamentos,
+  listDestinatarios,
   buscarAprovadores,
   listFormularios,
   getFormulario,
@@ -444,6 +461,7 @@ module.exports = {
   lookupBase,
   enviarResposta,
   resultados,
+  adicionarConvidado,
   minhaResposta,
   despublicar,
   atualizarEvento,

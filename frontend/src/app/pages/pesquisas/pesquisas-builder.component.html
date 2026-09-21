@@ -164,8 +164,26 @@
             <option value="todos">Todos os colaboradores</option>
             <option value="departamento">Departamento específico</option>
             <option value="externos">Convidados externos</option>
+            <option value="personalizado">Personalizado</option>
           </select>
         </div>
+        @if (publicoAlvo() === 'personalizado') {
+          <div class="destinatarios-resumo">
+            <div>
+              <b>{{ destinatarios().length }} colaborador(es) selecionado(s)</b>
+              <span>
+                @if (destinatarios().length) {
+                  Só essas pessoas recebem e respondem o formulário.
+                } @else {
+                  Escolha quem deve receber este formulário.
+                }
+              </span>
+            </div>
+            <button type="button" class="btn-secondary" (click)="abrirDestinatarios()">
+              {{ destinatarios().length ? 'Alterar lista' : 'Selecionar pessoas' }}
+            </button>
+          </div>
+        }
         @if (publicoAlvo() === 'departamento') {
           <div class="field" style="margin-top: 16px">
             <label>Departamento</label>
@@ -457,3 +475,10 @@
     (abertoChange)="qrAberto.set($event)"
   />
 }
+
+<app-pesquisas-destinatarios-modal
+  [open]="destinatariosModalAberto()"
+  [selecionados]="destinatarios()"
+  (confirm)="confirmarDestinatarios($event)"
+  (cancel)="cancelarDestinatarios()"
+/>

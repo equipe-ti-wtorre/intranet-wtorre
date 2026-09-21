@@ -24,6 +24,9 @@
           @if (d.formulario.publicoAlvo === 'departamento') {
             <span class="badge typepill">{{ d.formulario.publicoDepartamento || 'Departamento' }}</span>
           }
+          @if (d.formulario.publicoAlvo === 'personalizado') {
+            <span class="badge typepill">Personalizado</span>
+          }
           @if (d.formulario.publicoAlvo === 'externos') {
             <span class="badge exec">Externo</span>
           }
@@ -96,7 +99,101 @@
         </div>
       </div>
     }
+    <div
+      class="stat-chip"
+      [style.--accent-grad]="
+        prazoOverdue()
+          ? 'linear-gradient(135deg, #f87171, #b91c1c)'
+          : 'linear-gradient(135deg, #6366f1, #4338ca)'
+      "
+    >
+      <div class="stat-icon" style="background: var(--review-bg); color: var(--review-fg)">
+        <app-pesq-icon name="calendar" />
+      </div>
+      <div>
+        <div class="stat-num">{{ deadlineText() }}</div>
+        <div class="stat-label">Prazo</div>
+      </div>
+    </div>
   </div>
+
+  <div class="meta-strip">
+    @for (c of metaCells(); track c.k) {
+      <div class="meta-item">
+        <div class="mk">{{ c.k }}</div>
+        <div class="mv" [class.warn]="c.warn">{{ c.v }}</div>
+      </div>
+    }
+  </div>
+
+  <div class="form-card">
+    <h3><app-pesq-icon name="users" [size]="17" /> Cobertura do público</h3>
+    <div class="goal-head">
+      <span class="gp">{{ d.taxa }}%</span>
+      <span class="gt">{{ d.total }} de {{ audienceSize() }} {{ audienceNoun() }}</span>
+    </div>
+    <div class="goal-bar">
+      <i [style.width.%]="d.taxa"></i>
+    </div>
+    <div class="goal-legend">
+      <span><i class="dot-key" style="background: var(--primary-600)"></i>Responderam <b>{{ d.total }}</b></span>
+      <span><i class="dot-key" style="background: var(--slate-400)"></i>Faltam <b>{{ d.pendentes }}</b></span>
+      <span>
+        <i class="dot-key" [style.background]="prazoOverdue() ? '#c53030' : 'var(--pending-fg)'"></i>
+        Prazo <b>{{ deadlineText() }}</b>
+      </span>
+    </div>
+  </div>
+
+  @if (trendSeries().length) {
+    <div class="form-card">
+      <h3><app-pesq-icon name="bar" [size]="17" /> Respostas por dia</h3>
+      @if (trendTotal()) {
+        <div class="trend-sub">
+          <b>{{ trendTotal() }}</b> respostas nos últimos 7 dias · pico na
+          {{ (trendPeak()?.label || '').toLowerCase() }} com <b>{{ trendPeak()?.value }}</b>
+        </div>
+      } @else {
+        <div class="trend-sub">Nenhuma resposta nos últimos 7 dias.</div>
+      }
+      <div class="trend">
+        @for (dia of trendSeries(); track dia.label) {
+          <div class="trend-col">
+            <span class="trend-val" [class.dim]="!dia.value">{{ dia.value }}</span>
+            <div
+              class="trend-bar"
+              [class.peak]="isTrendPeak(dia)"
+              [class.zero]="!dia.value"
+              [style.height.%]="trendHeight(dia.value)"
+            ></div>
+          </div>
+        }
+      </div>
+      <div class="trend-labels">
+        @for (dia of trendSeries(); track dia.label) {
+          <span [class.peak]="isTrendPeak(dia)">{{ dia.label }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  @if (d.perguntas.length) {
+    <div class="form-card">
+      <h3><app-pesq-icon name="layers" [size]="17" /> Destaques</h3>
+      <div class="hl-grid">
+        @for (c of destaques(); track c.k) {
+          <div class="hl-card" [class]="'hl-card hl-card--' + c.tone">
+            <div class="hk">
+              <app-pesq-icon [name]="c.icon" [size]="13" />
+              {{ c.k }}
+            </div>
+            <div class="hv">{{ c.v }}</div>
+            <div class="hs">{{ c.s }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  }
 
   @if (d.formulario.publicoAlvo === 'externos') {
     <div class="form-card">
@@ -133,9 +230,13 @@
         </div>
       </div>
       <p class="page-sub" style="margin-top: 14px">Convidados identificados por CPF ou CNPJ e e-mail.</p>
-      <label style="display: block; margin-top: 16px; margin-bottom: 8px; font-size: 12.5px; font-weight: 700; color: var(--navy-700)">
-        Lista de convidados
-      </label>
+      <div class="guest-list-head">
+        <label>Lista de convidados</label>
+        <button type="button" class="btn-secondary" (click)="abrirConvidadoModal()">
+          <app-pesq-icon name="plus" [size]="14" />
+          Inserir convidados
+        </button>
+      </div>
       <div class="guest-table">
         @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
           <p class="page-sub">Nenhum convidado na lista.</p>
@@ -170,7 +271,7 @@
           <div class="bar-option">
             <span class="bar-label">{{ e.label }}</span>
             <div class="bar-track"><div class="bar-fill" [style.width.%]="e.pct"></div></div>
-            <span class="bar-pct">{{ e.value }}</span>
+            <span class="bar-pct">{{ e.value }} <span class="bar-count">({{ e.pct }}%)</span></span>
           </div>
         }
       }
@@ -188,7 +289,7 @@
         @if (q.tipo === 'escala') {
           <div class="scale-avg">
             <span class="num">{{ q.agregados.media ?? 0 }}</span>
-            <span class="lbl">média de 5</span>
+            <span class="lbl">média de 5 · {{ q.total }} resposta(s)</span>
           </div>
           @for (bar of escalaBars(q); track bar.label) {
             <div class="bar-option">
@@ -198,6 +299,9 @@
             </div>
           }
         } @else if (q.tipo === 'sim_nao' || q.tipo === 'multipla_escolha') {
+          <div style="font-size: 11.8px; color: var(--slate-500); margin-bottom: 9px">
+            {{ q.total }} resposta(s)
+          </div>
           @if (!choiceBars(q).length) {
             <p class="page-sub">Ainda sem respostas.</p>
           }
@@ -299,6 +403,13 @@
     (abertoChange)="qrAberto.set($event)"
   />
 }
+
+<app-pesquisas-convidado-modal
+  [open]="convidadoModalAberto()"
+  [formularioId]="data()?.formulario?.id ?? null"
+  (saved)="onConvidadoSalvo()"
+  (cancel)="fecharConvidadoModal()"
+/>
 
 @if (answerModal(); as modal) {
   <div class="modal-overlay" (click)="fecharModal()">

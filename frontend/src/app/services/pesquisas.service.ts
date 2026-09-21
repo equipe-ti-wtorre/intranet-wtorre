@@ -5,6 +5,8 @@ import { environment } from '../../environments/environment';
 import {
   ListaTipo,
   PesquisasAprovador,
+  PesquisasConvidado,
+  PesquisasDestinatario,
   PesquisasFormulario,
   PesquisasListItem,
   PesquisasRequisicao,
@@ -33,6 +35,10 @@ export class PesquisasService {
 
   departamentos(): Observable<string[]> {
     return this.http.get<string[]>(this.api('/departamentos'));
+  }
+
+  listDestinatarios(): Observable<PesquisasDestinatario[]> {
+    return this.http.get<PesquisasDestinatario[]>(this.api('/destinatarios'));
   }
 
   buscarAprovadores(q: string): Observable<PesquisasAprovador[]> {
@@ -120,6 +126,13 @@ export class PesquisasService {
     return this.http.get<PesquisasResultados>(
       this.api(`/formularios/${encodeURIComponent(String(ref))}/resultados`)
     );
+  }
+
+  adicionarConvidado(
+    id: number,
+    body: { nome?: string; cpf: string; email: string }
+  ): Observable<PesquisasConvidado> {
+    return this.http.post<PesquisasConvidado>(this.api(`/formularios/${id}/convidados`), body);
   }
 
   minhaResposta(id: number): Observable<PesquisasMinhaResposta> {

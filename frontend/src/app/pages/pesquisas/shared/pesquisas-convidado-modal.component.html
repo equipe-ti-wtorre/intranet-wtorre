@@ -1,0 +1,47 @@
+<app-admin-modal
+  [open]="open()"
+  title="Novo convidado"
+  subtitle="Quem estiver nesta lista consegue confirmar a identidade e responder o formulário."
+  saveLabel="Adicionar"
+  [salvando]="salvando()"
+  [saveDisabled]="!valido()"
+  (save)="salvar()"
+  (cancel)="fechar()"
+>
+  <div class="field">
+    <label>Nome</label>
+    <input type="text" name="guestNome" autocomplete="name" [ngModel]="nome()" (ngModelChange)="nome.set($event)" />
+  </div>
+  <div class="field">
+    <label>CPF ou CNPJ *</label>
+    <input
+      type="text"
+      name="guestDocumento"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="000.000.000-00 ou 00.000.000/0001-00"
+      [ngModel]="documento()"
+      (ngModelChange)="formatarDocumento($event)"
+      (blur)="tocado.set(true)"
+    />
+    @if (docErro()) {
+      <p class="help warn">{{ docErro() }}</p>
+    }
+  </div>
+  <div class="field">
+    <label>E-mail *</label>
+    <input
+      type="text"
+      name="guestEmail"
+      inputmode="email"
+      autocomplete="email"
+      placeholder="email@exemplo.com"
+      [ngModel]="email()"
+      (ngModelChange)="email.set($event)"
+      (blur)="tocado.set(true)"
+    />
+    @if (emailErro()) {
+      <p class="help warn">{{ emailErro() }}</p>
+    }
+  </div>
+</app-admin-modal>

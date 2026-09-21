@@ -64,6 +64,7 @@ router.post(
 
 router.get('/resumo', requireJwt, controller.resumo);
 router.get('/departamentos', requireJwt, controller.departamentos);
+router.get('/destinatarios', requireJwt, controller.listDestinatarios);
 router.get('/aprovadores', requireJwt, controller.buscarAprovadores);
 router.get('/templates', requireJwt, controller.listTemplates);
 
@@ -83,6 +84,7 @@ router.post('/formularios/:id/clonar', requireJwt, controller.clonar);
 router.post('/formularios/:id/publicar', requireJwt, controller.publicar);
 router.post('/formularios/:id/despublicar', requireJwt, controller.despublicar);
 router.post('/formularios/:id/evento', requireJwt, controller.atualizarEvento);
+router.post('/formularios/:id/convidados', requireJwt, controller.adicionarConvidado);
 router.post(
   '/formularios/:id/capa',
   requireJwt,

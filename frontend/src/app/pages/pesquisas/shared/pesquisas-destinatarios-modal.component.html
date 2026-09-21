@@ -1,0 +1,84 @@
+<app-admin-modal
+  [open]="open()"
+  title="Adicionar colaboradores ao formulário"
+  subtitle="Inclua quem deve receber e responder este formulário."
+  size="xlarge"
+  saveLabel="Adicionar à lista"
+  [saveDisabled]="!rascunho().length"
+  (save)="salvar()"
+  (cancel)="fechar()"
+>
+  <div class="dest-picker">
+    <section class="dest-col">
+      <header class="dest-col-head">
+        <div>
+          <p class="dest-col-title">Colaboradores do AD</p>
+          <p class="dest-col-meta">
+            {{ disponiveisFiltrados().length }} de {{ disponiveisTotal() }} disponíveis
+          </p>
+        </div>
+        <button type="button" class="dest-link" [disabled]="!disponiveisFiltrados().length" (click)="incluirTodos()">
+          Incluir todos
+        </button>
+      </header>
+      <input
+        type="search"
+        class="dest-search"
+        placeholder="Buscar por nome, cargo ou departamento..."
+        name="destBusca"
+        [ngModel]="busca()"
+        (ngModelChange)="busca.set($event)"
+      />
+      <div class="dest-list" role="list">
+        @if (carregando()) {
+          <p class="dest-empty">Carregando colaboradores…</p>
+        } @else if (!disponiveisFiltrados().length) {
+          <p class="dest-empty">
+            {{ busca().trim() ? 'Nenhum colaborador encontrado.' : 'Todos os colaboradores já estão na lista.' }}
+          </p>
+        } @else {
+          @for (p of disponiveisFiltrados(); track p.usuarioId) {
+            <div class="dest-row" role="listitem">
+              <span class="dest-grip" aria-hidden="true"></span>
+              <div class="dest-who">
+                <b>{{ p.nome }}</b>
+                <span>{{ subtitulo(p) }}</span>
+              </div>
+              <button type="button" class="dest-btn" (click)="incluir(p)">Incluir</button>
+            </div>
+          }
+        }
+      </div>
+      <p class="dest-hint">Clique em Incluir para adicionar ao formulário</p>
+    </section>
+
+    <section class="dest-col dest-col--selected">
+      <header class="dest-col-head">
+        <div>
+          <p class="dest-col-title">No formulário</p>
+          <p class="dest-col-meta">{{ rascunho().length }} selecionado(s)</p>
+        </div>
+        <button type="button" class="dest-link dest-link--danger" [disabled]="!rascunho().length" (click)="removerTodos()">
+          Remover todos
+        </button>
+      </header>
+      <div class="dest-list dest-list--selected" role="list">
+        @if (!rascunho().length) {
+          <p class="dest-empty">Ninguém selecionado ainda.</p>
+        } @else {
+          @for (p of rascunho(); track p.usuarioId) {
+            <div class="dest-row" role="listitem">
+              <span class="dest-grip" aria-hidden="true"></span>
+              <div class="dest-who">
+                <b>{{ p.nome }}</b>
+                <span>{{ subtitulo(p) }}</span>
+              </div>
+              <button type="button" class="dest-btn dest-btn--ghost" (click)="remover(p.usuarioId)">Remover</button>
+            </div>
+          }
+        }
+      </div>
+      <p class="dest-hint">Só essas pessoas recebem e respondem o formulário.</p>
+    </section>
+  </div>
+</app-admin-modal>

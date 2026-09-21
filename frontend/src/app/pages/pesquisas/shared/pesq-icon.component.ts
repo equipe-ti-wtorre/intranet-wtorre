@@ -9,6 +9,10 @@ import { Component, Input } from '@angular/core';
         @case ('plus') {
           <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         }
+        @case ('calendar') {
+          <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.8" />
+          <path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        }
         @case ('clock') {
           <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8" />
           <path d="M12 7.3v5l3.3 1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />

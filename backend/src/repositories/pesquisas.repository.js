@@ -81,6 +81,7 @@ function mapFormulario(row) {
     capaBlob: row.capa_blob || null,
     capaNome: row.capa_nome || null,
     totalConvidados: row.total_convidados != null ? Number(row.total_convidados) : undefined,
+    totalDestinatarios: row.total_destinatarios != null ? Number(row.total_destinatarios) : undefined,
     totalRespostas: row.total_respostas != null ? Number(row.total_respostas) : undefined,
     respondidoEm: toIso(row.respondido_em),
     criadoEm: toIso(row.criado_em),
@@ -136,7 +137,8 @@ const FORM_SELECT = `
     DATE_FORMAT(f.prazo_fim, '%Y%m%d%H%i') AS prazo_fim_key,
     u.nome_completo AS criador_nome,
     (SELECT COUNT(*) FROM pesquisas_respostas r WHERE r.formulario_id = f.id) AS total_respostas,
-    (SELECT COUNT(*) FROM pesquisas_convidados c WHERE c.formulario_id = f.id) AS total_convidados
+    (SELECT COUNT(*) FROM pesquisas_convidados c WHERE c.formulario_id = f.id) AS total_convidados,
+    (SELECT COUNT(*) FROM pesquisas_formulario_destinatarios d WHERE d.formulario_id = f.id) AS total_destinatarios
   FROM pesquisas_formularios f
   JOIN usuarios u ON u.id = f.criador_id
 `;
@@ -176,13 +178,20 @@ async function listFormulariosPendentes(user) {
        AND (
          f.publico_alvo = 'todos'
          OR (f.publico_alvo = 'departamento' AND f.publico_departamento = ?)
+         OR (
+           f.publico_alvo = 'personalizado'
+           AND EXISTS (
+             SELECT 1 FROM pesquisas_formulario_destinatarios d
+             WHERE d.formulario_id = f.id AND d.usuario_id = ?
+           )
+         )
        )
        AND NOT EXISTS (
          SELECT 1 FROM pesquisas_respostas r
          WHERE r.formulario_id = f.id AND r.usuario_id = ?
        )
      ORDER BY f.prazo_fim IS NULL, f.prazo_fim ASC, f.criado_em DESC`,
-    [nowSaoPauloSql(), nowSaoPauloSql(), user.departamento || '', user.id]
+    [nowSaoPauloSql(), nowSaoPauloSql(), user.departamento || '', user.id, user.id]
   );
   return rows.map(mapFormulario);
 }
@@ -243,12 +252,19 @@ async function countFormulariosPendentes(user) {
        AND (
          f.publico_alvo = 'todos'
          OR (f.publico_alvo = 'departamento' AND f.publico_departamento = ?)
+         OR (
+           f.publico_alvo = 'personalizado'
+           AND EXISTS (
+             SELECT 1 FROM pesquisas_formulario_destinatarios d
+             WHERE d.formulario_id = f.id AND d.usuario_id = ?
+           )
+         )
        )
        AND NOT EXISTS (
          SELECT 1 FROM pesquisas_respostas r
          WHERE r.formulario_id = f.id AND r.usuario_id = ?
        )`,
-    [nowSaoPauloSql(), nowSaoPauloSql(), user.departamento || '', user.id]
+    [nowSaoPauloSql(), nowSaoPauloSql(), user.departamento || '', user.id, user.id]
   );
   return Number(rows[0]?.n || 0);
 }
@@ -795,6 +811,35 @@ async function countConvidados(formularioId) {
   return Number(rows[0]?.n || 0);
 }
 
+async function findConvidadoByCpfHash(formularioId, cpfHash) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT id, formulario_id, nome, email, cpf_mascara
+     FROM pesquisas_convidados
+     WHERE formulario_id = ? AND cpf_hash = ?
+     LIMIT 1`,
+    [formularioId, cpfHash]
+  );
+  return mapConvidado(rows[0]);
+}
+
+async function insertConvidado(formularioId, guest) {
+  const pool = getPool();
+  const [result] = await pool.execute(
+    `INSERT INTO pesquisas_convidados
+      (formulario_id, nome, email, cpf_hash, cpf_mascara)
+     VALUES (?, ?, ?, ?, ?)`,
+    [formularioId, guest.nome || null, guest.email, guest.cpfHash, guest.cpfMascara]
+  );
+  return mapConvidado({
+    id: result.insertId,
+    formulario_id: formularioId,
+    nome: guest.nome || '',
+    email: guest.email,
+    cpf_mascara: guest.cpfMascara,
+  });
+}
+
 async function replaceConvidados(formularioId, convidados) {
   const pool = getPool();
   const conn = await pool.getConnection();
@@ -1006,6 +1051,128 @@ async function copyConvidados(fromId, toId) {
   );
 }
 
+function mapDestinatario(row) {
+  if (!row) return null;
+  return {
+    usuarioId: Number(row.usuario_id),
+    nome: row.nome || '',
+    email: row.email || '',
+    cargo: row.cargo || null,
+    departamento: row.departamento || null,
+  };
+}
+
+async function listDestinatariosCandidatos() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT u.id AS usuario_id,
+            u.nome_completo AS nome,
+            u.email,
+            c.cargo,
+            COALESCE(c.departamento, u.departamento) AS departamento
+       FROM usuarios u
+       LEFT JOIN colaboradores c ON c.ad_id = u.microsoft_id
+      WHERE u.ativo = 1
+      ORDER BY u.nome_completo ASC`
+  );
+  return rows.map(mapDestinatario);
+}
+
+async function filterUsuariosAtivos(ids) {
+  const uniq = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(ids) ? ids : []) {
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) continue;
+    seen.add(id);
+    uniq.push(id);
+  }
+  if (!uniq.length) return [];
+  const pool = getPool();
+  const placeholders = uniq.map(() => '?').join(',');
+  const [rows] = await pool.execute(
+    `SELECT id FROM usuarios WHERE ativo = 1 AND id IN (${placeholders})`,
+    uniq
+  );
+  const ok = new Set(rows.map((row) => Number(row.id)));
+  return uniq.filter((id) => ok.has(id));
+}
+
+async function listDestinatarios(formularioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT u.id AS usuario_id,
+            u.nome_completo AS nome,
+            u.email,
+            c.cargo,
+            COALESCE(c.departamento, u.departamento) AS departamento
+       FROM pesquisas_formulario_destinatarios d
+       INNER JOIN usuarios u ON u.id = d.usuario_id
+       LEFT JOIN colaboradores c ON c.ad_id = u.microsoft_id
+      WHERE d.formulario_id = ?
+      ORDER BY u.nome_completo ASC`,
+    [formularioId]
+  );
+  return rows.map(mapDestinatario);
+}
+
+async function countDestinatarios(formularioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT COUNT(*) AS n FROM pesquisas_formulario_destinatarios WHERE formulario_id = ?',
+    [formularioId]
+  );
+  return Number(rows[0]?.n || 0);
+}
+
+async function isDestinatario(formularioId, usuarioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT 1 AS ok
+       FROM pesquisas_formulario_destinatarios
+      WHERE formulario_id = ? AND usuario_id = ?
+      LIMIT 1`,
+    [formularioId, usuarioId]
+  );
+  return !!rows[0];
+}
+
+async function replaceDestinatarios(formularioId, usuarioIds) {
+  const ids = Array.isArray(usuarioIds) ? usuarioIds : [];
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute('DELETE FROM pesquisas_formulario_destinatarios WHERE formulario_id = ?', [
+      formularioId,
+    ]);
+    for (const usuarioId of ids) {
+      await conn.execute(
+        `INSERT INTO pesquisas_formulario_destinatarios (formulario_id, usuario_id)
+         VALUES (?, ?)`,
+        [formularioId, usuarioId]
+      );
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function copyDestinatarios(fromId, toId) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO pesquisas_formulario_destinatarios (formulario_id, usuario_id)
+     SELECT ?, usuario_id
+       FROM pesquisas_formulario_destinatarios
+      WHERE formulario_id = ?`,
+    [toId, fromId]
+  );
+}
+
 async function replaceFormularioBase(formularioId, rows) {
   const pool = getPool();
   const conn = await pool.getConnection();
@@ -1155,6 +1322,8 @@ module.exports = {
   setEventoAtivo,
   listConvidados,
   countConvidados,
+  findConvidadoByCpfHash,
+  insertConvidado,
   replaceConvidados,
   findConvidadoByHashEmail,
   findConvidadoByIdentidade,
@@ -1164,6 +1333,13 @@ module.exports = {
   findRespostaDoConvidado,
   copyFormularioBase,
   copyConvidados,
+  listDestinatariosCandidatos,
+  filterUsuariosAtivos,
+  listDestinatarios,
+  countDestinatarios,
+  isDestinatario,
+  replaceDestinatarios,
+  copyDestinatarios,
   replaceFormularioBase,
   listFormularioBaseDados,
   summarizeFormularioBase,

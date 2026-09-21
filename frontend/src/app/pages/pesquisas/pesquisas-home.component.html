@@ -114,6 +114,9 @@
                 @if (item.publicoAlvo === 'externos') {
                   <span class="badge exec">Externo</span>
                 }
+                @if (item.publicoAlvo === 'personalizado') {
+                  <span class="badge typepill">Personalizado</span>
+                }
                 @if (item.eventoAtivo === false) {
                   <span class="badge recusada">Evento desativado</span>
                 }
