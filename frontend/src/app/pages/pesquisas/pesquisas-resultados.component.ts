@@ -241,7 +241,6 @@ export class PesquisasResultadosComponent implements OnInit {
       { k: 'Prazo', v: this.prazoLabel(), warn: this.prazoVencido() },
       { k: 'Público', v: this.publicoLabel() },
       { k: 'Perguntas', v: d.perguntas.length },
-      { k: 'Identificação', v: d.formulario.anonimo ? 'Anônima' : 'Identificada' },
     ];
   }
 
