@@ -12,10 +12,10 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
 import { MassagemService } from '../../services/massagem.service';
 import { AlertasService } from '../../services/alertas.service';
-import { MassagemEmpresa, MassagemEvento, MassagemLayout } from '../../models/massagem.model';
+import { MassagemEmpresa, MassagemEvento, MassagemLayout, MassagemPunicaoPublica } from '../../models/massagem.model';
 import { MsgIconComponent } from './shared/msg-icon.component';
 import { MassagemSubnavComponent } from './shared/massagem-subnav.component';
 import { DocCatIconeComponent } from '../../shared/documentos/doc-cat-icone.component';
@@ -23,6 +23,7 @@ import {
   corEmpresaFromHex,
   faixaHorario,
   formatData,
+  formatDataCurta,
   ocupacaoBadgeClass,
 } from './shared/massagem-ui.utils';
 
@@ -84,6 +85,7 @@ export class MassagemHomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly eventos = signal<MassagemEvento[]>([]);
   readonly empresas = signal<MassagemEmpresa[]>([]);
   readonly layout = signal<MassagemLayout>(DEFAULT_LAYOUT);
+  readonly punicao = signal<MassagemPunicaoPublica | null>(null);
   readonly unidadeSel = signal('');
   readonly ringC = RING_C;
 
@@ -110,11 +112,13 @@ export class MassagemHomeComponent implements OnInit, AfterViewInit, OnDestroy {
       eventos: this.api.listEventos(),
       empresas: this.api.listEmpresas(),
       layout: this.api.getLayout(),
+      punicao: this.api.getPunicao().pipe(catchError(() => of({ punicao: null }))),
     }).subscribe({
-      next: ({ eventos, empresas, layout }) => {
+      next: ({ eventos, empresas, layout, punicao }) => {
         this.eventos.set(eventos);
         this.empresas.set(empresas);
         this.layout.set(layout || DEFAULT_LAYOUT);
+        this.punicao.set(punicao?.punicao || null);
         this.pickInitialUnidade(eventos, empresas);
         this.loading.set(false);
       },
@@ -141,7 +145,13 @@ export class MassagemHomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   formatData = formatData;
+  formatDataCurta = formatDataCurta;
   faixaHorario = faixaHorario;
+
+  labelPunicaoRestantes(): string {
+    const n = this.punicao()?.sessoesRestantes || 0;
+    return n === 1 ? '1 sessão' : `${n} sessões`;
+  }
   badgeClass = ocupacaoBadgeClass;
 
   corEmpresa(nome: string) {

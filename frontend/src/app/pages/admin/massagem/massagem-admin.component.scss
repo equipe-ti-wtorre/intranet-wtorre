@@ -653,6 +653,23 @@ td {
   color: #9a6a10;
 }
 
+.count-ok {
+  background: rgba(28, 158, 98, 0.14);
+  color: var(--ok, #1c9e62);
+}
+
+.punicao-toolbar .fld {
+  min-width: 160px;
+}
+
+.punicao-toolbar input[type='number'] {
+  width: 88px;
+}
+
+.punicao-busca {
+  margin-bottom: 1rem;
+}
+
 .det-list {
   display: flex;
   flex-direction: column;

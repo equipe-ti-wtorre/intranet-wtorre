@@ -207,6 +207,22 @@ async function saveConfig(req, res) {
   }
 }
 
+async function getPunicaoMe(req, res) {
+  try {
+    res.json(await service.getPunicaoMe(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function listPunicoesAdmin(req, res) {
+  try {
+    res.json(await service.listPunicoesAdmin());
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function listEmailTemplates(req, res) {
   try {
     res.json(await service.listEmailTemplates());
@@ -361,6 +377,8 @@ module.exports = {
   saveLayout,
   getConfig,
   saveConfig,
+  getPunicaoMe,
+  listPunicoesAdmin,
   listEmailTemplates,
   getEmailTemplateMeta,
   getEmailTemplate,

@@ -12,6 +12,9 @@ router.put('/layout', ...adminGuard, controller.saveLayout);
 router.get('/config', ...adminGuard, controller.getConfig);
 router.put('/config', ...adminGuard, controller.saveConfig);
 
+router.get('/punicao', requireJwt, controller.getPunicaoMe);
+router.get('/admin/punicoes', ...adminGuard, controller.listPunicoesAdmin);
+
 router.get('/admin/email-templates/meta', ...adminGuard, controller.getEmailTemplateMeta);
 router.post('/admin/email-templates/preview', ...adminGuard, controller.previewEmailTemplate);
 router.get('/admin/email-templates', ...adminGuard, controller.listEmailTemplates);

@@ -106,9 +106,18 @@ export class MassagemDetalheComponent implements OnInit {
   });
 
   readonly showFilaEnter = computed(
-    () => this.filaElegivel() && this.periodoLotado() && !this.slotsData()?.naFila
+    () =>
+      !this.punicaoAtiva() &&
+      this.filaElegivel() &&
+      this.periodoLotado() &&
+      !this.slotsData()?.naFila
   );
-  readonly showFilaActive = computed(() => this.filaElegivel() && !!this.slotsData()?.naFila);
+  readonly showFilaActive = computed(
+    () => !this.punicaoAtiva() && this.filaElegivel() && !!this.slotsData()?.naFila
+  );
+
+  readonly punicaoAtiva = computed(() => !!this.slotsData()?.punicao?.ativa);
+  readonly punicao = computed(() => this.slotsData()?.punicao || null);
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id')!;
@@ -183,12 +192,14 @@ export class MassagemDetalheComponent implements OnInit {
   }
 
   isClickable(slot: MassagemSlot): boolean {
+    if (this.punicaoAtiva() && slot.estado === 'disponivel') return false;
     if (this.isPresencaMarcada(slot)) return false;
     return slot.estado === 'disponivel' || slot.estado === 'minha';
   }
 
   isSlotDisabled(slot: MassagemSlot): boolean {
     return (
+      (this.punicaoAtiva() && slot.estado === 'disponivel') ||
       slot.estado === 'ocupado' ||
       slot.estado === 'encerrado' ||
       slot.estado === 'pausa' ||
@@ -198,6 +209,10 @@ export class MassagemDetalheComponent implements OnInit {
 
   clickSlot(slot: MassagemSlot): void {
     if (slot.estado === 'disponivel') {
+      if (this.punicaoAtiva()) {
+        this.alertas.erro(this.msgPunicao());
+        return;
+      }
       if (this.reservaEmOutroEvento()) {
         this.alertas.erro(this.msgReservaOutro());
         return;
@@ -285,12 +300,20 @@ export class MassagemDetalheComponent implements OnInit {
   }
 
   abrirFila(): void {
+    if (this.punicaoAtiva()) {
+      this.alertas.erro(this.msgPunicao());
+      return;
+    }
     this.modal.set('fila');
   }
 
   entrarFila(): void {
     const ev = this.evento();
     if (!ev) return;
+    if (this.punicaoAtiva()) {
+      this.alertas.erro(this.msgPunicao());
+      return;
+    }
     this.loading.set(true);
     this.api
       .entrarFila(ev.id)
@@ -335,5 +358,18 @@ export class MassagemDetalheComponent implements OnInit {
   closeModal(): void {
     this.loading.set(false);
     this.modal.set(null);
+  }
+
+  msgPunicao(): string {
+    const p = this.punicao();
+    if (!p) return 'Você está temporariamente sem acesso à massagem por falta em uma sessão anterior.';
+    const n = p.sessoesRestantes;
+    const sessoes = n === 1 ? '1 sessão' : `${n} sessões`;
+    return `Você está temporariamente sem acesso à massagem por falta em ${formatDataCurta(p.dataFalta)}. Falta${n === 1 ? '' : 'm'} ${sessoes} para voltar a participar.`;
+  }
+
+  labelPunicaoRestantes(): string {
+    const n = this.punicao()?.sessoesRestantes || 0;
+    return n === 1 ? '1 sessão' : `${n} sessões`;
   }
 }

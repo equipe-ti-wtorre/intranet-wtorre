@@ -79,6 +79,7 @@ export class MassagemAdminDisparoComponent implements OnInit {
     );
     const totalEmails = listasEmpresa.reduce((acc, l) => acc + (l.totalEmails || 0), 0);
     if (totalEmails > 0) {
+      const testes = this.emailsTeste();
       const detalhe =
         listasEmpresa.length === 1
           ? `Lista “${listasEmpresa[0].nome}”: ${totalEmails} e-mail(s)`
@@ -86,7 +87,10 @@ export class MassagemAdminDisparoComponent implements OnInit {
       return {
         tipo: 'lista' as const,
         titulo: listasEmpresa[0].empresaNm,
-        detalhe,
+        detalhe: testes.length
+          ? `${detalhe}. Há e-mails de teste no Layout, mas o disparo vai para a lista real.`
+          : detalhe,
+        ignoraTeste: testes.length > 0,
       };
     }
     const testes = this.emailsTeste();
@@ -95,12 +99,14 @@ export class MassagemAdminDisparoComponent implements OnInit {
         tipo: 'teste' as const,
         titulo: 'E-mails de teste',
         detalhe: `Lista da empresa vazia — envio para ${testes.length} e-mail(s) de teste.`,
+        ignoraTeste: false,
       };
     }
     return {
       tipo: 'vazio' as const,
       titulo: 'Nenhum destino',
       detalhe: 'Cadastre a lista da empresa na aba Listas.',
+      ignoraTeste: false,
     };
   });
 

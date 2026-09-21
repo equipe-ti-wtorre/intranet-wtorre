@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const repo = require('../repositories/massagem.repository');
 const mail = require('./massagem-mail.service');
+const outlook = require('./massagem-outlook.service');
 const { env } = require('../config/env');
 const { encerrarEventoSeDevido, processarEncerramentosEventos } = require('./massagem-lembrete.service');
 const {
@@ -18,6 +19,7 @@ const {
   normalizePausas,
   horarioSobrepoePausa,
   horaFimExclusivoPausa,
+  toDateStr,
 } = require('../utils/massagem.util');
 const {
   CODIGOS: TEMPLATE_CODIGOS,
@@ -64,6 +66,105 @@ function toMinhaReservaDto(reserva) {
 async function getReservaQueBloqueia(email, data) {
   if (!data) return null;
   return repo.getReservaUsuarioNoDia(email, data);
+}
+
+function enrichPunicao(row, datas, hoje) {
+  if (!row) return null;
+  const dataFalta = row.dataFalta;
+  const aplicadas = Number(row.sessoesAplicadas) || 0;
+  const consumidas = (datas || []).filter((d) => d > dataFalta && d < hoje).length;
+  const restantes = Math.max(0, aplicadas - consumidas);
+  const aposFalta = (datas || []).filter((d) => d > dataFalta);
+  const liberaEm = aposFalta[aplicadas - 1] || null;
+  return {
+    ...row,
+    sessoesConsumidas: consumidas,
+    sessoesRestantes: restantes,
+    liberaEm,
+  };
+}
+
+function toPunicaoPublica(p) {
+  if (!p || p.sessoesRestantes <= 0) return null;
+  return {
+    ativa: true,
+    dataFalta: p.dataFalta,
+    sessoesRestantes: p.sessoesRestantes,
+    sessoesAplicadas: p.sessoesAplicadas,
+    liberaEm: p.liberaEm,
+  };
+}
+
+function msgPunicao(p) {
+  const data = formatDataCurta(p.dataFalta);
+  const n = p.sessoesRestantes;
+  const sessoes = n === 1 ? '1 sessão' : `${n} sessões`;
+  return `Você está temporariamente sem acesso à massagem por falta em ${data}. Falta${n === 1 ? '' : 'm'} ${sessoes} para voltar a participar.`;
+}
+
+async function getPunicaoAtiva(email) {
+  if (!email) return null;
+  const row = await repo.getPunicaoByEmail(email);
+  if (!row) return null;
+  const datas = await repo.listDatasEventos();
+  return enrichPunicao(row, datas, toDateStr(new Date()));
+}
+
+async function assertSemPunicao(email) {
+  const p = await getPunicaoAtiva(email);
+  if (p && p.sessoesRestantes > 0) {
+    throw httpError(400, msgPunicao(p));
+  }
+  return p;
+}
+
+async function cancelarFuturosPorPunicao(email, dataFalta) {
+  const futuras = await repo.listReservasOkAposData(email, dataFalta);
+  for (const r of futuras) {
+    const chave = makeChave(r.eventoId, r.data, r.hora);
+    const outlookMapping = await repo.getReservaOutlook(r.id);
+    await repo.deleteReserva(r.eventoId, r.data, r.hora);
+    const evento = await repo.getEvento(r.eventoId);
+    scheduleMail(
+      'punicao-cancelamento',
+      mail.emailCancelamento(r.email, {
+        data: r.data,
+        hora: r.hora,
+        evento,
+        nome: r.nome || '',
+      })
+    );
+    scheduleMail('punicao-fila', notificarFilaParaVaga(chave));
+    outlook.scheduleOutlook('punicao-cancelamento', outlook.removerReservaDoOutlook(outlookMapping));
+  }
+  await repo.removeFilaByEmail(email);
+}
+
+async function aplicarPunicaoPorFalta(reserva) {
+  const cfg = await repo.getConfig();
+  const n = Number(cfg.sessoesPunicao);
+  if (!Number.isFinite(n) || n <= 0) return;
+  const datas = await repo.listDatasEventos();
+  const hoje = toDateStr(new Date());
+  const existing = await repo.getPunicaoByEmail(reserva.email);
+  const atual = existing ? enrichPunicao(existing, datas, hoje) : null;
+  const payload = {
+    userId: reserva.userId,
+    nome: reserva.nome,
+    reservaId: reserva.id,
+    eventoId: reserva.eventoId,
+    dataFalta: reserva.data,
+    sessoesAplicadas: atual && atual.sessoesRestantes > 0 ? atual.sessoesRestantes + n : n,
+  };
+  if (existing) {
+    await repo.updatePunicao(existing.id, payload);
+  } else {
+    await repo.createPunicao({
+      ...payload,
+      email: reserva.email,
+    });
+  }
+  await cancelarFuturosPorPunicao(reserva.email, reserva.data);
 }
 
 /** Envia e-mail fora do caminho crítico da API (não atrasa a resposta HTTP). */
@@ -296,8 +397,12 @@ async function updateEvento(id, body) {
 }
 
 async function removeEvento(id) {
+  const mappings = await repo.listOutlookByEventoId(id);
   const ok = await repo.removeEvento(id);
   if (!ok) throw httpError(404, 'Evento não encontrado');
+  for (const mapping of mappings) {
+    outlook.scheduleOutlook('remove-evento', outlook.removerReservaDoOutlook(mapping));
+  }
   return { ok: true };
 }
 
@@ -451,6 +556,7 @@ async function listSlots(req) {
       : null,
     jaTemReserva: !!minhaReserva,
     minhaReserva: toMinhaReservaDto(minhaReserva),
+    punicao: toPunicaoPublica(await getPunicaoAtiva(user.email)),
   };
 }
 
@@ -466,6 +572,8 @@ async function createReserva(req) {
   if (parsed.data !== evento.data) throw httpError(400, 'Data inválida para este evento');
   assertHorarioReservavel(evento, parsed.hora);
   if (isPastSlot(parsed.data, parsed.hora)) throw httpError(400, 'Horário já encerrado');
+
+  await assertSemPunicao(req.user.email);
 
   const existing = await repo.getReservaBySlot(eventoId, parsed.data, parsed.hora);
   if (existing) throw httpError(409, 'Horário indisponível');
@@ -500,6 +608,7 @@ async function createReserva(req) {
       origem: 'reserva',
     })
   );
+  outlook.scheduleOutlook('reserva', outlook.agendarReservaNoOutlook(reserva, evento));
   return { chave, reserva };
 }
 
@@ -517,6 +626,7 @@ async function trocarReserva(req) {
   if (atual.status === 'falta' || atual.status === 'presente') {
     throw httpError(400, 'Não é possível trocar esta reserva');
   }
+  await assertSemPunicao(req.user.email);
 
   const parsedNova = parseChave(novaChave);
   if (!parsedNova) throw httpError(400, 'novaChave inválida');
@@ -532,6 +642,7 @@ async function trocarReserva(req) {
   const destino = await repo.getReservaBySlot(parsedNova.eventoId, parsedNova.data, parsedNova.hora);
   if (destino) throw httpError(409, 'Novo horário indisponível');
 
+  const outlookMapping = await repo.getReservaOutlook(atual.id);
   await repo.deleteReserva(parsedAtual.eventoId, parsedAtual.data, parsedAtual.hora);
   const reserva = await repo.upsertReserva({
     eventoId: parsedNova.eventoId,
@@ -555,6 +666,10 @@ async function trocarReserva(req) {
       origem: 'troca',
     })
   );
+  outlook.scheduleOutlook(
+    'troca',
+    outlook.atualizarReservaNoOutlook(outlookMapping, reserva, evento)
+  );
   return { chave: novaChave, reserva, liberada: chave };
 }
 
@@ -568,6 +683,7 @@ async function cancelarReserva(req) {
   const isOwner = atual.email.toLowerCase() === req.user.email.toLowerCase();
   if (!isOwner && !hasMassagemModulo(req)) throw httpError(403, 'Sem permissão');
 
+  const outlookMapping = await repo.getReservaOutlook(atual.id);
   await repo.deleteReserva(parsed.eventoId, parsed.data, parsed.hora);
   const eventoCancel = await repo.getEvento(parsed.eventoId);
   scheduleMail(
@@ -580,6 +696,7 @@ async function cancelarReserva(req) {
     })
   );
   scheduleMail('cancelamento-fila', notificarFilaParaVaga(chave));
+  outlook.scheduleOutlook('cancelamento', outlook.removerReservaDoOutlook(outlookMapping));
   return { ok: true, chave };
 }
 
@@ -622,6 +739,7 @@ async function entrarFila(req) {
   if (!eventoId) throw httpError(400, 'eventoId é obrigatório');
   const evento = await repo.getEvento(eventoId);
   if (!evento || evento.status !== 'ativo') throw httpError(400, 'Evento inválido');
+  await assertSemPunicao(req.user.email);
   const existing = await repo.getFilaUsuario(req.user.email, eventoId);
   if (existing) throw httpError(400, 'Você já está na fila deste evento');
   const jaTem = await getReservaQueBloqueia(req.user.email, evento.data);
@@ -681,7 +799,11 @@ async function dashboard() {
 
 async function listReservasEvento(eventoId) {
   if (!eventoId) throw httpError(400, 'eventoId é obrigatório');
-  const list = await repo.listReservasByEvento(eventoId);
+  const [list, punicoes] = await Promise.all([
+    repo.listReservasByEvento(eventoId),
+    listPunicoesAdmin(),
+  ]);
+  const punidos = new Set(punicoes.map((p) => String(p.email || '').toLowerCase()));
   return list
     .map((r) => ({
       chave: makeChave(r.eventoId, r.data, r.hora),
@@ -692,6 +814,7 @@ async function listReservasEvento(eventoId) {
       nome: r.nome,
       status: r.status,
       observacao: r.observacao,
+      punido: punidos.has(String(r.email || '').toLowerCase()),
     }))
     .sort((a, b) => a.hora.localeCompare(b.hora));
 }
@@ -701,6 +824,7 @@ async function adminRemoverReserva(chave) {
   if (!parsed) throw httpError(400, 'Chave inválida');
   const atual = await repo.getReservaBySlot(parsed.eventoId, parsed.data, parsed.hora);
   if (!atual) throw httpError(404, 'Reserva não encontrada');
+  const outlookMapping = await repo.getReservaOutlook(atual.id);
   await repo.deleteReserva(parsed.eventoId, parsed.data, parsed.hora);
   const eventoCancelAdmin = await repo.getEvento(parsed.eventoId);
   scheduleMail(
@@ -713,6 +837,7 @@ async function adminRemoverReserva(chave) {
     })
   );
   scheduleMail('admin-cancelamento-fila', notificarFilaParaVaga(chave));
+  outlook.scheduleOutlook('admin-cancelamento', outlook.removerReservaDoOutlook(outlookMapping));
   return { ok: true, chave };
 }
 
@@ -804,6 +929,11 @@ async function tabletPresenca(chave, status, tabletUser) {
     console.error('[massagem-encerramento]', evento.id, err.message);
   }
   if (status === 'falta') {
+    try {
+      await aplicarPunicaoPorFalta(updated || reserva);
+    } catch (err) {
+      console.error('[massagem-punicao]', reserva.email, err.message);
+    }
     scheduleMail(
       'tablet-falta',
       mail.emailFaltaAdmin(reserva.email, {
@@ -864,8 +994,44 @@ async function getConfig() {
 }
 
 async function saveConfig(body) {
-  const emailsTeste = Array.isArray(body?.emailsTeste) ? body.emailsTeste : [];
-  return repo.saveConfig({ emailsTeste });
+  const patch = {};
+  if (body?.emailsTeste !== undefined) {
+    patch.emailsTeste = Array.isArray(body.emailsTeste) ? body.emailsTeste : [];
+  }
+  if (body?.sessoesPunicao !== undefined) {
+    const n = Number(body.sessoesPunicao);
+    if (!Number.isInteger(n) || n < 0 || n > 30) {
+      throw httpError(400, 'Sessões de punição deve ser um número inteiro entre 0 e 30.');
+    }
+    patch.sessoesPunicao = n;
+  }
+  if (!Object.keys(patch).length) return repo.getConfig();
+  return repo.saveConfig(patch);
+}
+
+async function getPunicaoMe(req) {
+  return { punicao: toPunicaoPublica(await getPunicaoAtiva(req.user?.email)) };
+}
+
+async function listPunicoesAdmin() {
+  const [rows, datas] = await Promise.all([repo.listPunicoes(), repo.listDatasEventos()]);
+  const hoje = toDateStr(new Date());
+  return rows
+    .map((row) => enrichPunicao(row, datas, hoje))
+    .filter((p) => p.sessoesRestantes > 0)
+    .map((p) => ({
+      id: p.id,
+      email: p.email,
+      nome: p.nome,
+      eventoId: p.eventoId,
+      eventoNm: p.eventoNm,
+      unidade: p.unidade,
+      dataFalta: p.dataFalta,
+      sessoesAplicadas: p.sessoesAplicadas,
+      sessoesRestantes: p.sessoesRestantes,
+      sessoesConsumidas: p.sessoesConsumidas,
+      liberaEm: p.liberaEm,
+    }));
 }
 
 function templateMeta() {
@@ -1144,6 +1310,8 @@ module.exports = {
   saveLayout,
   getConfig,
   saveConfig,
+  getPunicaoMe,
+  listPunicoesAdmin,
   templateMeta,
   listEmailTemplates,
   getEmailTemplate,

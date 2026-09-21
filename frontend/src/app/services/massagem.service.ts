@@ -19,6 +19,8 @@ import {
   MassagemEmailEnvio,
   MassagemMinhasResponse,
   MassagemSlotsResponse,
+  MassagemPunicao,
+  MassagemPunicaoPublica,
 } from '../models/massagem.model';
 
 @Injectable({ providedIn: 'root' })
@@ -41,8 +43,16 @@ export class MassagemService {
     return this.http.get<MassagemConfig>(this.api('/config'));
   }
 
-  saveConfig(body: MassagemConfig): Observable<MassagemConfig> {
+  saveConfig(body: Partial<MassagemConfig>): Observable<MassagemConfig> {
     return this.http.put<MassagemConfig>(this.api('/config'), body);
+  }
+
+  getPunicao(): Observable<{ punicao: MassagemPunicaoPublica | null }> {
+    return this.http.get<{ punicao: MassagemPunicaoPublica | null }>(this.api('/punicao'));
+  }
+
+  listPunicoesAdmin(): Observable<MassagemPunicao[]> {
+    return this.http.get<MassagemPunicao[]>(this.api('/admin/punicoes'));
   }
 
   listEmpresas(): Observable<MassagemEmpresa[]> {

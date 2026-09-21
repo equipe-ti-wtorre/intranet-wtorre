@@ -97,6 +97,16 @@ function mapReserva(row) {
   };
 }
 
+function mapReservaOutlook(row) {
+  if (!row) return null;
+  return {
+    reservaId: row.reserva_id,
+    graphEventId: row.graph_event_id,
+    graphUserId: row.graph_user_id,
+    tenantId: row.tenant_id != null ? Number(row.tenant_id) : null,
+  };
+}
+
 function mapFila(row) {
   if (!row) return null;
   return {
@@ -386,6 +396,43 @@ async function deleteReserva(eventoId, data, hora) {
   return result.affectedRows > 0;
 }
 
+async function getReservaOutlook(reservaId) {
+  if (!reservaId) return null;
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM massagem_reserva_outlook WHERE reserva_id = ? LIMIT 1',
+    [reservaId]
+  );
+  return mapReservaOutlook(rows[0]);
+}
+
+async function listOutlookByEventoId(eventoId) {
+  if (!eventoId) return [];
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT o.* FROM massagem_reserva_outlook o
+     INNER JOIN massagem_reservas r ON r.id = o.reserva_id
+     WHERE r.evento_id = ?`,
+    [eventoId]
+  );
+  return rows.map(mapReservaOutlook);
+}
+
+async function upsertReservaOutlook({ reservaId, graphEventId, graphUserId, tenantId }) {
+  if (!reservaId || !graphEventId || !graphUserId) return null;
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO massagem_reserva_outlook (reserva_id, graph_event_id, graph_user_id, tenant_id)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       graph_event_id = VALUES(graph_event_id),
+       graph_user_id = VALUES(graph_user_id),
+       tenant_id = VALUES(tenant_id)`,
+    [reservaId, graphEventId, graphUserId, tenantId || null]
+  );
+  return getReservaOutlook(reservaId);
+}
+
 async function updateReservaStatus(eventoId, data, hora, status) {
   const pool = getPool();
   await pool.execute(
@@ -532,8 +579,10 @@ function normalizeEmailsTeste(raw) {
 }
 
 function mapConfig(row) {
+  const n = Number(row?.sessoes_punicao);
   return {
     emailsTeste: normalizeEmailsTeste(row?.emails_teste),
+    sessoesPunicao: Number.isFinite(n) && n >= 0 ? n : 1,
   };
 }
 
@@ -544,7 +593,7 @@ async function getConfig() {
     await pool.execute(
       'INSERT IGNORE INTO massagem_config (id, emails_teste) VALUES (1, JSON_ARRAY())'
     );
-    return { emailsTeste: [] };
+    return { emailsTeste: [], sessoesPunicao: 1 };
   }
   return mapConfig(rows[0]);
 }
@@ -554,15 +603,117 @@ async function getEmailsTeste() {
   return cfg.emailsTeste;
 }
 
-async function saveConfig({ emailsTeste }) {
+async function saveConfig({ emailsTeste, sessoesPunicao } = {}) {
+  const current = await getConfig();
+  const normalized =
+    emailsTeste !== undefined ? normalizeEmailsTeste(emailsTeste) : current.emailsTeste;
+  const sessoes =
+    sessoesPunicao !== undefined ? Number(sessoesPunicao) : current.sessoesPunicao;
   const pool = getPool();
-  const normalized = normalizeEmailsTeste(emailsTeste);
   await pool.execute(
-    `INSERT INTO massagem_config (id, emails_teste) VALUES (1, ?)
-     ON DUPLICATE KEY UPDATE emails_teste = VALUES(emails_teste)`,
-    [JSON.stringify(normalized)]
+    `INSERT INTO massagem_config (id, emails_teste, sessoes_punicao) VALUES (1, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       emails_teste = VALUES(emails_teste),
+       sessoes_punicao = VALUES(sessoes_punicao)`,
+    [JSON.stringify(normalized), sessoes]
   );
   return getConfig();
+}
+
+function mapPunicao(row) {
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    userId: row.user_id != null ? Number(row.user_id) : null,
+    email: row.email,
+    nome: row.nome,
+    reservaId: row.reserva_id != null ? Number(row.reserva_id) : null,
+    eventoId: row.evento_id != null ? String(row.evento_id) : null,
+    eventoNm: row.evento_nm || '',
+    unidade: row.evento_unidade || '',
+    dataFalta: toDateStr(row.data_falta),
+    sessoesAplicadas: Number(row.sessoes_aplicadas) || 1,
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em,
+  };
+}
+
+const PUNICAO_SELECT = `SELECT p.*, e.nm AS evento_nm, e.unidade AS evento_unidade
+     FROM massagem_punicoes p
+     LEFT JOIN massagem_eventos e ON e.id = p.evento_id`;
+
+async function listPunicoes() {
+  const pool = getPool();
+  const [rows] = await pool.execute(`${PUNICAO_SELECT} ORDER BY p.atualizado_em DESC, p.id DESC`);
+  return rows.map(mapPunicao);
+}
+
+async function getPunicaoByEmail(email) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `${PUNICAO_SELECT} WHERE LOWER(p.email) = LOWER(?) LIMIT 1`,
+    [email]
+  );
+  return mapPunicao(rows[0]);
+}
+
+async function listDatasEventos() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT DISTINCT data FROM massagem_eventos ORDER BY data ASC'
+  );
+  return rows.map((r) => toDateStr(r.data)).filter(Boolean);
+}
+
+async function createPunicao({ userId, email, nome, reservaId, eventoId, dataFalta, sessoesAplicadas }) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO massagem_punicoes
+      (user_id, email, nome, reserva_id, evento_id, data_falta, sessoes_aplicadas)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      userId || null,
+      email,
+      nome,
+      reservaId || null,
+      eventoId || null,
+      dataFalta,
+      sessoesAplicadas,
+    ]
+  );
+  return getPunicaoByEmail(email);
+}
+
+async function updatePunicao(id, { userId, nome, reservaId, eventoId, dataFalta, sessoesAplicadas }) {
+  const pool = getPool();
+  await pool.execute(
+    `UPDATE massagem_punicoes
+     SET user_id = ?, nome = ?, reserva_id = ?, evento_id = ?, data_falta = ?, sessoes_aplicadas = ?
+     WHERE id = ?`,
+    [userId || null, nome, reservaId || null, eventoId || null, dataFalta, sessoesAplicadas, id]
+  );
+  const [rows] = await pool.execute(`${PUNICAO_SELECT} WHERE p.id = ? LIMIT 1`, [id]);
+  return mapPunicao(rows[0]);
+}
+
+async function listReservasOkAposData(email, data) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT * FROM massagem_reservas
+     WHERE LOWER(email) = LOWER(?) AND data > ? AND status = 'ok'
+     ORDER BY data ASC, hora ASC`,
+    [email, toDateStr(data)]
+  );
+  return rows.map(mapReserva);
+}
+
+async function removeFilaByEmail(email) {
+  const pool = getPool();
+  const [result] = await pool.execute(
+    'DELETE FROM massagem_fila WHERE LOWER(email) = LOWER(?)',
+    [email]
+  );
+  return result.affectedRows > 0;
 }
 
 function mapEmailTemplate(row) {
@@ -936,6 +1087,13 @@ module.exports = {
   getConfig,
   getEmailsTeste,
   saveConfig,
+  listPunicoes,
+  getPunicaoByEmail,
+  listDatasEventos,
+  createPunicao,
+  updatePunicao,
+  listReservasOkAposData,
+  removeFilaByEmail,
   listEmailTemplates,
   getEmailTemplate,
   findEmailTemplateByCodigo,
@@ -955,6 +1113,9 @@ module.exports = {
   getReservaUsuarioNoDia,
   upsertReserva,
   deleteReserva,
+  getReservaOutlook,
+  listOutlookByEventoId,
+  upsertReservaOutlook,
   updateReservaStatus,
   countReservasAtivas,
   countReservasByStatus,

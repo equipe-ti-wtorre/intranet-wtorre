@@ -13,6 +13,7 @@ import {
   MassagemEvento,
   MassagemFilaItem,
   MassagemPausa,
+  MassagemPunicao,
 } from '../../../models/massagem.model';
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
 import { formatData, statusBadgeClass, statusLabel } from '../../massagem/shared/massagem-ui.utils';
@@ -22,7 +23,7 @@ import { MassagemAdminEnviosComponent } from './massagem-admin-envios.component'
 import { MassagemAdminListasComponent } from './massagem-admin-listas.component';
 import { MassagemLayoutAdminComponent } from './massagem-layout-admin.component';
 
-type Aba = 'empresas' | 'layout' | 'eventos' | 'email';
+type Aba = 'empresas' | 'layout' | 'eventos' | 'email' | 'punicoes';
 type SubAba = 'disparo' | 'envios' | 'templates' | 'listas';
 type EventosSubAba = 'ativos' | 'inativos' | 'historico';
 type SlotPreview =
@@ -87,8 +88,36 @@ export class MassagemAdminComponent implements OnInit {
   readonly eventoDetalhe = signal<MassagemEvento | null>(null);
   readonly reservas = signal<MassagemAdminReserva[]>([]);
   readonly fila = signal<MassagemFilaItem[]>([]);
+  readonly punicoes = signal<MassagemPunicao[]>([]);
+  readonly loadingPunicoes = signal(false);
+  readonly savingPunicaoConfig = signal(false);
+  readonly buscaPunicao = signal('');
+  private buscaPunicaoTimer: ReturnType<typeof setTimeout> | null = null;
+  buscaPunicaoInput = '';
+  sessoesPunicaoInput = 1;
   readonly slotsPreview = signal<SlotPreview[]>([]);
 
+  readonly presentesDetalhe = computed(() =>
+    this.reservas()
+      .filter((r) => r.status === 'presente')
+      .sort((a, b) => a.hora.localeCompare(b.hora))
+  );
+  readonly faltasDetalhe = computed(() =>
+    this.reservas()
+      .filter((r) => r.status === 'falta')
+      .sort((a, b) => a.hora.localeCompare(b.hora))
+  );
+  readonly punicoesFiltradas = computed(() => {
+    const q = this.buscaPunicao().trim().toLowerCase();
+    const list = this.punicoes();
+    if (!q) return list;
+    return list.filter(
+      (p) =>
+        p.nome.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        (p.eventoNm || '').toLowerCase().includes(q)
+    );
+  });
   readonly unidadesPreset = computed(() => this.empresas().map((e) => e.nm));
   readonly modalEventoTitulo = computed(() =>
     this.editEventoId() ? 'Editar evento' : 'Criar evento'
@@ -180,6 +209,9 @@ export class MassagemAdminComponent implements OnInit {
     if (this.aba() === 'email' && this.sub() === 'templates') {
       this.carregarTemplates();
     }
+    if (this.aba() === 'punicoes') {
+      this.carregarPunicoes();
+    }
   }
 
   private aplicarQuery(): void {
@@ -202,7 +234,7 @@ export class MassagemAdminComponent implements OnInit {
       );
       return;
     }
-    if (abaQ === 'eventos' || abaQ === 'layout' || abaQ === 'empresas') {
+    if (abaQ === 'eventos' || abaQ === 'layout' || abaQ === 'empresas' || abaQ === 'punicoes') {
       this.aba.set(abaQ);
     }
   }
@@ -221,6 +253,9 @@ export class MassagemAdminComponent implements OnInit {
     }
     if (aba === 'email' && this.sub() === 'templates') {
       this.carregarTemplates();
+    }
+    if (aba === 'punicoes') {
+      this.carregarPunicoes();
     }
   }
 
@@ -250,7 +285,10 @@ export class MassagemAdminComponent implements OnInit {
       },
     });
     this.api.getConfig().subscribe({
-      next: (cfg) => this.emailsTeste.set(cfg.emailsTeste || []),
+      next: (cfg) => {
+        this.emailsTeste.set(cfg.emailsTeste || []);
+        this.sessoesPunicaoInput = Number(cfg.sessoesPunicao) >= 0 ? Number(cfg.sessoesPunicao) : 1;
+      },
       error: () => this.emailsTeste.set([]),
     });
   }
@@ -890,6 +928,55 @@ export class MassagemAdminComponent implements OnInit {
     const [h, m] = hora.split(':').map(Number);
     const t = h * 60 + m + dur;
     return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+  }
+
+  carregarPunicoes(): void {
+    this.loadingPunicoes.set(true);
+    this.api.listPunicoesAdmin().subscribe({
+      next: (list) => {
+        this.punicoes.set(list);
+        this.loadingPunicoes.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.alertas.erro(err.error?.mensagem || 'Erro ao carregar punições.');
+        this.loadingPunicoes.set(false);
+      },
+    });
+  }
+
+  onBuscaPunicao(value: string): void {
+    this.buscaPunicaoInput = value;
+    if (this.buscaPunicaoTimer) clearTimeout(this.buscaPunicaoTimer);
+    this.buscaPunicaoTimer = setTimeout(() => {
+      this.buscaPunicao.set(value);
+    }, 300);
+  }
+
+  salvarSessoesPunicao(): void {
+    const n = Number(this.sessoesPunicaoInput);
+    if (!Number.isInteger(n) || n < 0 || n > 30) {
+      this.alertas.erro('Informe um número inteiro entre 0 e 30.');
+      return;
+    }
+    this.savingPunicaoConfig.set(true);
+    this.api.saveConfig({ sessoesPunicao: n }).subscribe({
+      next: (cfg) => {
+        this.sessoesPunicaoInput = cfg.sessoesPunicao;
+        this.savingPunicaoConfig.set(false);
+        this.alertas.sucesso('Configuração de punição salva.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.savingPunicaoConfig.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Erro ao salvar configuração.');
+      },
+    });
+  }
+
+  labelLiberaEm(p: MassagemPunicao): string {
+    if (p.liberaEm) {
+      return `após ${this.formatDataCurta(p.liberaEm)}`;
+    }
+    return 'após o próximo evento';
   }
 
   ocupacaoPct(ev: MassagemEvento): number {

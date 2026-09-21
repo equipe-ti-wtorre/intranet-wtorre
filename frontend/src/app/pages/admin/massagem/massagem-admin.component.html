@@ -3,7 +3,7 @@
     <div>
       <h1>Configurações de Massagem</h1>
       <p class="page-subtitle">
-        Configure eventos, disparo de e-mail, envios, listas, empresas, templates e layout da página.
+        Configure eventos, punições, disparo de e-mail, envios, listas, empresas, templates e layout da página.
       </p>
     </div>
   </header>
@@ -87,6 +87,20 @@
       <button
         type="button"
         class="admin-tab"
+        [class.active]="aba() === 'punicoes'"
+        (click)="selecionarAba('punicoes')"
+      >
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+            <path d="M8 8l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Punições</span>
+      </button>
+      <button
+        type="button"
+        class="admin-tab"
         [class.active]="aba() === 'email' && sub() === 'templates'"
         (click)="selecionarSub('templates')"
       >
@@ -152,6 +166,95 @@
                         <button type="button" (click)="abrirEditar(e)">Editar</button>
                         <button type="button" class="danger" (click)="excluirEmpresa(e)">Excluir</button>
                       </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (aba() === 'punicoes') {
+      <div class="massagem-tab-panel">
+        <div class="pane-head">
+          <div>
+            <h2>Punições</h2>
+            <p class="hint">
+              Quantos eventos o colaborador perde após uma falta. 0 desativa. A punição cai sozinha quando as sessões passam.
+            </p>
+          </div>
+          <div class="toolbar punicao-toolbar">
+            <label class="fld">
+              Sessões de punição
+              <input
+                type="number"
+                min="0"
+                max="30"
+                step="1"
+                [(ngModel)]="sessoesPunicaoInput"
+              />
+            </label>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              (click)="salvarSessoesPunicao()"
+              [disabled]="savingPunicaoConfig()"
+            >
+              {{ savingPunicaoConfig() ? 'Salvando…' : 'Salvar' }}
+            </button>
+          </div>
+        </div>
+        <div class="pane-body">
+          <div class="toolbar punicao-busca">
+            <label class="fld busca-fld">
+              Buscar
+              <input
+                type="search"
+                [ngModel]="buscaPunicaoInput"
+                (ngModelChange)="onBuscaPunicao($event)"
+                placeholder="Nome ou e-mail…"
+              />
+            </label>
+          </div>
+          @if (loadingPunicoes()) {
+            <p class="muted">Carregando…</p>
+          } @else if (!punicoesFiltradas().length) {
+            <div class="empty">
+              @if (punicoes().length) {
+                Nenhum punido encontrado para a busca.
+              } @else {
+                Ninguém está punido no momento.
+              }
+            </div>
+          } @else {
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>E-mail</th>
+                    <th>Falta em</th>
+                    <th>Sessões</th>
+                    <th>Libera em</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of punicoesFiltradas(); track p.id) {
+                    <tr>
+                      <td>
+                        <strong>{{ p.nome }}</strong>
+                        @if (p.eventoNm) {
+                          <div class="cell-sub">{{ p.eventoNm }}</div>
+                        }
+                      </td>
+                      <td>{{ p.email }}</td>
+                      <td>{{ formatDataCurta(p.dataFalta) }}</td>
+                      <td>{{ p.sessoesRestantes }} / {{ p.sessoesAplicadas }}</td>
+                      <td>{{ labelLiberaEm(p) }}</td>
+                      <td><span class="badge-status off">Punido</span></td>
                     </tr>
                   }
                 </tbody>
@@ -586,14 +689,14 @@
       }
       <section class="det-block">
         <div class="det-hd">
-          <h3>Reservas <span class="count">{{ reservas().length }}</span></h3>
-          <p class="muted">Colaboradores com horário confirmado</p>
+          <h3>Presentes <span class="count count-ok">{{ presentesDetalhe().length }}</span></h3>
+          <p class="muted">Colaboradores com presença marcada pela massagista</p>
         </div>
-        @if (!reservas().length) {
-          <div class="empty">Nenhuma reserva ainda.</div>
+        @if (!presentesDetalhe().length) {
+          <div class="empty">Nenhuma presença registrada ainda.</div>
         } @else {
           <div class="det-list">
-            @for (r of reservas(); track r.chave) {
+            @for (r of presentesDetalhe(); track r.chave) {
               <div class="det-row">
                 <div>
                   <div class="det-nome">{{ r.nome }}</div>
@@ -601,9 +704,35 @@
                 </div>
                 <div class="det-meta">
                   <span>{{ r.hora }} – {{ horaFim(r.hora) }}</span>
-                  <span class="badge-status" [class.off]="r.status !== 'ok' && r.status !== 'presente'">
-                    {{ label(r.status) }}
-                  </span>
+                  <span class="badge-status">Presente</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </section>
+
+      <section class="det-block">
+        <div class="det-hd">
+          <h3>Faltas <span class="count count-warn">{{ faltasDetalhe().length }}</span></h3>
+          <p class="muted">Colaboradores com falta marcada pela massagista</p>
+        </div>
+        @if (!faltasDetalhe().length) {
+          <div class="empty">Nenhuma falta registrada ainda.</div>
+        } @else {
+          <div class="det-list">
+            @for (r of faltasDetalhe(); track r.chave) {
+              <div class="det-row">
+                <div>
+                  <div class="det-nome">{{ r.nome }}</div>
+                  <div class="cell-sub">{{ r.email }}</div>
+                </div>
+                <div class="det-meta">
+                  <span>{{ r.hora }} – {{ horaFim(r.hora) }}</span>
+                  <span class="badge-status off">Falta</span>
+                  @if (r.punido) {
+                    <span class="badge-status off">Punido</span>
+                  }
                 </div>
               </div>
             }

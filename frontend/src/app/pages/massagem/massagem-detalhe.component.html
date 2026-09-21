@@ -55,7 +55,19 @@
 
   <div class="cn det-body">
     <div id="det-top-notif">
-      @if (reservaEmOutroEvento()) {
+      @if (punicao(); as p) {
+        <div class="msg-punicao-banner">
+          <div class="msg-punicao-banner-inner">
+            <div class="msg-punicao-badge">Punição</div>
+            <h3>Você está temporariamente sem acesso</h3>
+            <p>
+              Falta registrada em <strong>{{ formatDataCurta(p.dataFalta) }}</strong>.
+              Falta{{ p.sessoesRestantes === 1 ? '' : 'm' }}
+              <strong>{{ labelPunicaoRestantes() }}</strong> para voltar a participar.
+            </p>
+          </div>
+        </div>
+      } @else if (reservaEmOutroEvento()) {
         <div class="fila-card-unif reserva-unica-card">
           <div class="fila-card-top">
             <div class="fila-card-badge reserva-unica-badge">Reserva única</div>

@@ -3,7 +3,8 @@
     <div>
       <h2>Disparo de e-mail</h2>
       <p class="hint">
-        O convite da nova sessão vai para a lista da empresa (e-mail geral). Sem lista, usa os e-mails de teste.
+        O convite vai primeiro para a lista da empresa. Só usa os e-mails de teste do Layout se a lista
+        estiver vazia.
       </p>
     </div>
     <label class="fld filtro-fld">
@@ -118,7 +119,11 @@
     </select>
   </label>
   @if (destinoResumo(); as dest) {
-    <div class="destino" [class.warn]="dest.tipo === 'vazio'">
+    <div
+      class="destino"
+      [class.warn]="dest.tipo === 'vazio'"
+      [class.aviso]="dest.tipo === 'lista' && dest.ignoraTeste"
+    >
       <div class="destino-label">Destino</div>
       <strong>{{ dest.titulo }}</strong>
       <p>{{ dest.detalhe }}</p>

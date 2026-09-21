@@ -2,7 +2,7 @@
   <div class="pane-head">
     <div>
       <h2>Layout</h2>
-      <p class="hint">Marca, textos do hero e e-mails de teste usados nos envios.</p>
+      <p class="hint">Marca, textos do hero e e-mails de teste (quem recebe primeiro nos envios).</p>
     </div>
   </div>
 
@@ -166,9 +166,9 @@
       <fieldset class="form-section">
         <legend>E-mails de teste</legend>
         <p class="field-hint">
-          A lista de Disparo é só o convite da nova sessão. Confirmação, cancelamento, fila, lembrete e
-          falta vão para o e-mail da pessoa. Se houver e-mails aqui, todos os envios de massagem vão só
-          para eles.
+          Disparo (convite da sessão): a lista da empresa recebe primeiro. Estes e-mails só entram se a
+          lista estiver vazia. Confirmação, cancelamento, fila, lembrete e falta: se houver e-mails aqui,
+          o envio vai só para eles — não para a pessoa.
         </p>
         <div class="email-chips" role="list">
           @for (email of emailsTeste(); track email) {

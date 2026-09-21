@@ -362,3 +362,47 @@
     width: 100%;
   }
 }
+
+.msg-app .msg-punicao-banner {
+  border-radius: 16px;
+  border: 1.5px solid rgba(185, 28, 28, 0.22);
+  background: var(--sur, #fff);
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(185, 28, 28, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06);
+  margin: 0 0 20px;
+}
+
+.msg-app .msg-punicao-banner-inner {
+  padding: 20px 24px 18px;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff7f7 100%);
+}
+
+.msg-app .msg-punicao-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid rgba(185, 28, 28, 0.22);
+  margin-bottom: 8px;
+}
+
+.msg-app .msg-punicao-banner h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display, Archivo, sans-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #7f1d1d;
+}
+
+.msg-app .msg-punicao-banner p {
+  margin: 0;
+  color: var(--mu, #6b7280);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}

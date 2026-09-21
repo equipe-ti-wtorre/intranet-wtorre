@@ -38,6 +38,7 @@ intranet-wtorre/
    - `MailboxSettings.Read` — **obrigatória** para excluir caixas compartilhadas (`SharedMailbox`), salas e equipamentos do sync AD (campo Graph `mailboxSettings.userPurpose`, equivalente ao tipo de caixa no Exchange)
    - `User.ReadWrite.All` — **obrigatória** para edição/importação em Gestão de Usuários (PATCH Graph, inclusive directory extensions para ramal e aniversário)
    - `Application.Read.All` + `Application.ReadWrite.All` — registrar directory extensions (`ramal`, `dataNascimento`) na app de cada tenant
+   - `Calendars.ReadWrite` — **obrigatória** para gravar a reserva de massagem na agenda Outlook do colaborador (`POST`/`PATCH`/`DELETE /users/{id}/events`). Se existir Application Access Policy no Exchange, incluir as mailboxes dos colaboradores (não só salas/recursos)
 5. O `tid` (tenant ID) de cada empresa deve ser cadastrado em `azure_tenants` com `ativo=1`.
 
 ### Sync AD — excluir caixas compartilhadas
@@ -48,6 +49,14 @@ O tipo de caixa exibido no Exchange (`UserMailbox` / `SharedMailbox`) correspond
 - Sem essa permissão: a sync continua com heurística (nome/matrícula) e registra aviso no resumo (`mailbox_purpose_disponivel: false`).
 
 **Como conceder:** Azure Portal → App registrations → sua app → API permissions → Add permission → Microsoft Graph → **Application permissions** → `MailboxSettings.Read` → **Grant admin consent** (repetir em cada tenant).
+
+### Agenda Outlook — massagem
+
+Ao confirmar, trocar ou cancelar uma sessão em `/massagem`, o backend cria, atualiza ou remove um compromisso **privado** na agenda Outlook do colaborador via Graph (escrita direta na caixa, sem convite). A reserva na intranet continua mesmo se o Graph falhar.
+
+**Como conceder:** Azure Portal → App registrations → sua app → API permissions → Add permission → Microsoft Graph → **Application permissions** → `Calendars.ReadWrite` → **Grant admin consent** (repetir em cada tenant cadastrado em `azure_tenants`).
+
+Se o Exchange tiver **Application Access Policy**, incluir as mailboxes dos colaboradores — não só salas e recursos. Sem essa permissão o agendamento na intranet segue normal; o erro fica só no log (`[massagem] outlook background`).
 
 ### Directory extensions (ramal e aniversário)
 

@@ -26,6 +26,29 @@ export interface MassagemLayout {
 
 export interface MassagemConfig {
   emailsTeste: string[];
+  sessoesPunicao: number;
+}
+
+export interface MassagemPunicao {
+  id: string;
+  email: string;
+  nome: string;
+  eventoId: string | null;
+  eventoNm: string;
+  unidade: string;
+  dataFalta: string;
+  sessoesAplicadas: number;
+  sessoesRestantes: number;
+  sessoesConsumidas: number;
+  liberaEm: string | null;
+}
+
+export interface MassagemPunicaoPublica {
+  ativa: boolean;
+  dataFalta: string;
+  sessoesRestantes: number;
+  sessoesAplicadas: number;
+  liberaEm: string | null;
 }
 
 export type MassagemEmailTemplateCodigo =
@@ -199,6 +222,7 @@ export interface MassagemSlotsResponse {
   minhaChave: string | null;
   jaTemReserva?: boolean;
   minhaReserva?: MassagemMinhaReserva | null;
+  punicao?: MassagemPunicaoPublica | null;
 }
 
 export interface MassagemReservaItem {
@@ -242,6 +266,7 @@ export interface MassagemAdminReserva {
   nome: string;
   status: string;
   observacao?: string;
+  punido?: boolean;
 }
 
 export interface MassagemTabletDay {

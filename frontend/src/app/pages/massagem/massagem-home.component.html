@@ -29,6 +29,20 @@
   <app-massagem-subnav />
 
   <div class="cn home-body">
+    @if (punicao(); as p) {
+      <div class="msg-punicao-banner">
+        <div class="msg-punicao-banner-inner">
+          <div class="msg-punicao-badge">Punição</div>
+          <h3>Você está temporariamente sem acesso</h3>
+          <p>
+            Falta registrada em <strong>{{ formatDataCurta(p.dataFalta) }}</strong>.
+            Falta{{ p.sessoesRestantes === 1 ? '' : 'm' }}
+            <strong>{{ labelPunicaoRestantes() }}</strong> para voltar a participar.
+          </p>
+        </div>
+      </div>
+    }
+
     <div class="home-section-label">
       <span class="home-section-line"></span>
       <span>Eventos disponíveis</span>
