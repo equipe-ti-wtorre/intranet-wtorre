@@ -234,6 +234,7 @@ export class AuthService {
   /** Navega para /inicio após login (router primeiro; reload só se necessário). */
   completarLogin(): void {
     if (!this.temSessao()) return;
+    sessionStorage.setItem('nsc_alerta_force_login', '1');
 
     const navegar = (): void => {
       void this.router.navigateByUrl('/inicio', { replaceUrl: true }).then((ok) => {
@@ -298,6 +299,7 @@ export class AuthService {
     sessionStorage.removeItem(CHAVE_REFRESH);
     sessionStorage.removeItem(CHAVE_USUARIO);
     sessionStorage.removeItem(CHAVE_REDIRECT_FP);
+    sessionStorage.removeItem('nsc_alerta_force_login');
   }
 
   logout(navigate = true, msalLogout = true): void {
@@ -429,6 +431,7 @@ export class AuthService {
     storage.setItem(CHAVE_ACCESS, accessToken);
     storage.setItem(CHAVE_REFRESH, refreshToken);
     storage.setItem(CHAVE_USUARIO, JSON.stringify({ ...user, modulos: this.modulos() }));
+    sessionStorage.setItem('nsc_alerta_force_login', '1');
 
     const other = manterConectado ? sessionStorage : localStorage;
     other.removeItem(CHAVE_ACCESS);

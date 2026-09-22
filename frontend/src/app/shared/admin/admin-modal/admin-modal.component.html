@@ -1,5 +1,9 @@
 @if (open()) {
-  <div class="admin-modal overlay" (click)="onBackdropClick($event)">
+  <div
+    class="admin-modal overlay"
+    [class.admin-modal--elevated]="elevated()"
+    (click)="onBackdropClick($event)"
+  >
     <div
       class="admin-modal__panel"
       [class.admin-modal__panel--wide]="size() === 'wide'"
@@ -70,7 +74,7 @@
                 stroke-linejoin="round"
               />
             </svg>
-            {{ salvando() ? 'Salvando...' : saveLabel() }}
+            {{ salvando() ? savingLabel() : saveLabel() }}
           </button>
         }
       </footer>

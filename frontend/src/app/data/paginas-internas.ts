@@ -29,6 +29,8 @@ export const PAGINAS_INTERNAS: PaginaInterna[] = [
   { path: '/massagem', label: 'Massagem' },
   { path: '/pesquisas', label: 'Central de Pesquisas' },
   { path: '/ti/rustdesk', label: 'TI / Rust Desk' },
+  { path: '/nao-se-cale', label: 'Não se Cale' },
+  { path: '/agenda_rh', label: 'Agenda RH' },
 ];
 
 export function paginasDocumentosFromPaginas(
@@ -140,6 +142,7 @@ export function isPaginaInternaConhecida(path: string): boolean {
     DOCUMENTOS_PATH_REGEX.test(pathOnly) ||
     TREINAMENTOS_PATH_REGEX.test(pathOnly) ||
     PAGINA_PUBLICA_REGEX.test(pathOnly) ||
-    /^\/documentos\/[a-z0-9-]+\?cat=treinamentos/.test(path)
+    /^\/documentos\/[a-z0-9-]+\?cat=treinamentos/.test(path) ||
+    /^\/(agenda_rh|cipa)(\/evento\/[^/]+)?$/.test(pathOnly)
   );
 }

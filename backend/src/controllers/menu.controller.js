@@ -5,10 +5,12 @@ const { isValidMenuUrl, normalizeMenuUrl } = require('../utils/menu.validation')
 const { MAX_DEPTH, getDepth, isDescendant } = require('../utils/menu.tree');
 const { usuarioPodeVisualizar } = require('../services/camarotes-acesso.service');
 const { usuarioPodeVisualizar: usuarioPodeVisualizarSolicitacao } = require('../services/solicitacao-acesso.service');
+const { usuarioPodeVisualizar: usuarioPodeVisualizarNsc } = require('../services/nsc-acesso.service');
 
 const CAMAROTES_BI_URL = '/bi/camarotes';
 const SOLICITACAO_COLABORADOR_URL = '/solicitacao-colaborador';
 const RUSTDESK_URL = '/ti/rustdesk';
+const NSC_URL = '/nao-se-cale';
 
 function filterUrlFromTree(nodes, url) {
   const result = [];
@@ -98,6 +100,11 @@ async function getPublicTree(req, res) {
   if (!podeRustdesk) {
     tree = filterUrlFromTree(tree, RUSTDESK_URL);
     tree = pruneParentIfEmpty(tree, 'TI');
+  }
+
+  const podeVisualizarNsc = await usuarioPodeVisualizarNsc(req.user, req.userModulos || []);
+  if (!podeVisualizarNsc) {
+    tree = filterUrlFromTree(tree, NSC_URL);
   }
 
   return res.json(tree);

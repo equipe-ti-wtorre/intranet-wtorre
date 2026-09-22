@@ -59,6 +59,24 @@ export class SolicitacaoColaboradorService {
     return this.http.get<SolicitacaoDetalheAdmin>(this.api(`/admin/solicitacoes/${id}`));
   }
 
+  previewTemplate(body: {
+    campos: string[];
+    assunto?: string | null;
+  }): Observable<{ html: string; subject?: string }> {
+    return this.http.post<{ html: string; subject?: string }>(
+      this.api('/admin/preview-template'),
+      body
+    );
+  }
+
+  enviarTeste(body: {
+    campos: string[];
+    assunto?: string | null;
+    email: string;
+  }): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(this.api('/admin/enviar-teste'), body);
+  }
+
   previewEmail(solicitacaoId: number, grupoId: number): Observable<{ html: string; subject?: string }> {
     return this.http.get<{ html: string; subject?: string }>(
       this.api(`/admin/solicitacoes/${solicitacaoId}/preview/${grupoId}`)
@@ -86,6 +104,13 @@ export class SolicitacaoColaboradorService {
       this.api(`/admin/solicitacoes/${solicitacaoId}/reenviar-individual/${emailId}`),
       {}
     );
+  }
+
+  encaminharEmail(
+    solicitacaoId: number,
+    body: { email: string; grupoId?: number; emailIndividualId?: number }
+  ): Observable<unknown> {
+    return this.http.post(this.api(`/admin/solicitacoes/${solicitacaoId}/encaminhar`), body);
   }
 
   listarGrupos(): Observable<SolicitacaoGrupo[]> {

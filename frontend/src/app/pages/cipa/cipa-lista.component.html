@@ -1,0 +1,71 @@
+<div class="pagina cipa-page">
+  <app-public-chrome>
+    <div class="cipa-wrap">
+      @if (carregando()) {
+        <p class="state-msg">Carregando eventos…</p>
+      } @else if (erro()) {
+        <div class="state-msg state-erro">
+          <p>{{ erro() }}</p>
+          <button type="button" class="btn-retry" (click)="carregar()">Tentar novamente</button>
+        </div>
+      } @else {
+        <div class="filtros">
+          <label class="filtro">
+            <span>Categoria</span>
+            <select [ngModel]="categoria()" (ngModelChange)="categoria.set($event)">
+              <option value="">Todas</option>
+              @for (c of categorias(); track c) {
+                <option [value]="c">{{ c }}</option>
+              }
+            </select>
+          </label>
+          <label class="filtro">
+            <span>Data</span>
+            <input type="date" [ngModel]="dataFiltro()" (ngModelChange)="dataFiltro.set($event)" />
+          </label>
+        </div>
+
+        @if (!filtrados().length) {
+          <p class="state-msg">
+            @if (eventos().length) {
+              Nenhum evento encontrado com os filtros atuais.
+            } @else {
+              Não há eventos da Agenda RH disponíveis para você no momento.
+            }
+          </p>
+        } @else {
+          <div class="grid">
+            @for (ev of filtrados(); track ev.id) {
+              <a class="card" [routerLink]="['/', ev.codigo]">
+                <div class="card-img" [class.empty]="!imagens()[ev.codigo]">
+                  @if (imagens()[ev.codigo]; as src) {
+                    <img
+                      [src]="src"
+                      [alt]="ev.titulo"
+                      [style.object-position]="posicaoImagem(ev)"
+                      [style.transform]="escalaImagem(ev)"
+                      [style.transform-origin]="posicaoImagem(ev)"
+                    />
+                  }
+                </div>
+                <div class="card-body">
+                  <div class="meta">
+                    <time>{{ formatarData(ev.data) }}</time>
+                    @if (ev.categoria) {
+                      <span class="tag">{{ ev.categoria }}</span>
+                    }
+                  </div>
+                  <h2>{{ ev.titulo }}</h2>
+                  @if (ev.localizacao) {
+                    <p class="loc">{{ ev.localizacao }}</p>
+                  }
+                </div>
+              </a>
+            }
+          </div>
+        }
+      }
+    </div>
+  </app-public-chrome>
+  <app-footer />
+</div>

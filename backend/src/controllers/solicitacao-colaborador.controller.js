@@ -185,6 +185,28 @@ async function obterSolicitacaoAdmin(req, res) {
   }
 }
 
+async function previewTemplate(req, res) {
+  try {
+    const preview = envioService.previewTemplate(req.body?.campos, req.body?.assunto);
+    return res.json(preview);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function enviarTeste(req, res) {
+  try {
+    const resultado = await envioService.enviarTeste(
+      req.body?.campos,
+      req.body?.assunto,
+      req.body?.email
+    );
+    return res.json(resultado);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
 async function previewEmail(req, res) {
   try {
     const solicitacaoId = Number(req.params.id);
@@ -213,6 +235,20 @@ async function previewEmailIndividual(req, res) {
     const emailId = Number(req.params.emailId);
     const preview = await envioService.previewIndividual(solicitacaoId, emailId);
     return res.json(preview);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function encaminharEmail(req, res) {
+  try {
+    const solicitacaoId = Number(req.params.id);
+    const resultado = await envioService.encaminhar(solicitacaoId, {
+      email: req.body?.email,
+      grupoId: req.body?.grupoId,
+      emailIndividualId: req.body?.emailIndividualId,
+    });
+    return res.json(resultado);
   } catch (err) {
     return handleError(res, err);
   }
@@ -479,10 +515,13 @@ module.exports = {
   minhas,
   listarSolicitacoesAdmin,
   obterSolicitacaoAdmin,
+  previewTemplate,
+  enviarTeste,
   previewEmail,
   reenviarEmail,
   previewEmailIndividual,
   reenviarEmailIndividual,
+  encaminharEmail,
   listarGrupos,
   criarGrupo,
   atualizarGrupo,

@@ -12,6 +12,10 @@
   animation: adminModalFadeIn 0.2s ease;
 }
 
+.admin-modal.overlay.admin-modal--elevated {
+  z-index: 560;
+}
+
 .admin-modal__panel {
   width: min(500px, 100%);
   max-height: calc(100vh - 48px);

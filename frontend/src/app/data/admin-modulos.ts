@@ -20,6 +20,8 @@ export const ADMIN_MODULO_ROTAS: { codigo: string; rota: string }[] = [
   { codigo: 'followup-suprimentos', rota: 'followup-suprimentos' },
   { codigo: 'massagem', rota: 'massagem' },
   { codigo: 'pesquisas', rota: 'pesquisas' },
+  { codigo: 'nao-se-cale', rota: 'nao-se-cale' },
+  { codigo: 'agenda_rh', rota: 'agenda_rh' },
 ];
 
 export function rotaParaModulo(path: string): string | null {

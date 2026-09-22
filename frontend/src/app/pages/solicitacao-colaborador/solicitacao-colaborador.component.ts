@@ -163,7 +163,9 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     if (!this.centroCusto().trim()) return 'Informe o centro de custo.';
     if (!this.empresa()) return 'Selecione a empresa.';
     if (!this.localTrabalho().trim()) return 'Informe o local de trabalho.';
-    if (!this.fotoFile()) return 'Envie a foto do colaborador.';
+    if (this.tipo() !== 'efetivacao' && this.tipo() !== 'mudanca' && !this.fotoFile()) {
+      return 'Envie a foto do colaborador.';
+    }
     if (!this.dataInicio()) return 'Informe a data de início.';
     if (this.credencialEstacionamento() && !this.credencialVeiculoFile()) {
       return 'Credencial do veículo é obrigatória quando estacionamento = Sim.';

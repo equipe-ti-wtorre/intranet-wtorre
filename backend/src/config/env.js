@@ -29,6 +29,7 @@ const env = {
   jwtRefreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
   encryptionKey: process.env.ENCRYPTION_KEY,
   corsOrigins: getCorsOrigins(),
+  publicAppUrl: (process.env.PUBLIC_APP_URL || '').replace(/\/+$/, ''),
   msalRedirectUriWeb: process.env.MSAL_REDIRECT_URI_WEB || 'http://localhost:4201',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@grupowtorre.com',
   adminPassword: process.env.ADMIN_PASSWORD,
@@ -130,6 +131,15 @@ const env = {
   rustdeskInstallerPath:
     process.env.RUSTDESK_INSTALLER_PATH ||
     path.join(__dirname, '..', '..', 'storage', 'rustdesk', 'Rustdesk.zip'),
+  nscCertificadosDir:
+    process.env.NSC_CERTIFICADOS_DIR ||
+    path.join(__dirname, '..', '..', 'storage', 'nsc-certificados'),
+  nscUploadMaxMb: Number(process.env.NSC_UPLOAD_MAX_MB) || 10,
+  nscCron: process.env.NSC_CRON || '0 8 * * *',
+  cipaImagensDir:
+    process.env.CIPA_IMAGENS_DIR ||
+    path.join(__dirname, '..', '..', 'storage', 'cipa-imagens'),
+  cipaUploadMaxMb: Number(process.env.CIPA_UPLOAD_MAX_MB) || 5,
 };
 
 function validateEnv() {

@@ -10,6 +10,7 @@ const CAMPOS = [
       { valor: 'novo', label: 'Novo colaborador' },
       { valor: 'reposicao', label: 'Reposição' },
       { valor: 'mudanca', label: 'Mudança' },
+      { valor: 'efetivacao', label: 'Efetivação' },
     ],
   },
   { chave: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },

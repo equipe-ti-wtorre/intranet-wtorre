@@ -1,11 +1,8 @@
 <div class="admin-shell" [class.sidebar-open]="sidebarOpen()">
   <aside class="admin-sidebar">
     <div class="sidebar-brand">
-      <app-logo-w class="logo-wrap" />
-      <div>
-        <div class="grp">GRUPO WTORRE</div>
-        <div class="sub">Administração</div>
-      </div>
+      <div class="grp">GRUPO WTORRE</div>
+      <div class="sub">Administração</div>
     </div>
 
     <div class="sidebar-body">
@@ -122,17 +119,37 @@
       </nav>
     }
 
-    @if (auth.hasModulo('solicitacao-colaborador')) {
+    @if (auth.hasModulo('solicitacao-colaborador') || auth.hasModulo('nao-se-cale') || auth.hasModulo('agenda_rh')) {
       <div class="nav-group-label">Pessoas / RH</div>
       <nav class="sidebar-nav">
-        <a routerLink="/admin/solicitacao-colaborador" routerLinkActive="active" (click)="closeSidebar()">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" />
-            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" />
-            <path d="M19 8v6M22 11h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          </svg>
-          Solicitação de Colaborador
-        </a>
+        @if (auth.hasModulo('solicitacao-colaborador')) {
+          <a routerLink="/admin/solicitacao-colaborador" routerLinkActive="active" (click)="closeSidebar()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" />
+              <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" />
+              <path d="M19 8v6M22 11h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            Solicitação de Colaborador
+          </a>
+        }
+        @if (auth.hasModulo('nao-se-cale')) {
+          <a routerLink="/admin/nao-se-cale" routerLinkActive="active" (click)="closeSidebar()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+              <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Não se Cale
+          </a>
+        }
+        @if (auth.hasModulo('agenda_rh')) {
+          <a routerLink="/admin/agenda_rh" routerLinkActive="active" (click)="closeSidebar()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" />
+              <path d="M8 3v4M16 3v4M3 11h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            Agenda RH
+          </a>
+        }
       </nav>
     }
 
@@ -231,9 +248,33 @@
           <span class="bc-current">{{ pageTitle() }}</span>
         </div>
       </div>
-      <div class="status-dot">
-        <span class="dot"></span>
-        Sistemas normais
+      <div class="topline-right">
+        <div class="avatar-wrap" #avatarWrap>
+          <button
+            class="avatar"
+            type="button"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="avatarMenuAberto()"
+            [title]="auth.usuario()?.nome_completo ?? auth.usuario()?.nome ?? 'Meu perfil'"
+            (click)="toggleAvatarMenu()"
+          >
+            @if (fotoUrl()) {
+              <img [src]="fotoUrl()!" alt="" class="avatar-img" />
+            } @else {
+              {{ auth.getIniciais() }}
+            }
+          </button>
+          @if (avatarMenuAberto()) {
+            <div class="avatar-menu">
+              <div class="avatar-menu-name">
+                {{ auth.usuario()?.nome_completo ?? auth.usuario()?.nome }}
+              </div>
+              <div class="avatar-menu-email">{{ auth.usuario()?.email }}</div>
+              <a routerLink="/inicio" (click)="fecharAvatarMenu()">Voltar à intranet</a>
+              <button type="button" (click)="sair()">Sair</button>
+            </div>
+          }
+        </div>
       </div>
     </header>
 

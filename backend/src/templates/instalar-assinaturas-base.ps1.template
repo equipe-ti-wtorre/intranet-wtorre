@@ -3,28 +3,52 @@
 .SYNOPSIS
     Instala assinaturas de e-mail para todos os aliases do usuário logado.
     Limpa assinaturas antigas antes de instalar.
-    Baixa as configurações via HTTP a partir de -ConfigUrl.
+    Prefere JSON local (-ConfigJsonPath); fallback HTTP via -ConfigUrl.
 #>
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$ConfigUrl
+    [Parameter(Mandatory=$false)]
+    [string]$ConfigUrl = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$ConfigJsonPath = ""
 )
 
 $ErrorActionPreference = 'Continue'
+
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+} catch {}
+try {
+    $proxy = [System.Net.WebRequest]::GetSystemWebProxy()
+    if ($proxy) {
+        $proxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
+        [System.Net.WebRequest]::DefaultWebProxy = $proxy
+    }
+} catch {}
 
 $USUARIO    = "$env:USERNAME"
 $SIG_FOLDER = "$env:APPDATA\Microsoft\Signatures"
 $BLOB       = "https://nubankparqueassets.blob.core.windows.net/email-assets"
 
-Write-Host "`n  Baixando configuracoes..." -ForegroundColor Cyan
+Write-Host "`n  Carregando configuracoes..." -ForegroundColor Cyan
 try {
-    $response    = Invoke-RestMethod -Uri $ConfigUrl -Method GET -Headers @{ "User-Agent" = "Instalador-Assinaturas/1.0" } -ErrorAction Stop
+    $isLoopback = $ConfigUrl -match '://(127\.0\.0\.1|localhost|\[::1\])(:|/|$)'
+    if ($ConfigJsonPath -and (Test-Path -LiteralPath $ConfigJsonPath)) {
+        $response = Get-Content -LiteralPath $ConfigJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    } elseif ($ConfigUrl -and -not $isLoopback) {
+        $response = Invoke-RestMethod -Uri $ConfigUrl -Method GET -Headers @{ "User-Agent" = "Instalador-Assinaturas/1.0" } -ErrorAction Stop
+    } else {
+        throw "Nenhuma configuracao disponivel."
+    }
     $ASSINATURAS = $response.assinaturas
     $emailPadrao = $response.EmailPadrao
 } catch {
-    Write-Host "ERRO: Nao foi possivel baixar as configuracoes." -ForegroundColor Red
+    Write-Host "ERRO: Nao foi possivel carregar as configuracoes." -ForegroundColor Red
     Write-Host "      Verifique sua conexao e tente novamente." -ForegroundColor Yellow
+    if ($ConfigUrl) {
+        Write-Host "      URL: $ConfigUrl" -ForegroundColor DarkGray
+    }
     Write-Host "      Detalhe: $($_.Exception.Message)" -ForegroundColor DarkGray
     Read-Host "`nPressione Enter para fechar"
     exit 1
@@ -35,7 +59,6 @@ try {
 # ---------------------------------------------
 $DOMINIOS = @{
     "nubankparque.com"        = @{ Cor="#8D0DE3"; Entidade="Nubank Parque";   Banner="$BLOB/banner_nubank_parque.gif";  Font="'NuSansDisplay',Helvetica,Arial,sans-serif"; WNome="500";  WResto="400";    FontFace=$true  }
-    "allianzparque.com.br"    = @{ Cor="#005399"; Entidade="Real Arenas";     Banner="$BLOB/banner_allianz_parque.gif"; Font="Helvetica,Arial,sans-serif";                 WNome="bold"; WResto="normal"; FontFace=$false }
     "basecoworking.space"     = @{ Cor="#005399"; Entidade="Base Coworking";  Banner="$BLOB/banner_base_coworking.gif"; Font="Helvetica,Arial,sans-serif";                 WNome="bold"; WResto="normal"; FontFace=$false }
     "novoanhangabau.com.br"   = @{ Cor="#000000"; Entidade="Novo Anhangabaú"; Banner="$BLOB/banner_novoanhangabau.gif"; Font="Arial,sans-serif";                           WNome="bold"; WResto="normal"; FontFace=$false }
     "wtentretenimento.com.br" = @{ Cor="#005399"; Entidade="Real Arenas";     Banner="$BLOB/banner_allianz_parque.gif"; Font="Helvetica,Arial,sans-serif";                 WNome="bold"; WResto="normal"; FontFace=$false }

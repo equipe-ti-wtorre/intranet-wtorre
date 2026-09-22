@@ -30,6 +30,7 @@ const TIPO_LABELS = {
   novo: 'Novo colaborador',
   reposicao: 'Reposição',
   mudanca: 'Mudança',
+  efetivacao: 'Efetivação',
 };
 
 const EQUIPAMENTO_LABELS = {

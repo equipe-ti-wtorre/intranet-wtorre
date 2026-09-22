@@ -450,16 +450,13 @@ export class FollowupSuprimentosComponent implements OnInit {
     this.followup.porNumero(q, escopo).subscribe({
       next: (rows) => {
         this.solicitacoes.set(rows);
-        if (!tipoFixo) this.alinharTipoComResultados(rows);
-        else if (!rows.some((r) => tipoOf(r) === tipoFixo)) {
-          this.alinharTipoComResultados(rows);
-        }
+        this.alinharTipoComResultados(rows);
         this.carregando.set(false);
       },
       error: (err: HttpErrorResponse) => {
         this.solicitacoes.set([]);
-        if (err.status === 404 || err.status === 403) {
-          this.erro.set('');
+        if (err.status === 404) {
+          this.erro.set(err.error?.mensagem || '');
         } else {
           this.erro.set(err.error?.mensagem || 'Erro na busca.');
         }

@@ -1,4 +1,4 @@
-export type SolicitacaoTipo = 'novo' | 'reposicao' | 'mudanca';
+export type SolicitacaoTipo = 'novo' | 'reposicao' | 'mudanca' | 'efetivacao';
 export type SolicitacaoEquipamento = 'desktop' | 'notebook' | 'nao';
 export type SolicitacaoStatus = 'recebida' | 'enviada' | 'parcial' | 'erro';
 

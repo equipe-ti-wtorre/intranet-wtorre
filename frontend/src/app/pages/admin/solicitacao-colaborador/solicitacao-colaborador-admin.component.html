@@ -134,6 +134,25 @@
                   [attr.aria-label]="g.ativo ? 'Desativar grupo' : 'Ativar grupo'"
                   (click)="toggleGrupoAtivo(g)"
                 ></button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  [disabled]="carregandoPreview()"
+                  (click)="verTemplateGrupo(g)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+                  </svg>
+                  Ver template
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" (click)="abrirEnvioTesteGrupo(g)">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+                    <path d="M4 6h16v12H4V6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <path d="M4 8l8 5 8-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  Enviar teste
+                </button>
                 <button type="button" class="btn btn-ghost btn-sm" (click)="editarGrupo(g)">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
                     <path d="M4 20h4l10-10-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
@@ -211,6 +230,25 @@
                   [attr.aria-label]="item.ativo ? 'Desativar e-mail' : 'Ativar e-mail'"
                   (click)="toggleIndividualAtivo(item)"
                 ></button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  [disabled]="carregandoPreview()"
+                  (click)="verTemplateIndividual(item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+                  </svg>
+                  Ver template
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" (click)="abrirEnvioTesteIndividual(item)">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+                    <path d="M4 6h16v12H4V6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                    <path d="M4 8l8 5 8-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  Enviar teste
+                </button>
                 <button type="button" class="btn btn-ghost btn-sm" (click)="editarIndividual(item)">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
                     <path d="M4 20h4l10-10-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
@@ -379,53 +417,34 @@
                             </div>
                           </div>
                         } @else {
-                          @for (e of enviosExpandidos(s.id); track e.id) {
-                            <div class="sub-row">
-                              <span class="sub-icon" [class.ok]="e.status === 'ok'" [class.err]="e.status !== 'ok'">
-                                @if (e.status === 'ok') {
-                                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                    <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
-                                  </svg>
-                                } @else {
-                                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
-                                  </svg>
-                                }
-                              </span>
-                              <div>
-                                <div class="sub-name">{{ e.grupo_nome }}</div>
-                                <div class="sub-email">{{ resumoDestinatarios(e.destinatarios) }}</div>
-                              </div>
-                              <div class="sub-actions">
-                                @if (e.status === 'ok' && (e.grupo_id || e.email_individual_id)) {
-                                  <button
-                                    type="button"
-                                    class="btn btn-ghost btn-sm"
-                                    (click)="$event.stopPropagation(); previewEnvio(s.id, e)"
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
-                                      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
-                                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
-                                    </svg>
-                                    Pré-visualizar
-                                  </button>
-                                }
-                                @if (e.grupo_id || e.email_individual_id) {
-                                  <button
-                                    type="button"
-                                    class="btn btn-sm"
-                                    [class.btn-primary]="e.status === 'erro'"
-                                    [class.btn-ghost]="e.status !== 'erro'"
-                                    (click)="$event.stopPropagation(); reenviarEnvio(s.id, e)"
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
-                                      <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                                      <path d="M20 9A8 8 0 005.5 7.5M4 15a8 8 0 0014.5 1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                                    </svg>
-                                    Reenviar
-                                  </button>
-                                }
-                              </div>
+                          @if (enviosGrupos(s.id).length) {
+                            <div class="exp-section">
+                              <div class="exp-section-title">Grupos</div>
+                              @for (e of enviosGrupos(s.id); track e.id) {
+                                <ng-container
+                                  *ngTemplateOutlet="envioRow; context: { $implicit: e, solicitacao: s }"
+                                />
+                              }
+                            </div>
+                          }
+                          @if (enviosIndividuais(s.id).length) {
+                            <div class="exp-section">
+                              <div class="exp-section-title">E-mails individuais</div>
+                              @for (e of enviosIndividuais(s.id); track e.id) {
+                                <ng-container
+                                  *ngTemplateOutlet="envioRow; context: { $implicit: e, solicitacao: s }"
+                                />
+                              }
+                            </div>
+                          }
+                          @if (enviosEncaminhados(s.id).length) {
+                            <div class="exp-section">
+                              <div class="exp-section-title">Encaminhados</div>
+                              @for (e of enviosEncaminhados(s.id); track e.id) {
+                                <ng-container
+                                  *ngTemplateOutlet="envioRow; context: { $implicit: e, solicitacao: s }"
+                                />
+                              }
                             </div>
                           }
                         }
@@ -442,6 +461,74 @@
   </section>
 </div>
 
+<ng-template #envioRow let-e let-solicitacao="solicitacao">
+  <div class="sub-row">
+    <span class="sub-icon" [class.ok]="e.status === 'ok'" [class.err]="e.status !== 'ok'">
+      @if (e.status === 'ok') {
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+      } @else {
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+      }
+    </span>
+    <div>
+      <div class="sub-name">
+        {{ nomeEnvio(e) }}
+        @if (isEnvioEncaminhado(e)) {
+          <span class="sub-badge">Encaminhado</span>
+        } @else if (isEnvioIndividual(e)) {
+          <span class="sub-badge">Individual</span>
+        }
+      </div>
+      <div class="sub-email">{{ resumoDestinatarios(e.destinatarios) }}</div>
+    </div>
+    <div class="sub-actions">
+      @if (e.status === 'ok' && (e.grupo_id || e.email_individual_id)) {
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          (click)="$event.stopPropagation(); previewEnvio(solicitacao.id, e)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+          </svg>
+          Pré-visualizar
+        </button>
+      }
+      @if (e.grupo_id || e.email_individual_id) {
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          (click)="$event.stopPropagation(); abrirEncaminharEnvio(solicitacao.id, e)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+            <path d="M4 6h16v12H4V6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+            <path d="M4 8l8 5 8-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Encaminhar
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-primary]="e.status === 'erro'"
+          [class.btn-ghost]="e.status !== 'erro'"
+          (click)="$event.stopPropagation(); reenviarEnvio(solicitacao.id, e)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+            <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            <path d="M20 9A8 8 0 005.5 7.5M4 15a8 8 0 0014.5 1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          Reenviar
+        </button>
+      }
+    </div>
+  </div>
+</ng-template>
+
 <!-- Modal: criar/editar grupo -->
 <app-admin-modal
   [open]="modalGrupoAberto()"
@@ -452,6 +539,19 @@
   (save)="salvarGrupo()"
   (cancel)="fecharModalGrupo()"
 >
+  <button
+    type="button"
+    adminModalFootStart
+    class="btn btn-ghost modal-preview-btn"
+    [disabled]="salvandoGrupo() || carregandoPreview()"
+    (click)="previewModalGrupo()"
+  >
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+    </svg>
+    {{ carregandoPreview() ? 'Gerando…' : 'Pré-visualizar' }}
+  </button>
   <div class="modal-grupo-form">
     <div class="modal-toggle-row">
       <div>
@@ -566,6 +666,19 @@
   (save)="salvarIndividual()"
   (cancel)="fecharModalIndividual()"
 >
+  <button
+    type="button"
+    adminModalFootStart
+    class="btn btn-ghost modal-preview-btn"
+    [disabled]="salvandoIndividual() || carregandoPreview()"
+    (click)="previewModalIndividual()"
+  >
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+    </svg>
+    {{ carregandoPreview() ? 'Gerando…' : 'Pré-visualizar' }}
+  </button>
   <div class="modal-grupo-form">
     <div class="modal-toggle-row">
       <div>
@@ -661,13 +774,78 @@
   <div class="preview-backdrop" (click)="fecharPreview()"></div>
   <aside class="preview-panel">
     <header>
-      <h3>Pré-visualização do e-mail</h3>
-      <button type="button" class="x" (click)="fecharPreview()">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </button>
+      <div class="preview-heading">
+        <h3>{{ previewEhExemplo() ? 'Template de e-mail (exemplo)' : 'Pré-visualização do e-mail' }}</h3>
+        @if (previewAssunto()) {
+          <p class="preview-subject">{{ previewAssunto() }}</p>
+        }
+      </div>
+      <div class="preview-header-actions">
+        @if (previewEhExemplo()) {
+          <button type="button" class="btn btn-ghost btn-sm" (click)="abrirEnvioTesteDoPreview()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="btn-icon">
+              <path d="M4 6h16v12H4V6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+              <path d="M4 8l8 5 8-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Enviar teste
+          </button>
+        }
+        <button type="button" class="x" (click)="fecharPreview()">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
     </header>
     <div class="preview-frame" [innerHTML]="previewHtml()"></div>
   </aside>
 }
+
+<app-admin-modal
+  [open]="modalTesteAberto()"
+  [elevated]="true"
+  [title]="tituloModalDestino()"
+  [salvando]="enviandoTeste()"
+  [saveDisabled]="!testeEmail().trim()"
+  [saveLabel]="saveLabelDestino()"
+  savingLabel="Enviando..."
+  (save)="enviarEmailTeste()"
+  (cancel)="fecharModalTeste()"
+>
+  <div class="modal-grupo-form">
+    <p class="field-hint">{{ hintModalDestino() }}</p>
+    <div class="field">
+      <label>Destinatário</label>
+      <div class="dest-busca">
+        <input
+          type="search"
+          placeholder="Buscar no AD por nome ou e-mail…"
+          [ngModel]="testeBuscaTexto()"
+          (ngModelChange)="onBuscaTeste($event)"
+          [disabled]="enviandoTeste()"
+        />
+        @if (resultadosTeste().length) {
+          <ul class="busca-resultados">
+            @for (c of resultadosTeste(); track c.id) {
+              <li>
+                <button type="button" (click)="selecionarEmailTesteDoAd(c)" [disabled]="enviandoTeste()">
+                  {{ c.nome }} — {{ c.email || '—' }}
+                  @if (c.departamento) {
+                    <span class="busca-meta">· {{ c.departamento }}</span>
+                  }
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+      <input
+        type="email"
+        [ngModel]="testeEmail()"
+        (ngModelChange)="testeEmail.set($event)"
+        placeholder="nome@empresa.com"
+        [disabled]="enviandoTeste()"
+      />
+    </div>
+  </div>
+</app-admin-modal>

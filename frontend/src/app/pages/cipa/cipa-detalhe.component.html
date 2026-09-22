@@ -1,0 +1,250 @@
+<div class="pagina cipa-page">
+  @if (logado()) {
+    <app-public-chrome />
+  }
+  <div class="cipa-wrap">
+      @if (logado()) {
+        <div class="back-row">
+          <a class="back-pill" routerLink="/agenda_rh">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <path d="M19 12H5M12 19l-7-7 7-7"></path>
+            </svg>
+            Voltar à lista
+          </a>
+        </div>
+      }
+
+      @if (carregando()) {
+        <p class="state-msg">Carregando evento…</p>
+      } @else if (erro() || !evento()) {
+        <div class="state-msg state-erro">
+          <p>{{ erro() || 'Evento não encontrado.' }}</p>
+          @if (logado()) {
+            <a class="btn-retry" routerLink="/agenda_rh">Ver agenda</a>
+          }
+        </div>
+      } @else if (evento(); as ev) {
+        <article class="detalhe">
+          <div
+            class="hero-split"
+            [class.is-cropped]="imagemRecortada()"
+            [style.--crop-h]="imagemRecortada() ? imagemAltura() + 'px' : null"
+          >
+            <div
+              class="banner"
+              [class.has-image]="!!imagemUrl()"
+              [class.is-cropped]="imagemRecortada()"
+              [style.justify-content]="imagemJustifyCss()"
+              [style.align-items]="imagemAlignCss()"
+            >
+              @if (imagemUrl(); as src) {
+                <img
+                  class="banner-img"
+                  [src]="src"
+                  [alt]="ev.titulo"
+                  [style.width.%]="imagemTamanho()"
+                />
+              }
+            </div>
+
+            <aside class="aside">
+              @if (ev.categoria) {
+                <p
+                  class="aside-cat"
+                  [style.font-size.px]="estilo('categoria').tamanho"
+                  [style.text-align]="estilo('categoria').align"
+                  [style.justify-content]="estilo('categoria').justify"
+                >
+                  <span class="dot" aria-hidden="true"></span>
+                  {{ ev.categoria }}
+                </p>
+              }
+              <h1
+                [style.font-size.px]="estilo('titulo').tamanho"
+                [style.text-align]="estilo('titulo').align"
+              >
+                {{ ev.titulo }}
+              </h1>
+              @if (ev.texto) {
+                <p
+                  class="aside-lead"
+                  [style.font-size.px]="estilo('texto').tamanho"
+                  [style.text-align]="estilo('texto').align"
+                >
+                  {{ ev.texto }}
+                </p>
+              }
+              <p
+                class="aside-meta"
+                [style.font-size.px]="estilo('data').tamanho"
+                [style.text-align]="estilo('data').align"
+                [style.justify-content]="estilo('data').justify"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                  <path d="M16 2v4M8 2v4M3 10h18"></path>
+                </svg>
+                {{ formatarData(ev.data) }}
+              </p>
+              @if (ev.localizacao) {
+                <p
+                  class="aside-meta"
+                  [style.font-size.px]="estilo('localizacao').tamanho"
+                  [style.text-align]="estilo('localizacao').align"
+                  [style.justify-content]="estilo('localizacao').justify"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"></path>
+                    <circle cx="12" cy="10" r="2.5"></circle>
+                  </svg>
+                  {{ ev.localizacao }}
+                </p>
+              }
+              @if (vagasMaximas(ev); as maxVagas) {
+                <p
+                  class="aside-meta"
+                  [style.font-size.px]="estilo('vagas').tamanho"
+                  [style.text-align]="estilo('vagas').align"
+                  [style.justify-content]="estilo('vagas').justify"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                  Até {{ maxVagas }} participante{{ maxVagas === 1 ? '' : 's' }}
+                </p>
+              }
+              <p
+                class="aside-meta"
+                [style.font-size.px]="estilo('duracao').tamanho"
+                [style.text-align]="estilo('duracao').align"
+                [style.justify-content]="estilo('duracao').justify"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 7v5l3 2"></path>
+                </svg>
+                Duração {{ ev.duracao_slot_min }} minuto{{ ev.duracao_slot_min === 1 ? '' : 's' }}
+              </p>
+              @if (ev.texto) {
+                <div
+                  class="aside-about"
+                  [style.text-align]="estilo('sobre').align"
+                >
+                  <p [style.font-size.px]="estilo('sobre').tamanho">{{ ev.texto }}</p>
+                </div>
+              }
+            </aside>
+          </div>
+
+          <section class="horarios" aria-label="Horários disponíveis">
+            <h2>Horários disponíveis</h2>
+            @if (!ev.slots?.length) {
+              <p class="state-msg">Nenhum horário cadastrado para este evento.</p>
+            } @else {
+              <div class="slots">
+                @for (slot of ev.slots; track slot.id) {
+                  <article class="slot" [class.full]="slot.vagas_restantes <= 0">
+                    <div class="slot-time">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <path d="M12 7v5l3 2"></path>
+                      </svg>
+                      <strong>{{ slot.horario }}</strong>
+                    </div>
+                    <div class="slot-ocupacao">
+                      <span>{{ slot.inscritos }}/{{ slot.vagas }} inscritos</span>
+                      @if (slot.vagas_restantes > 0) {
+                        <span class="livre">{{ slot.vagas_restantes }} vaga{{ slot.vagas_restantes === 1 ? '' : 's' }} livre{{ slot.vagas_restantes === 1 ? '' : 's' }}</span>
+                      } @else {
+                        <span class="esgotado">Esgotado</span>
+                      }
+                    </div>
+                    <div class="slot-bar" aria-hidden="true">
+                      <span [style.width.%]="percentualOcupacao(slot)"></span>
+                    </div>
+                    <button
+                      type="button"
+                      class="slot-btn"
+                      [disabled]="slotIndisponivel(slot, ev)"
+                      (click)="abrirInscricao(slot)"
+                    >
+                      @if (slotIndisponivel(slot, ev)) {
+                        Indisponível
+                      } @else {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                          <path d="M5 12h14M13 6l6 6-6 6"></path>
+                        </svg>
+                        Inscrever-se
+                      }
+                    </button>
+                  </article>
+                }
+              </div>
+            }
+          </section>
+        </article>
+      }
+  </div>
+  @if (logado()) {
+    <app-footer />
+  }
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  title="Inscrição Agenda RH"
+  [subtitle]="logado() ? 'Confirme seus dados e informe o CPF.' : 'Preencha seus dados e informe o CPF.'"
+  saveLabel="Confirmar inscrição"
+  savingLabel="Enviando..."
+  [salvando]="enviando()"
+  [saveDisabled]="!formInscricaoValido()"
+  (save)="confirmar()"
+  (cancel)="fecharModal()"
+>
+  <div class="field">
+    <label>Nome{{ logado() ? '' : ' *' }}</label>
+    @if (logado()) {
+      <input type="text" [value]="nome()" disabled />
+    } @else {
+      <input
+        type="text"
+        maxlength="200"
+        autocomplete="name"
+        placeholder="Seu nome completo"
+        [ngModel]="guestNome()"
+        (ngModelChange)="guestNome.set($event)"
+      />
+    }
+  </div>
+  <div class="field">
+    <label>E-mail{{ logado() ? '' : ' *' }}</label>
+    @if (logado()) {
+      <input type="email" [value]="email()" disabled />
+    } @else {
+      <input
+        type="email"
+        maxlength="200"
+        autocomplete="email"
+        placeholder="seu.email@empresa.com"
+        [ngModel]="guestEmail()"
+        (ngModelChange)="guestEmail.set($event)"
+      />
+    }
+  </div>
+  <div class="field">
+    <label>CPF *</label>
+    <input
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="000.000.000-00"
+      [ngModel]="cpf()"
+      (ngModelChange)="onCpfInput($event)"
+    />
+  </div>
+  @if (slotSelecionado(); as s) {
+    <p class="slot-hint">Horário selecionado: <strong>{{ s.horario }}</strong></p>
+  }
+</app-admin-modal>

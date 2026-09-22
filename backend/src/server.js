@@ -37,6 +37,8 @@ const pesquisasRoutes = require('./routes/pesquisas.routes');
 const tabletRoutes = require('./routes/tablet.routes');
 const ramalRoutes = require('./routes/ramal.routes');
 const rustdeskRoutes = require('./routes/rustdesk.routes');
+const nscRoutes = require('./routes/nsc.routes');
+const cipaRoutes = require('./routes/cipa.routes');
 const assinaturasController = require('./controllers/assinaturas.controller');
 const { agendarSincronizacaoColaboradores } = require('./services/colaboradores.sync');
 const { agendarJobsCamarotes } = require('./services/camarotes-cron.service');
@@ -45,6 +47,10 @@ const { agendarJobsFollowup } = require('./services/followup-cron.service');
 const { agendarLembretesMassagem } = require('./services/massagem-lembrete.service');
 const { agendarJobsPesquisas } = require('./services/pesquisas-cron.service');
 const { agendarJobsRustdesk } = require('./services/rustdesk-cron.service');
+const { agendarJobsNsc } = require('./services/nsc-cron.service');
+const { ensureNscDir } = require('./config/nsc-upload');
+const { ensureCipaImagensDir } = require('./config/cipa-upload');
+const { sincronizarCatalogoModulos } = require('./repositories/permissoes.repository');
 const { reconcileAll } = require('./services/doc-pagina-menu.sync');
 const { ensureFotosDir } = require('./controllers/colaboradores.controller');
 const { ensureGrupoLogosDir } = require('./config/grupo-logos-upload');
@@ -110,6 +116,9 @@ app.use('/api/v1/pesquisas', pesquisasRoutes);
 app.use('/api/v1/tablet', tabletRoutes);
 app.use('/api/v1/ramal', ramalRoutes);
 app.use('/api/v1/rustdesk', rustdeskRoutes);
+app.use('/api/v1/nsc', nscRoutes);
+app.use('/api/v1/agenda_rh', cipaRoutes);
+app.use('/api/v1/cipa', cipaRoutes);
 
 // Rotas públicas de assinaturas (sem JWT — usadas pelo instalador antes de qualquer login)
 app.get('/api/v1/assinaturas/script/instalar', assinaturasController.obterScriptBase);
@@ -166,4 +175,20 @@ app.listen(env.port, () => {
   agendarLembretesMassagem();
   agendarJobsPesquisas();
   agendarJobsRustdesk();
+  try {
+    ensureNscDir();
+  } catch (err) {
+    console.error('[nsc] Não foi possível preparar pasta de certificados:', err.message);
+  }
+  agendarJobsNsc();
+  try {
+    ensureCipaImagensDir();
+  } catch (err) {
+    console.error('[cipa] Não foi possível preparar pasta de imagens:', err.message);
+  }
+  sincronizarCatalogoModulos()
+    .then(() => console.log('[permissoes] Catálogo de módulos sincronizado com o banco.'))
+    .catch((err) =>
+      console.error('[permissoes] Falha ao sincronizar catálogo de módulos:', err.message)
+    );
 });

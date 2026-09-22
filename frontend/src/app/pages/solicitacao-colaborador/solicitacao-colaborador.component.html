@@ -64,6 +64,16 @@
               />
               Mudança de área / empresa
             </label>
+            <label class="opt" [class.sel]="tipo() === 'efetivacao'">
+              <input
+                type="radio"
+                name="tipo"
+                value="efetivacao"
+                [ngModel]="tipo()"
+                (ngModelChange)="tipo.set($event)"
+              />
+              Efetivação
+            </label>
           </div>
         </div>
 
@@ -182,7 +192,7 @@
           </p>
           <div class="grid g2">
             <div class="field">
-              <label>Foto <span class="req">*</span></label>
+              <label>Foto @if (tipo() !== 'efetivacao' && tipo() !== 'mudanca') {<span class="req">*</span>}</label>
               <div
                 class="dz"
                 [class.has-file]="!!fotoFile()"
@@ -196,16 +206,16 @@
                   #fotoInput
                   type="file"
                   hidden
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg"
                   (change)="onFileInput($event, 'foto')"
                 />
                 <div class="ic">⬆</div>
                 @if (fotoFile(); as f) {
                   <b>{{ f.name }}</b>
-                  <small>Clique para trocar · JPG/PNG · até 5 MB</small>
+                  <small>Clique para trocar · JPG/JPEG/PNG · até 5 MB</small>
                 } @else {
                   <b>Arraste a imagem ou clique para enviar</b>
-                  <small>JPG/PNG · até 5 MB</small>
+                  <small>JPG/JPEG/PNG · até 5 MB</small>
                 }
               </div>
             </div>
@@ -224,16 +234,16 @@
                   #boasInput
                   type="file"
                   hidden
-                  accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx"
+                  accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,text/plain,.txt"
                   (change)="onFileInput($event, 'boas_vindas')"
                 />
                 <div class="ic">⬆</div>
                 @if (boasVindasFile(); as f) {
                   <b>{{ f.name }}</b>
-                  <small>Clique para trocar · Imagem ou PDF</small>
+                  <small>Clique para trocar · Imagem, PDF ou TXT</small>
                 } @else {
                   <b>Arraste o arquivo ou clique para enviar</b>
-                  <small>Imagem ou PDF</small>
+                  <small>Imagem, PDF ou TXT</small>
                 }
               </div>
             </div>

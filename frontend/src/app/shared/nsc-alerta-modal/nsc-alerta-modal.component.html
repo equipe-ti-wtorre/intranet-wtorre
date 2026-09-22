@@ -1,0 +1,77 @@
+@if (alerta.aberto() && copy(); as c) {
+  @let variante = alerta.estado()?.variante;
+  <div class="nsc-alerta-backdrop" role="presentation">
+    <div
+      class="nsc-alerta-card"
+      [class.is-pendente]="variante === 'pendente'"
+      [class.is-vencido]="variante === 'vencido'"
+      [class.is-avencer]="variante === 'a_vencer'"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-labelledby]="'nsc-alerta-titulo'"
+    >
+      <div class="nsc-alerta-icon" aria-hidden="true">
+        @if (variante === 'pendente') {
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M7 3.5h7.2L19 8.2V20a1.5 1.5 0 01-1.5 1.5h-10A1.5 1.5 0 016 20V5a1.5 1.5 0 011.5-1.5z"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <path d="M14 3.6V8h4.6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          </svg>
+        } @else if (variante === 'vencido') {
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 4.2L20.4 19H3.6L12 4.2z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <path d="M12 10v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <circle cx="12" cy="16.6" r="0.9" fill="currentColor" />
+          </svg>
+        } @else {
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M6.5 5.5h11M6.5 18.5h11M8 5.5l3.4 5.2a1.2 1.2 0 010 1.3L8 18.5M16 5.5l-3.4 5.2a1.2 1.2 0 000 1.3l3.4 6.5"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        }
+      </div>
+
+      <p class="nsc-alerta-kicker">{{ c.kicker }}</p>
+      <h2 id="nsc-alerta-titulo">{{ c.titulo }}</h2>
+      <p class="nsc-alerta-texto">{{ c.texto }}</p>
+
+      @if (validadeChip(); as chip) {
+        <p class="nsc-alerta-chip">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3" />
+            <path d="M2 6.5h12M5.2 2v2.4M10.8 2v2.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+          </svg>
+          {{ chip }}
+        </p>
+      }
+
+      <button type="button" class="nsc-alerta-btn primary" (click)="abrirCurso()">
+        {{ c.primario }}
+        <span aria-hidden="true">↗</span>
+      </button>
+      <button type="button" class="nsc-alerta-btn secondary" (click)="enviarCertificado()">
+        {{ c.secundario }}
+      </button>
+      <button type="button" class="nsc-alerta-later" (click)="lembrarDepois()">Lembrar depois</button>
+
+      <p class="nsc-alerta-portal">
+        Dúvidas?
+        <button type="button" (click)="abrirPortal()">Portal Não se Cale ↗</button>
+      </p>
+      <p class="nsc-alerta-note">O certificado é gratuito e oficial — não pague por inscrições.</p>
+    </div>
+  </div>
+}

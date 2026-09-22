@@ -6,7 +6,7 @@ export const FONTE_NUSANS_MEDIUM = '/api/v1/assinaturas/fonts/NuSansDisplay-Medi
 export const FONTE_NUSANS_REGULAR = '/api/v1/assinaturas/fonts/NuSansDisplay-Regular.otf';
 
 /** Domínios que não devem gerar assinatura (ex.: alias padrão do tenant M365). */
-export const DOMINIOS_EXCLUIDOS = new Set(['wtorre.onmicrosoft.com']);
+export const DOMINIOS_EXCLUIDOS = new Set(['wtorre.onmicrosoft.com', 'allianzparque.com.br']);
 
 const DOMINIOS: Record<string, Omit<DominioConfig, 'dominio'>> = {
   'nubankparque.com': {
@@ -17,15 +17,6 @@ const DOMINIOS: Record<string, Omit<DominioConfig, 'dominio'>> = {
     wNome: '500',
     wResto: '400',
     fontFace: true,
-  },
-  'allianzparque.com.br': {
-    cor: '#005399',
-    entidade: 'Real Arenas',
-    banner: `${BLOB_BASE}/banner_allianz_parque.gif`,
-    font: 'Helvetica,Arial,sans-serif',
-    wNome: 'bold',
-    wResto: 'normal',
-    fontFace: false,
   },
   'basecoworking.space': {
     cor: '#005399',

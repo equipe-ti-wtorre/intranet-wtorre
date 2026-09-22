@@ -1,0 +1,75 @@
+<div class="admin-page cipa-inscritos">
+  <header class="cipa-insc-head print-hide">
+    <a routerLink="/admin/agenda_rh" class="cipa-back">← Eventos</a>
+    <h1>Inscrições</h1>
+    @if (evento(); as ev) {
+      <p class="cipa-insc-sub">{{ ev.titulo }} · {{ formatarData(ev.data) }}</p>
+    }
+  </header>
+
+  <section class="card cipa-insc-panel">
+    <div class="cipa-insc-toolbar print-hide">
+      <p class="cipa-insc-count">
+        @if (carregando()) {
+          Carregando…
+        } @else {
+          {{ inscritos().length }} inscrição(ões)
+        }
+      </p>
+      <div class="cipa-insc-btns">
+        <button type="button" class="cipa-ghost" (click)="imprimir()">Imprimir</button>
+        <button type="button" class="cipa-ghost" (click)="exportarXlsx()">Gerar XLSX</button>
+        <button type="button" class="cipa-ghost" (click)="exportarPdf()">Gerar PDF</button>
+      </div>
+    </div>
+
+    @if (!carregando() && !inscritos().length) {
+      <p class="empty">Nenhuma inscrição neste evento.</p>
+    } @else if (!carregando()) {
+      <div class="table-scroll print-area">
+        <h2 class="print-only">
+          {{ evento()?.titulo }} · {{ formatarData(evento()?.data || '') }}
+        </h2>
+        <table class="cipa-insc-table">
+          <thead>
+            <tr>
+              <th>Horário</th>
+              <th>Nome</th>
+              <th>E-mail</th>
+              <th>CPF</th>
+              <th>Data</th>
+              <th class="cipa-th-actions print-hide">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (i of inscritos(); track i.id) {
+              <tr>
+                <td>{{ i.horario }}</td>
+                <td class="cipa-nome">{{ i.nome_completo }}</td>
+                <td>{{ i.email }}</td>
+                <td>{{ formatarCpf(i.cpf) }}</td>
+                <td>{{ formatarInscricao(i.criado_em) }}</td>
+                <td class="cipa-td-actions print-hide">
+                  <button
+                    type="button"
+                    class="cipa-icon cipa-icon--danger"
+                    title="Excluir inscrição"
+                    aria-label="Excluir inscrição"
+                    (click)="excluir(i)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

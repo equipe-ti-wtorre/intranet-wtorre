@@ -1,0 +1,864 @@
+<div class="admin-page nsc-admin">
+  @if (resumo(); as k) {
+    <div class="kpis">
+      <div class="kpi">
+        <div class="n">{{ k.obrigatorios }}</div>
+        <div class="l">Obrigatórios</div>
+      </div>
+      <div class="kpi ok">
+        <div class="n">{{ k.validos }}</div>
+        <div class="l">Válidos</div>
+      </div>
+      <div class="kpi wait">
+        <div class="n">{{ k.a_vencer }}</div>
+        <div class="l">A vencer</div>
+      </div>
+      <div class="kpi bad">
+        <div class="n">{{ k.vencidos }}</div>
+        <div class="l">Vencidos</div>
+      </div>
+      <div class="kpi wait">
+        <div class="n">{{ k.aguardando_aprovacao || 0 }}</div>
+        <div class="l">Aguardando RH</div>
+      </div>
+      <div class="kpi neutral">
+        <div class="n">{{ k.pendentes }}</div>
+        <div class="l">Pendentes</div>
+      </div>
+      <div class="kpi bad">
+        <div class="n">{{ k.irregulares }}</div>
+        <div class="l">Irregulares</div>
+      </div>
+    </div>
+  }
+
+  <section class="card nsc-unified-card">
+    <nav class="admin-tabs" aria-label="Não se Cale">
+      <button type="button" class="admin-tab" [class.active]="aba() === 'departamentos'" (click)="selecionarAba('departamentos')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Departamentos</span>
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'colaboradores'" (click)="selecionarAba('colaboradores')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Colaboradores</span>
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'aprovacoes'" (click)="selecionarAba('aprovacoes')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M9 11l3 3L22 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Aprovações</span>
+        @if (aprovacoesPendentes()) {
+          <span class="tab-count">{{ aprovacoesPendentes() }}</span>
+        }
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'relatorios'" (click)="selecionarAba('relatorios')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 19V5M4 19h16M8 16V10M12 16V7M16 16v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Relatórios</span>
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'notificacoes'" (click)="selecionarAba('notificacoes')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Notificações</span>
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'historico'" (click)="selecionarAba('historico')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+            <path d="M12 7v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Histórico</span>
+      </button>
+    </nav>
+
+    @if (aba() === 'colaboradores') {
+      <div class="nsc-pane">
+        <div class="nsc-banner">
+          👥 Lista de quem deve apresentar o certificado — use
+          <b>Adicionar colaborador</b> para incluir pessoas do módulo de Usuários (AD/Entra).
+        </div>
+
+        <div class="toolbar">
+          <input
+            type="text"
+            placeholder="Buscar por nome…"
+            [ngModel]="busca()"
+            (ngModelChange)="onBusca($event)"
+          />
+          <select [ngModel]="departamento()" (ngModelChange)="departamento.set($event); filtrar()">
+            <option value="">Todos os departamentos</option>
+            @for (d of departamentos(); track d) {
+              <option [value]="d">{{ d }}</option>
+            }
+          </select>
+          <select [ngModel]="statusFiltro()" (ngModelChange)="statusFiltro.set($event); filtrar()">
+            <option value="">Todos os status</option>
+            <option value="valido">Válido</option>
+            <option value="a_vencer">A vencer</option>
+            <option value="vencido">Vencido</option>
+            <option value="pendente">Pendente</option>
+            <option value="aguardando_aprovacao">Aguardando aprovação</option>
+          </select>
+          <button type="button" class="btn sm" (click)="abrirPicker()">Adicionar colaborador</button>
+        </div>
+
+        <div class="table-card">
+          @if (erro()) {
+            <p class="nsc-erro">{{ erro() }}</p>
+          } @else if (carregando()) {
+            <p class="nsc-muted">Carregando colaboradores…</p>
+          } @else if (!colaboradores().length) {
+            <p class="nsc-muted empty">
+              Nenhum colaborador na lista. Clique em <b>Adicionar colaborador</b> para incluir quem
+              deve participar.
+            </p>
+          } @else {
+            <table class="nsc-table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Departamento</th>
+                  <th>Status</th>
+                  <th>Validade</th>
+                  <th>Atualizado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of colaboradores(); track c.ad_object_id) {
+                  <tr>
+                    <td>
+                      <div class="u-nm">{{ c.nome }}</div>
+                      <div class="u-sub">{{ c.cargo || '—' }}</div>
+                    </td>
+                    <td>{{ c.departamento || '—' }}</td>
+                    <td>
+                      <span
+                        class="badge"
+                        [class.b-ok]="toneStatus(c.status) === 'ok'"
+                        [class.b-wait]="toneStatus(c.status) === 'wait'"
+                        [class.b-bad]="toneStatus(c.status) === 'bad'"
+                        [class.b-neutral]="toneStatus(c.status) === 'neutral'"
+                      >
+                        <span
+                          class="dot"
+                          [class.d-ok]="toneStatus(c.status) === 'ok'"
+                          [class.d-wait]="toneStatus(c.status) === 'wait'"
+                          [class.d-bad]="toneStatus(c.status) === 'bad'"
+                          [class.d-neutral]="toneStatus(c.status) === 'neutral'"
+                        ></span>
+                        {{ labelStatus(c.status) }}
+                      </span>
+                    </td>
+                    <td>{{ c.validade_efetiva | date: 'dd/MM/yyyy' }}</td>
+                    <td class="u-sub">{{ c.atualizado_em | date: 'dd/MM/yyyy' }}</td>
+                    <td class="nsc-actions">
+                      <div class="nsc-actions-row">
+                        <button type="button" class="btn ghost sm" (click)="verCertificado(c)">Ver</button>
+                        <button type="button" class="btn ghost sm" (click)="removerDaLista(c)">Remover</button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      </div>
+    }
+
+    @if (aba() === 'aprovacoes') {
+      <div class="nsc-pane">
+        <div class="nsc-banner">
+          Certificados em que o nome lido não coincide com o colaborador. Aprove só se for a mesma pessoa.
+        </div>
+        <div class="toolbar">
+          <select
+            [ngModel]="aprovacaoFiltro()"
+            (ngModelChange)="filtrarAprovacoes($event)"
+          >
+            <option value="pendente">Pendentes</option>
+            <option value="aprovado">Aprovados</option>
+            <option value="rejeitado">Recusados</option>
+          </select>
+        </div>
+        <div class="table-card table-card-fit">
+          @if (aprovacoesCarregando()) {
+            <p class="nsc-muted">Carregando aprovações…</p>
+          } @else if (!aprovacoes().length) {
+            <p class="nsc-muted empty">Nenhum certificado neste filtro.</p>
+          } @else {
+            <table class="nsc-table nsc-table-aprovacoes">
+              <thead>
+                <tr>
+                  <th class="col-colab">Colaborador</th>
+                  <th class="col-nome">Nome no certificado</th>
+                  <th class="col-date">Emissão</th>
+                  <th class="col-date">Enviado</th>
+                  <th class="col-motivo">Motivo</th>
+                  <th class="col-acoes"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (a of aprovacoes(); track a.id) {
+                  <tr>
+                    <td class="col-colab">
+                      <div class="u-nm">{{ a.colaborador_nome || '—' }}</div>
+                      <div class="u-sub">{{ a.departamento || a.cargo || '—' }}</div>
+                    </td>
+                    <td class="col-nome">{{ a.nome_lido || '—' }}</td>
+                    <td class="col-date">{{ a.data_emissao | date: 'dd/MM/yyyy' }}</td>
+                    <td class="col-date u-sub">{{ a.enviado_em | date: 'dd/MM/yyyy' }}</td>
+                    <td class="col-motivo">
+                      <div class="nsc-motivo">{{ textoMotivoAprovacao(a) }}</div>
+                    </td>
+                    <td class="nsc-actions col-acoes">
+                      <div class="nsc-actions-row">
+                        <button type="button" class="btn ghost sm" (click)="verArquivoAprovacao(a)">Ver</button>
+                        @if (a.aprovacao === 'pendente') {
+                          <button type="button" class="btn sm" (click)="abrirAprovacao(a)">Aprovar</button>
+                          <button type="button" class="btn ghost sm" (click)="abrirRecusa(a)">Recusar</button>
+                        }
+                        <button type="button" class="btn ghost sm danger" (click)="removerAprovacao(a)">
+                          Remover
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      </div>
+    }
+
+    @if (aba() === 'departamentos') {
+      <div class="nsc-pane">
+        <div class="section-t">🏢 Departamentos / OUs que atuam em eventos</div>
+        <p class="nsc-lead">
+          Baseado no departamento/OU do AD. Colaboradores destes grupos entram automaticamente como
+          obrigatórios (ajustável por pessoa na aba Colaboradores). Ao ativar um departamento,
+          quem tinha sido removido da lista volta à obrigatoriedade.
+        </p>
+        @if (!regras().length) {
+          <p class="nsc-muted">Nenhum departamento no diretório.</p>
+        } @else {
+          @for (r of regras(); track r.departamento_ou) {
+            <div class="dept-block" [class.open]="deptoAberto() === r.departamento_ou">
+              <div class="dept-row" (click)="toggleDepto(r.departamento_ou)">
+                <label class="sw" (click)="$event.stopPropagation()">
+                  <input
+                    type="checkbox"
+                    [checked]="r.obrigatorio"
+                    (change)="toggleRegra(r, $any($event.target).checked)"
+                  />
+                  <span></span>
+                </label>
+                <div>
+                  <div class="dn">{{ r.departamento_ou }}</div>
+                </div>
+                <div class="dc">
+                  {{ qtdDepto(r.departamento_ou) }} colaborador(es)
+                  @if (r.obrigatorio) {
+                    · obrigatório
+                  }
+                  @if (r.gestores; as gs) {
+                    @if (gs.length) {
+                      · {{ gs.length }} gestor(es)
+                    }
+                  }
+                </div>
+                <span class="dept-chev" aria-hidden="true">{{ deptoAberto() === r.departamento_ou ? '▾' : '▸' }}</span>
+              </div>
+              @if (deptoAberto() === r.departamento_ou) {
+                <div class="dept-body">
+                  <div class="dept-gestores">
+                    <div class="dept-gestores-head">
+                      <span>Gestores vinculados</span>
+                      <button type="button" class="btn ghost sm" (click)="abrirPickerGestores(r)">
+                        Vincular gestores
+                      </button>
+                    </div>
+                    @if (!r.gestores?.length) {
+                      <p class="nsc-muted">Nenhum gestor vinculado. O aviso usa só o gestor do AD, se existir.</p>
+                    } @else {
+                      <div class="gestor-chips">
+                        @for (g of r.gestores; track g.ad_object_id) {
+                          <span class="gestor-chip">
+                            {{ g.nome || g.email || g.ad_object_id }}
+                          </span>
+                        }
+                      </div>
+                    }
+                  </div>
+                  <table class="nsc-table">
+                    <thead>
+                      <tr>
+                        <th>Colaborador</th>
+                        <th>Cargo</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (c of colabsDoDepto(r.departamento_ou); track c.ad_object_id) {
+                        <tr>
+                          <td>{{ c.nome }}</td>
+                          <td>{{ c.cargo || '—' }}</td>
+                          <td>
+                            @if (c.obrigatorio_efetivo) {
+                              <span
+                                class="badge"
+                                [class.b-ok]="toneStatus(c.status) === 'ok'"
+                                [class.b-wait]="toneStatus(c.status) === 'wait'"
+                                [class.b-bad]="toneStatus(c.status) === 'bad'"
+                                [class.b-neutral]="toneStatus(c.status) === 'neutral'"
+                              >
+                                {{ labelStatus(c.status) }}
+                              </span>
+                            } @else {
+                              <span class="badge b-neutral">Não obrigatório</span>
+                            }
+                          </td>
+                        </tr>
+                      } @empty {
+                        <tr>
+                          <td colspan="3" class="nsc-muted">Nenhum colaborador neste departamento.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+
+    @if (aba() === 'relatorios') {
+      <div class="nsc-pane">
+        <div class="section-t">Relatório de certificação</div>
+        <p class="nsc-lead">
+          Totais por departamento e lista dos colaboradores obrigatórios. Exporte Excel ou PDF.
+        </p>
+        <div class="toolbar">
+          <select [ngModel]="relatorioDepto()" (ngModelChange)="relatorioDepto.set($event)">
+            <option value="">Todos os departamentos</option>
+            @for (d of resumo()?.por_departamento || []; track d.departamento) {
+              <option [value]="d.departamento">{{ d.departamento }}</option>
+            }
+          </select>
+          <button type="button" class="btn sm" [disabled]="exportando()" (click)="exportarXlsx()">
+            {{ exportando() ? 'A gerar…' : 'Excel (XLSX)' }}
+          </button>
+          <button type="button" class="btn ghost sm" (click)="exportarPdf()">PDF</button>
+        </div>
+
+        <div class="table-card">
+          <table class="nsc-table">
+            <thead>
+              <tr>
+                <th>Departamento</th>
+                <th>Obrigatórios</th>
+                <th>Válidos</th>
+                <th>A vencer</th>
+                <th>Vencidos</th>
+                <th>Pendentes</th>
+                <th>Irregulares</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!relatorioDeptos().length) {
+                <tr>
+                  <td colspan="7" class="nsc-muted">Nenhum dado por departamento.</td>
+                </tr>
+              } @else {
+                @for (d of relatorioDeptos(); track d.departamento) {
+                  <tr>
+                    <td>{{ d.departamento }}</td>
+                    <td>{{ d.obrigatorios }}</td>
+                    <td>{{ d.validos }}</td>
+                    <td>{{ d.a_vencer }}</td>
+                    <td>{{ d.vencidos }}</td>
+                    <td>{{ d.pendentes }}</td>
+                    <td>{{ d.irregulares }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section-t nsc-relatorio-sub">Colaboradores obrigatórios</div>
+        <div class="table-card">
+          <table class="nsc-table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th>Departamento</th>
+                <th>Status</th>
+                <th>Validade</th>
+                <th>Dias</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (!relatorioColabsFiltrados().length) {
+                <tr>
+                  <td colspan="5" class="nsc-muted">Nenhum colaborador obrigatório neste recorte.</td>
+                </tr>
+              } @else {
+                @for (c of relatorioColabsFiltrados(); track c.ad_object_id) {
+                  <tr>
+                    <td>
+                      <div class="u-name">{{ c.nome }}</div>
+                      <div class="u-sub">{{ c.cargo || '—' }}</div>
+                    </td>
+                    <td>{{ c.departamento || 'Sem departamento' }}</td>
+                    <td>
+                      <span class="badge" [class]="toneStatus(c.status)">{{ labelStatus(c.status) }}</span>
+                    </td>
+                    <td>{{ formatarValidade(c.validade_efetiva) }}</td>
+                    <td>{{ c.dias_restantes == null ? '—' : c.dias_restantes }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
+    @if (aba() === 'notificacoes') {
+      <div class="nsc-pane">
+        @if (config(); as cfg) {
+          <div class="section-t">Modelos de disparo</div>
+          <p class="nsc-lead">
+            Ative os avisos de antecedência, vencimento, gestor e resumo do RH. Use Pré-visualizar para ver o e-mail com dados de exemplo.
+          </p>
+
+          <div class="triggers-grid">
+            @for (meta of disparoUi; track meta.id) {
+              <div class="tcard {{ meta.cardClass }}" [class.tcard-off]="!disparoAtivo(meta)">
+                <div class="tcard-head {{ meta.headClass }}">
+                  <span class="tcard-title">{{ meta.titulo }}</span>
+                  <span class="tbadge {{ meta.badgeClass }}">{{ meta.badge }}</span>
+                </div>
+                <div class="tcard-body">
+                  <div>
+                    <label class="fl">Antecedência (dias)</label>
+                    <input type="text" [value]="meta.antecedenciaLabel" readonly />
+                  </div>
+                  <div>
+                    <label class="fl">Template de e-mail</label>
+                    <input type="text" [value]="meta.template" readonly />
+                  </div>
+                  <div>
+                    <label class="fl">Assunto</label>
+                    <input type="text" [value]="meta.assunto" readonly />
+                  </div>
+                </div>
+                <div class="tcard-foot">
+                  <label class="tog-wrap">
+                    <span class="tog">
+                      <input
+                        type="checkbox"
+                        [checked]="disparoAtivo(meta)"
+                        (change)="toggleDisparo(meta, $any($event.target).checked)"
+                      />
+                      <span class="tog-sl"></span>
+                    </span>
+                    <span class="tog-txt">{{ disparoAtivo(meta) ? 'Disparo ativo' : 'Inativo' }}</span>
+                  </label>
+                  <button
+                    type="button"
+                    class="preview-btn"
+                    [disabled]="carregandoPreview()"
+                    (click)="previewDisparo(meta)"
+                  >
+                    Pré-visualizar
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="nrow">
+            <div>
+              <div class="nt">Bloquear escala em evento sem certificado válido</div>
+              <div class="nd">Sinaliza para a operação quando um colaborador obrigatório está irregular.</div>
+            </div>
+            <label class="sw">
+              <input
+                type="checkbox"
+                [ngModel]="cfg.sinalizar_operacao"
+                (ngModelChange)="atualizarFlag('sinalizar_operacao', $event)"
+              />
+              <span></span>
+            </label>
+          </div>
+
+          <div class="nsc-extra">
+            <label class="nsc-field">
+              Meses de validade padrão
+              <input
+                type="number"
+                min="1"
+                max="120"
+                [ngModel]="cfg.meses_validade_padrao"
+                (ngModelChange)="config.set({ ...cfg, meses_validade_padrao: +$event })"
+              />
+            </label>
+            <label class="nsc-field">
+              E-mails do resumo RH
+              <input
+                type="text"
+                [ngModel]="emailsRhTexto()"
+                (ngModelChange)="emailsRhTexto.set($event)"
+                placeholder="rh@empresa.com, outro@empresa.com"
+              />
+            </label>
+            <div class="nrow nrow-extra">
+              <div>
+                <div class="nt">Permitir validade manual no envio</div>
+                <div class="nd">O colaborador informa a validade no formulário de upload.</div>
+              </div>
+              <label class="sw">
+                <input
+                  type="checkbox"
+                  [ngModel]="cfg.permitir_validade_manual"
+                  (ngModelChange)="atualizarFlag('permitir_validade_manual', $event)"
+                />
+                <span></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="save-row">
+            <button type="button" class="btn" [disabled]="salvando()" (click)="salvarConfig()">
+              {{ salvando() ? 'Salvando…' : 'Salvar configurações' }}
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    @if (aba() === 'historico') {
+      <div class="nsc-pane">
+        <div class="section-t">Histórico de notificações</div>
+        <p class="nsc-lead">
+          E-mails automáticos enviados a colaboradores, gestores e RH. Os últimos 500 registos.
+        </p>
+        <div class="toolbar">
+          <input
+            type="text"
+            placeholder="Buscar por nome, e-mail ou departamento…"
+            [ngModel]="historicoBusca()"
+            (ngModelChange)="historicoBusca.set($event)"
+            (keyup.enter)="carregarHistorico()"
+          />
+          <select [ngModel]="historicoTipo()" (ngModelChange)="historicoTipo.set($event); carregarHistorico()">
+            <option value="">Todos os tipos</option>
+            <option value="vencido">Certificado vencido</option>
+            <option value="antecedencia">Aviso de antecedência</option>
+            <option value="gestor_vencido">Gestor (vencido)</option>
+            <option value="gestor_a_vencer">Gestor (a vencer)</option>
+            <option value="resumo_rh">Resumo semanal RH</option>
+          </select>
+          <select [ngModel]="historicoStatus()" (ngModelChange)="historicoStatus.set($event); carregarHistorico()">
+            <option value="">Todos os estados</option>
+            <option value="enviado">Enviado</option>
+            <option value="erro">Erro</option>
+          </select>
+          <button type="button" class="btn sm" (click)="carregarHistorico()">Filtrar</button>
+        </div>
+        <div class="table-card">
+          @if (historicoCarregando()) {
+            <p class="nsc-muted">Carregando histórico…</p>
+          } @else if (!historico().length) {
+            <p class="nsc-muted empty">Nenhuma notificação registada.</p>
+          } @else {
+            <table class="nsc-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Tipo</th>
+                  <th>Colaborador</th>
+                  <th>Departamento</th>
+                  <th>Destinatário</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (n of historico(); track n.id) {
+                  <tr>
+                    <td>{{ n.enviado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td>{{ labelTipoNotificacao(n.tipo) }}</td>
+                    <td>{{ nomeNotificacao(n) }}</td>
+                    <td>{{ n.departamento || '—' }}</td>
+                    <td>{{ n.destinatario }}</td>
+                    <td>
+                      <span class="badge" [class.b-ok]="n.status === 'enviado'" [class.b-bad]="n.status === 'erro'">
+                        {{ n.status === 'enviado' ? 'Enviado' : n.status === 'erro' ? 'Erro' : n.status }}
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      </div>
+    }
+  </section>
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  title="Certificado"
+  [subtitle]="detalhe()?.colaborador?.nome || ''"
+  size="xlarge"
+  saveLabel="Abrir arquivo"
+  [saveDisabled]="!detalhe()?.vigente && !thumbEnvioId()"
+  (save)="abrirArquivo(false)"
+  (cancel)="fecharModal()"
+>
+  @if (detalhe(); as det) {
+    <div class="nsc-cert-modal">
+    <div class="nsc-thumb">
+      @if (thumbCarregando()) {
+        <p class="nsc-muted">Carregando miniatura…</p>
+      } @else if (thumbUrl()) {
+        <img [src]="thumbUrl()!" alt="Miniatura do certificado" />
+      } @else {
+        <p class="nsc-muted">{{ thumbErro() || 'Sem miniatura para este envio.' }}</p>
+      }
+    </div>
+    <p class="nsc-muted nsc-thumb-meta">
+      Status: <strong>{{ labelStatus(det.colaborador.status) }}</strong>
+      · Validade: {{ det.colaborador.validade_efetiva | date: 'dd/MM/yyyy' }}
+    </p>
+    @if (!det.historico.length) {
+      <p class="nsc-muted">Nenhum arquivo enviado.</p>
+    } @else {
+      <table class="nsc-table">
+        <thead>
+          <tr>
+            <th>Arquivo</th>
+            <th>Emissão</th>
+            <th>Validade</th>
+            <th>Motivo</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (h of det.historico; track h.id) {
+            <tr [class.is-thumb]="thumbEnvioId() === h.id">
+              <td>{{ h.nome_arquivo }}{{ h.vigente ? ' (vigente)' : '' }}</td>
+              <td>{{ h.data_emissao | date: 'dd/MM/yyyy' }}</td>
+              <td>{{ h.validade | date: 'dd/MM/yyyy' }}</td>
+              <td class="nsc-motivo">{{ h.motivo_rejeicao || h.motivo_aprovacao || '—' }}</td>
+              <td class="nsc-actions">
+                <div class="nsc-actions-row">
+                  <button type="button" class="btn ghost sm" (click)="verHistorico(h)">Ver</button>
+                  <button type="button" class="btn ghost sm" (click)="baixarHistorico(h)">Baixar</button>
+                  <button type="button" class="btn ghost sm danger" (click)="removerHistorico(h)">Remover</button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    </div>
+  }
+</app-admin-modal>
+
+<app-admin-modal
+  [open]="pickerAberto()"
+  [title]="pickerTitulo()"
+  [subtitle]="pickerSubtitulo()"
+  size="xlarge"
+  [saveLabel]="pickerSaveLabel()"
+  savingLabel="Salvando…"
+  [salvando]="pickerSalvando()"
+  [saveDisabled]="!pickerDirty() || pickerCarregando()"
+  (save)="confirmarPicker()"
+  (cancel)="fecharPicker()"
+>
+  @if (pickerCarregando()) {
+    <p class="nsc-muted">Carregando diretório AD…</p>
+  } @else {
+    <div class="picker">
+      <section class="picker-col">
+        <header class="picker-head">
+          <div>
+            <div class="picker-kicker">Colaboradores do AD</div>
+            <div class="picker-meta">{{ pickerDisponiveisFiltrados().length }} de {{ pickerDisponiveis().length }} disponíveis</div>
+          </div>
+          <button
+            type="button"
+            class="picker-link"
+            [disabled]="!pickerDisponiveisFiltrados().length"
+            (click)="incluirTodosFiltrados()"
+          >
+            Incluir todos
+          </button>
+        </header>
+        <div class="picker-search">
+          <input
+            type="search"
+            placeholder="Buscar por nome, cargo ou departamento…"
+            [ngModel]="pickerBusca()"
+            (ngModelChange)="pickerBusca.set($event)"
+          />
+        </div>
+        <div class="picker-rows">
+          @for (c of pickerDisponiveisFiltrados(); track c.ad_object_id) {
+            <div class="picker-row">
+              <div class="picker-grip" aria-hidden="true"></div>
+              <div class="picker-copy">
+                <div class="u-nm">{{ c.nome }}</div>
+                <div class="u-sub">{{ c.cargo || '—' }}{{ c.departamento ? ' · ' + c.departamento : '' }}</div>
+              </div>
+              <button type="button" class="picker-action" (click)="incluirNoPicker(c)">Incluir</button>
+            </div>
+          } @empty {
+            <p class="picker-empty-inline">Nenhum colaborador disponível com esse filtro.</p>
+          }
+        </div>
+        <footer class="picker-foot">
+          {{ pickerRodape() }}
+        </footer>
+      </section>
+
+      <section class="picker-col">
+        <header class="picker-head">
+          <div>
+            <div class="picker-kicker">{{ pickerKickerDireita() }}</div>
+            <div class="picker-meta">{{ pickerNaLista().length }} selecionado(s)</div>
+          </div>
+          <button
+            type="button"
+            class="picker-link"
+            [disabled]="!pickerNaLista().length"
+            (click)="removerTodosDoPicker()"
+          >
+            Remover todos
+          </button>
+        </header>
+        <div class="picker-rows picker-rows--right">
+          @if (!pickerNaLista().length) {
+            <div class="picker-empty">
+              <strong>Nenhum colaborador aqui</strong>
+              <p>Inclua ao menos um para participar.<br />Use a coluna da esquerda.</p>
+            </div>
+          } @else {
+            @for (c of pickerNaLista(); track c.ad_object_id) {
+              <div class="picker-row">
+                <div class="picker-grip" aria-hidden="true"></div>
+                <div class="picker-copy">
+                  <div class="u-nm">{{ c.nome }}</div>
+                  <div class="u-sub">{{ c.cargo || '—' }}{{ c.departamento ? ' · ' + c.departamento : '' }}</div>
+                </div>
+                <button type="button" class="picker-action" (click)="removerDoPicker(c)">Remover</button>
+              </div>
+            }
+          }
+        </div>
+        <footer class="picker-foot">Na indicação, só essas pessoas entram na lista.</footer>
+      </section>
+    </div>
+  }
+</app-admin-modal>
+
+<app-admin-modal
+  [open]="aprovacaoAberto()"
+  title="Aprovar certificado"
+  [subtitle]="aprovacaoEnvio()?.colaborador_nome || ''"
+  saveLabel="Aprovar"
+  savingLabel="Aprovando…"
+  [salvando]="aprovacaoSalvando()"
+  [saveDisabled]="!aprovacaoMotivo().trim()"
+  (save)="confirmarAprovacao()"
+  (cancel)="fecharAprovacao()"
+>
+  <p class="nsc-muted">
+    Nome no certificado: <strong>{{ aprovacaoEnvio()?.nome_lido || '—' }}</strong>
+    · Nome no AD: <strong>{{ aprovacaoEnvio()?.colaborador_nome || '—' }}</strong>
+  </p>
+  <label class="nsc-field-label" for="nsc-aprovacao-motivo">Motivo informado pelo colaborador</label>
+  <textarea
+    id="nsc-aprovacao-motivo"
+    class="nsc-textarea"
+    rows="4"
+    [ngModel]="aprovacaoMotivo()"
+    (ngModelChange)="aprovacaoMotivo.set($event)"
+    placeholder="O colaborador deve informar o motivo no envio."
+  ></textarea>
+</app-admin-modal>
+
+<app-admin-modal
+  [open]="recusaAberto()"
+  title="Recusar certificado"
+  [subtitle]="recusaEnvio()?.colaborador_nome || ''"
+  saveLabel="Recusar"
+  savingLabel="Recusando…"
+  [salvando]="recusaSalvando()"
+  [saveDisabled]="!recusaMotivo().trim()"
+  (save)="confirmarRecusa()"
+  (cancel)="fecharRecusa()"
+>
+  <p class="nsc-muted">
+    Nome no certificado: <strong>{{ recusaEnvio()?.nome_lido || '—' }}</strong>
+  </p>
+  <label class="nsc-field-label" for="nsc-recusa-motivo">Motivo da recusa</label>
+  <textarea
+    id="nsc-recusa-motivo"
+    class="nsc-textarea"
+    rows="4"
+    [ngModel]="recusaMotivo()"
+    (ngModelChange)="recusaMotivo.set($event)"
+    placeholder="Explique por que este certificado não pode ser aceito."
+  ></textarea>
+</app-admin-modal>
+
+@if (previewAberto()) {
+  <div class="preview-backdrop" (click)="fecharPreview()">
+    <div class="preview-modal" (click)="$event.stopPropagation()">
+      <div class="preview-modal-hd">
+        <h3>{{ previewTitulo() }}</h3>
+        <button type="button" class="preview-close" (click)="fecharPreview()">×</button>
+      </div>
+      <div class="preview-modal-body">
+        @if (previewHtml()) {
+          <div class="preview-email" [innerHTML]="previewHtml()"></div>
+        }
+      </div>
+      <div class="preview-modal-ft">
+        <button type="button" class="btn ghost" (click)="fecharPreview()">Fechar</button>
+      </div>
+    </div>
+  </div>
+}

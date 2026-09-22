@@ -1,4 +1,53 @@
 const { getPool } = require('../db/pool');
+const { MODULOS } = require('../config/modulos-admin');
+
+function erroFkModulo(err) {
+  if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.errno === 1452) {
+    const e = new Error('Um ou mais módulos não existem no catálogo do banco.');
+    e.status = 400;
+    return e;
+  }
+  return err;
+}
+
+async function remapCipaParaAgendaRh(executor) {
+  const [rows] = await executor.execute(
+    "SELECT codigo FROM modulos_admin WHERE codigo = 'cipa' LIMIT 1"
+  );
+  if (!rows.length) return;
+
+  await executor.execute(
+    `INSERT IGNORE INTO modulos_admin (codigo, nome, ordem)
+     SELECT 'agenda_rh', 'Agenda RH', ordem FROM modulos_admin WHERE codigo = 'cipa'`
+  );
+  await executor.execute(
+    "INSERT IGNORE INTO modulos_admin (codigo, nome, ordem) VALUES ('agenda_rh', 'Agenda RH', 19)"
+  );
+  await executor.execute(
+    `INSERT IGNORE INTO perfil_modulos (perfil_id, modulo_codigo)
+     SELECT perfil_id, 'agenda_rh' FROM perfil_modulos WHERE modulo_codigo = 'cipa'`
+  );
+  await executor.execute(
+    `INSERT IGNORE INTO usuario_modulos_extra (usuario_id, modulo_codigo)
+     SELECT usuario_id, 'agenda_rh' FROM usuario_modulos_extra WHERE modulo_codigo = 'cipa'`
+  );
+  await executor.execute("DELETE FROM perfil_modulos WHERE modulo_codigo = 'cipa'");
+  await executor.execute("DELETE FROM usuario_modulos_extra WHERE modulo_codigo = 'cipa'");
+  await executor.execute("DELETE FROM modulos_admin WHERE codigo = 'cipa'");
+}
+
+async function sincronizarCatalogoModulos() {
+  const pool = getPool();
+  await remapCipaParaAgendaRh(pool);
+
+  const placeholders = MODULOS.map(() => '(?, ?, ?)').join(', ');
+  const values = MODULOS.flatMap((m) => [m.codigo, m.nome, m.ordem]);
+  await pool.execute(
+    `INSERT INTO modulos_admin (codigo, nome, ordem) VALUES ${placeholders}
+     ON DUPLICATE KEY UPDATE nome = VALUES(nome), ordem = VALUES(ordem)`,
+    values
+  );
+}
 
 function mapPerfil(row, modulos = []) {
   if (!row) return null;
@@ -71,6 +120,7 @@ async function listarModulosDoPerfil(perfilId) {
 }
 
 async function setModulosDoPerfil(perfilId, codigos) {
+  await sincronizarCatalogoModulos();
   const pool = getPool();
   const conn = await pool.getConnection();
   try {
@@ -85,7 +135,7 @@ async function setModulosDoPerfil(perfilId, codigos) {
     await conn.commit();
   } catch (e) {
     await conn.rollback();
-    throw e;
+    throw erroFkModulo(e);
   } finally {
     conn.release();
   }
@@ -113,6 +163,7 @@ async function setPerfisDoUsuario(usuarioId, perfilIds) {
 }
 
 async function setModulosExtra(usuarioId, codigos) {
+  await sincronizarCatalogoModulos();
   const pool = getPool();
   const conn = await pool.getConnection();
   try {
@@ -127,7 +178,7 @@ async function setModulosExtra(usuarioId, codigos) {
     await conn.commit();
   } catch (e) {
     await conn.rollback();
-    throw e;
+    throw erroFkModulo(e);
   } finally {
     conn.release();
   }
@@ -208,4 +259,5 @@ module.exports = {
   listarUsuariosAfetadosPorPerfil,
   listarPerfisDoUsuario,
   listarModulosExtraDoUsuario,
+  sincronizarCatalogoModulos,
 };

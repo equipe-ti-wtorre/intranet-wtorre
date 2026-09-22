@@ -4,7 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const { env } = require('./env');
 
-const FOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const FOTO_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
 const BOAS_VINDAS_MIMES = new Set([
   'image/jpeg',
   'image/png',
@@ -12,6 +12,7 @@ const BOAS_VINDAS_MIMES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
 ]);
 const CREDENCIAL_VEICULO_MIMES = new Set([
   'image/jpeg',
@@ -53,7 +54,7 @@ function fileFilter(_req, file, cb) {
   }
   if (field === 'boas_vindas') {
     if (!BOAS_VINDAS_MIMES.has(file.mimetype)) {
-      return cb(new Error('Boas-vindas deve ser imagem, PDF ou Word.'));
+      return cb(new Error('Boas-vindas deve ser imagem, PDF, Word ou TXT.'));
     }
     return cb(null, true);
   }

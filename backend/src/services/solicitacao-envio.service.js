@@ -3,10 +3,42 @@ const blobService = require('./blob.service');
 const { sendEmail, sendMailBatched } = require('../utils/emailSender');
 const { CHAVES_ANEXO } = require('../config/solicitacao-campos');
 const { buildGrupoHtml, buildTextoPlano, CAMPO_COL_MAP } = require('../utils/solicitacao-email-html.util');
-const { buildAssunto } = require('../utils/solicitacao-email-assunto.util');
-const { decodeBlobRef, validarGrupoSensivel } = require('../utils/solicitacao-validation.util');
+const { buildAssunto, validarAssunto } = require('../utils/solicitacao-email-assunto.util');
+const {
+  decodeBlobRef,
+  validarCamposGrupo,
+  validarGrupoSensivel,
+} = require('../utils/solicitacao-validation.util');
 const { validarEmailsAlerta } = require('../utils/camarotes-email-domains.util');
 const { env } = require('../config/env');
+
+/** Dados fictícios para pré-visualizar e enviar e-mail teste sem uma solicitação real. */
+const MOCK_SOLICITACAO = {
+  nome: 'Ana',
+  sobrenome: 'Oliveira',
+  tipo: 'novo',
+  cpf: '123.456.789-00',
+  rg: '12.345.678-9',
+  data_nascimento: '1992-03-15',
+  empresa: 'WTorre',
+  cargo: 'Analista de Sistemas',
+  departamento: 'Tecnologia',
+  centro_custo: 'TI-001',
+  supervisor: 'Carlos Mendes',
+  local_trabalho: 'São Paulo',
+  email_novo: 'ana.oliveira@wtorre.com.br',
+  solicitante: 'Maria Souza',
+  solicitante_nome: 'Maria Souza',
+  solicitante_email: 'maria.souza@wtorre.com.br',
+  equipamento: 'notebook',
+  precisa_celular: true,
+  precisa_ramal: true,
+  credencial_estacionamento: true,
+  data_inicio: '2026-10-01',
+  foto_url: 'mock://foto.jpg',
+  boas_vindas_url: 'mock://boas-vindas.pdf',
+  credencial_veiculo_url: 'mock://credencial.pdf',
+};
 
 async function montarAnexos(solicitacao, campos) {
   const attachments = [];
@@ -263,6 +295,41 @@ async function enviarParaGrupos(solicitacaoId) {
   };
 }
 
+function previewTemplate(campos, assunto) {
+  const camposValidos = validarCamposGrupo(campos ?? []);
+  const assuntoValido = validarAssunto(assunto);
+  return {
+    html: buildGrupoHtml(MOCK_SOLICITACAO, camposValidos),
+    subject: buildAssunto(assuntoValido, MOCK_SOLICITACAO),
+  };
+}
+
+async function enviarTeste(campos, assunto, email) {
+  const destinatarios = validarEmailsAlerta(email ? [String(email).trim()] : []);
+  if (!destinatarios.length) {
+    const err = new Error('Informe um e-mail de destino válido.');
+    err.status = 400;
+    throw err;
+  }
+
+  const camposValidos = validarCamposGrupo(campos ?? []);
+  validarGrupoSensivel(camposValidos, destinatarios);
+  const assuntoValido = validarAssunto(assunto);
+  const html = buildGrupoHtml(MOCK_SOLICITACAO, camposValidos);
+  const text = buildTextoPlano(MOCK_SOLICITACAO, camposValidos);
+  const subjectBase = buildAssunto(assuntoValido, MOCK_SOLICITACAO);
+  const subject = `[TESTE] ${subjectBase}`.slice(0, 255);
+
+  await sendEmail({
+    to: destinatarios[0],
+    subject,
+    html,
+    text,
+  });
+
+  return { ok: true };
+}
+
 async function previewGrupo(solicitacaoId, grupoId) {
   const solicitacao = await repo.findSolicitacaoById(solicitacaoId);
   if (!solicitacao) {
@@ -388,11 +455,102 @@ async function reenviarIndividual(solicitacaoId, emailId) {
   return { envio, status, erro };
 }
 
+async function encaminhar(solicitacaoId, { email, grupoId, emailIndividualId }) {
+  const destinatarios = validarEmailsAlerta(email ? [String(email).trim()] : []);
+  if (!destinatarios.length) {
+    const err = new Error('Informe um e-mail de destino válido.');
+    err.status = 400;
+    throw err;
+  }
+
+  const solicitacao = await repo.findSolicitacaoById(solicitacaoId);
+  if (!solicitacao) {
+    const err = new Error('Solicitação não encontrada.');
+    err.status = 404;
+    throw err;
+  }
+
+  let campos;
+  let assunto;
+  let grupo_id = null;
+  let email_individual_id = null;
+  let origemNome = '';
+
+  if (emailIndividualId) {
+    const individual = await repo.findEmailIndividualById(Number(emailIndividualId));
+    if (!individual) {
+      const err = new Error('E-mail individual não encontrado.');
+      err.status = 404;
+      throw err;
+    }
+    campos = individual.campos;
+    assunto = individual.assunto;
+    email_individual_id = individual.id;
+    origemNome = individual.nome || individual.email;
+  } else if (grupoId) {
+    const grupo = await repo.findGrupoById(Number(grupoId));
+    if (!grupo) {
+      const err = new Error('Grupo não encontrado.');
+      err.status = 404;
+      throw err;
+    }
+    campos = grupo.campos;
+    assunto = grupo.assunto;
+    grupo_id = grupo.id;
+    origemNome = grupo.nome;
+  } else {
+    const err = new Error('Informe o grupo ou o e-mail individual de origem.');
+    err.status = 400;
+    throw err;
+  }
+
+  validarGrupoSensivel(campos, destinatarios);
+
+  let status = 'ok';
+  let erro = null;
+
+  try {
+    const { html, text, attachments, subject } = await montarConteudo(
+      solicitacao,
+      campos,
+      assunto
+    );
+    const subjectFwd = email_individual_id
+      ? subject
+      : `[Encaminhado] ${subject}`.slice(0, 255);
+    await sendEmail({
+      to: destinatarios[0],
+      subject: subjectFwd,
+      html,
+      text,
+      attachments,
+    });
+  } catch (err) {
+    status = 'erro';
+    erro = err.message || 'Falha no encaminhamento.';
+  }
+
+  const envio = await repo.createEnvio({
+    solicitacao_id: solicitacaoId,
+    grupo_id,
+    email_individual_id,
+    grupo_nome: `Encaminhado — ${origemNome}`,
+    destinatarios,
+    status,
+    erro,
+  });
+
+  return { envio, status, erro };
+}
+
 module.exports = {
   enviarParaGrupos,
+  previewTemplate,
+  enviarTeste,
   previewGrupo,
   previewIndividual,
   reenviarGrupo,
   reenviarIndividual,
+  encaminhar,
   buildGrupoHtml,
 };

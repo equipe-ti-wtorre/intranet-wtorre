@@ -50,6 +50,10 @@ function shouldAttachIntranetToken(url: string): boolean {
   );
 }
 
+function skipLoginRedirect(url: string): boolean {
+  return url.includes('/agenda_rh/eventos/') || url.includes('/cipa/eventos/');
+}
+
 function tokenRenovado(refreshed: { accessToken?: string; token?: string } | null): string | null {
   return refreshed?.accessToken || refreshed?.token || null;
 }
@@ -184,14 +188,14 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
           if (auth.temAccessValido() || auth.temSessao()) {
             auth.limparSessao();
           }
-          if (!onLoginPage) {
+          if (!onLoginPage && !skipLoginRedirect(req.url)) {
             void auth.irParaLogin();
           }
           return throwError(() => err);
         }),
         catchError(() => {
           if (auth.temSessao()) auth.limparSessao();
-          if (!onLoginPage) {
+          if (!onLoginPage && !skipLoginRedirect(req.url)) {
             void auth.irParaLogin();
           }
           return throwError(() => err);

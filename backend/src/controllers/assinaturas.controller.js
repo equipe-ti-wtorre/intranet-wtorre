@@ -1,4 +1,5 @@
 const https = require('https');
+const { env } = require('../config/env');
 const graphService = require('../services/assinatura-graph.service');
 const scriptService = require('../services/assinatura-script.service');
 const configService = require('../services/assinatura-config.service');
@@ -8,9 +9,42 @@ const { isDominioMapeado, isEmailPermitido } = require('../utils/assinatura-doma
 const BLOB_BASE = 'https://nubankparqueassets.blob.core.windows.net/email-assets';
 const FONTES_PERMITIDAS = new Set(['NuSansDisplay-Medium.otf', 'NuSansDisplay-Regular.otf']);
 
+function hostnameOf(host) {
+  const raw = String(host || '').split(',')[0].trim().toLowerCase();
+  if (!raw) return '';
+  if (raw.startsWith('[')) {
+    const end = raw.indexOf(']');
+    return end > 0 ? raw.slice(1, end) : raw;
+  }
+  return raw.replace(/:\d+$/, '');
+}
+
+function isLoopbackHost(host) {
+  const name = hostnameOf(host);
+  return name === 'localhost' || name === '127.0.0.1' || name === '::1';
+}
+
+function fallbackPublicUrl() {
+  if (env.publicAppUrl) return env.publicAppUrl;
+  const fromCors = env.corsOrigins.find(
+    (origin) => /^https:\/\//i.test(origin) && !isLoopbackHost(origin.replace(/^https?:\/\//i, ''))
+  );
+  return fromCors ? fromCors.replace(/\/+$/, '') : '';
+}
+
 function publicBaseUrl(req) {
-  const proto = req.get('x-forwarded-proto') || req.protocol;
-  return `${proto}://${req.get('host')}`;
+  const forwardedHost = req.get('x-forwarded-host');
+  const host = String(forwardedHost || req.get('host') || '')
+    .split(',')[0]
+    .trim();
+  if (host && !isLoopbackHost(host)) {
+    const forwardedProto = req.get('x-forwarded-proto');
+    const proto = forwardedProto
+      ? String(forwardedProto).split(',')[0].trim()
+      : 'https';
+    return `${proto}://${host}`;
+  }
+  return fallbackPublicUrl() || 'https://intranet.nubankparque.com';
 }
 
 async function me(req, res) {
@@ -121,4 +155,4 @@ async function paraEmail(req, res) {
   }
 }
 
-module.exports = { me, gerarScript, obterConfig, obterScriptBase, servirFonte, paraEmail };
+module.exports = { me, gerarScript, obterConfig, obterScriptBase, servirFonte, paraEmail, publicBaseUrl };

@@ -1,0 +1,287 @@
+<app-public-chrome />
+
+<main class="nsc-page wrap">
+  <header class="page-head">
+    <h1>Meu certificado — Não se Cale</h1>
+    <p>
+      O Protocolo Não se Cale é uma capacitação obrigatória por lei (Leis 17.621/2023 e 17.635/2023)
+      para profissionais que atuam em eventos. Envie aqui seu certificado oficial e acompanhe a validade.
+    </p>
+  </header>
+
+  @if (carregando()) {
+    <section class="card">Carregando seu status…</section>
+  } @else if (erro()) {
+    <section class="card">
+      <p>{{ erro() }}</p>
+      <button type="button" class="btn ghost" (click)="carregar()">Tentar de novo</button>
+    </section>
+  } @else if (dados(); as d) {
+    <div
+      class="hero"
+      [class.ok]="hero().tone === 'ok'"
+      [class.wait]="hero().tone === 'wait'"
+      [class.bad]="hero().tone === 'bad'"
+      [class.neutral]="hero().tone === 'neutral'"
+    >
+      <div class="hero-ic">{{ hero().icone }}</div>
+      <div>
+        <h2>{{ hero().titulo }}</h2>
+        <p>{{ hero().texto }}</p>
+        @if (d.arquivo_id || d.pedido_aprovacao) {
+          <div class="hero-actions">
+            @if (d.arquivo_id) {
+              <button type="button" class="btn ghost sm" (click)="verCertificado(false)">Ver certificado</button>
+              <button type="button" class="btn ghost sm" (click)="verCertificado(true)">Baixar</button>
+              <button
+                type="button"
+                class="btn ghost sm danger"
+                [disabled]="removendo()"
+                (click)="removerCertificado(d.arquivo_id)"
+              >
+                {{ removendo() ? 'Removendo…' : 'Remover certificado' }}
+              </button>
+            }
+            @if (d.pedido_aprovacao && !d.arquivo_id) {
+              <button
+                type="button"
+                class="btn ghost sm danger"
+                [disabled]="removendo()"
+                (click)="removerCertificado(d.pedido_aprovacao.id)"
+              >
+                {{ removendo() ? 'Removendo…' : 'Cancelar envio' }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+      <div class="val">
+        <b>{{ hero().validade }}</b>
+        <span>{{ hero().sub }}</span>
+      </div>
+    </div>
+    @if (d.pedido_aprovacao && d.status !== 'aguardando_aprovacao') {
+      <div class="previa wait pend-banner">
+        Há um certificado em nome de
+        <b>{{ d.pedido_aprovacao.nome_lido || 'outra pessoa' }}</b>
+        aguardando aprovação do RH. O certificado vigente atual continua válido até a decisão.
+        @if (d.pedido_aprovacao.motivo_aprovacao) {
+          <div class="previa-nota">Motivo: {{ d.pedido_aprovacao.motivo_aprovacao }}</div>
+        }
+        <button
+          type="button"
+          class="btn ghost sm danger"
+          [disabled]="removendo()"
+          (click)="removerCertificado(d.pedido_aprovacao.id)"
+        >
+          Cancelar este envio
+        </button>
+      </div>
+    }
+
+    <div class="grid2">
+      <div class="card">
+        <div class="section-t">Enviar certificado</div>
+        <app-admin-dropzone
+          accept="application/pdf,image/jpeg,image/png"
+          hint="Arraste o certificado oficial aqui ou"
+          hintLink="clique para selecionar"
+          subhint="PDF, JPG ou PNG do modelo Univesp / Secretaria da Mulher · até 10 MB"
+          [disabled]="enviando()"
+          (fileSelected)="onFile($event)"
+        />
+        @if (arquivo(); as f) {
+          <p class="file-name">{{ f.name }}</p>
+        }
+        @if (lendo()) {
+          <p class="previa-status">Lendo certificado…</p>
+        } @else if (previaErro()) {
+          <div class="previa bad">{{ previaErro() }}</div>
+        } @else if (previa(); as p) {
+          <div
+            class="previa"
+            [class.ok]="!p.requer_aprovacao && !p.requer_data_manual"
+            [class.wait]="p.requer_aprovacao || !!p.requer_data_manual"
+          >
+            <div>
+              <span>Nome no certificado</span>
+              <b>{{ p.nome_lido }}</b>
+            </div>
+            <div>
+              <span>Seu nome no AD</span>
+              <b>{{ p.colaborador_nome }}</b>
+            </div>
+            <div>
+              <span>Emissão</span>
+              @if (p.requer_data_manual) {
+                <input
+                  type="date"
+                  class="emissao-manual"
+                  [ngModel]="dataEmissaoManual()"
+                  (ngModelChange)="onDataEmissaoManual($event)"
+                  [max]="hojeIso()"
+                />
+              } @else {
+                <b>{{ formatDate(p.data_emissao) }}</b>
+              }
+            </div>
+            <div>
+              <span>Validade</span>
+              <b>{{ formatDate(p.validade) }}</b>
+            </div>
+            @if (p.requer_data_manual) {
+              <p class="previa-nota">
+                {{ p.mensagem || 'Não foi possível ler a data no certificado. Informe a data de emissão que aparece no PDF.' }}
+              </p>
+            }
+            @if (p.requer_aprovacao) {
+              <p class="previa-nota">
+                O nome do certificado não coincide com o seu. O envio vai para aprovação do RH.
+              </p>
+              <div class="field previa-motivo">
+                <label for="nsc-motivo-aprovacao">Motivo para aprovação do RH</label>
+                <textarea
+                  id="nsc-motivo-aprovacao"
+                  rows="3"
+                  maxlength="500"
+                  [ngModel]="motivoAprovacao()"
+                  (ngModelChange)="motivoAprovacao.set($event)"
+                  placeholder="Explique por que o nome do certificado é diferente do seu no AD."
+                ></textarea>
+              </div>
+            }
+          </div>
+        }
+        @if (d.pedido_rejeitado && !d.pedido_aprovacao && !previa()) {
+          <div class="previa bad">
+            O RH recusou o último certificado
+            @if (d.pedido_rejeitado.nome_lido) {
+              em nome de <b>{{ d.pedido_rejeitado.nome_lido }}</b>
+            }
+            @if (d.pedido_rejeitado.motivo_rejeicao) {
+              : {{ d.pedido_rejeitado.motivo_rejeicao }}
+            }
+            . Envie o certificado oficial no seu nome.
+          </div>
+        }
+        @if (d.permitir_validade_manual) {
+          <div class="fields">
+            <div class="field">
+              <label>Validade (informada pelo RH conforme política)</label>
+              <input
+                type="date"
+                [ngModel]="validadeManual()"
+                (ngModelChange)="validadeManual.set($event)"
+              />
+            </div>
+          </div>
+        }
+        <div class="send-row">
+          <button
+            type="button"
+            class="btn"
+            [disabled]="enviando() || lendo() || !podeEnviar()"
+            (click)="enviar()"
+          >
+            {{
+              enviando()
+                ? 'Enviando…'
+                : lendo()
+                  ? 'Lendo certificado…'
+                  : previa()?.requer_aprovacao
+                    ? 'Enviar para aprovação do RH'
+                    : 'Enviar para o RH'
+            }}
+          </button>
+        </div>
+      </div>
+
+      <div class="info">
+        <h3>Precisa emitir ou renovar?</h3>
+        <p>
+          A capacitação é <b>gratuita e 100% online</b> (cerca de 30h) e o certificado oficial é
+          emitido pela Secretaria de Políticas para a Mulher / Univesp.
+        </p>
+        <p>Só vale o certificado oficial — não pague por inscrições.</p>
+        <a class="btn sm" [href]="d.link_renovacao" target="_blank" rel="noopener noreferrer">
+          Fazer / renovar o curso
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+        <p class="portal">
+          Mais informações:<br />
+          <a [href]="d.link_portal" target="_blank" rel="noopener noreferrer">
+            mulher.sp.gov.br · Não se Cale
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </a>
+          <a [href]="d.link_canal" target="_blank" rel="noopener noreferrer">
+            Canal de denúncias · Contato Seguro
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </a>
+        </p>
+      </div>
+    </div>
+
+    <div class="card hist">
+      <div class="section-t">Histórico de envios</div>
+      @if (!d.historico.length) {
+        <p class="muted">Nenhum arquivo enviado ainda.</p>
+      } @else {
+        @for (h of d.historico; track h.id) {
+          <div class="hist-row">
+            <div class="hist-ic">📄</div>
+            <div>
+              <div class="nm">{{ h.nome_arquivo }}</div>
+              <div class="mt">
+                Enviado em {{ h.enviado_em | date: 'dd/MM/yyyy' }}
+                · validade {{ formatDate(h.validade) }}
+              </div>
+            </div>
+            <div class="st">
+              <span class="badge" [class.b-ok]="h.vigente" [class.b-neutral]="!h.vigente">
+                <span class="dot" [class.d-ok]="h.vigente" [class.d-neutral]="!h.vigente"></span>
+                {{ h.vigente ? 'Vigente' : h.aprovacao === 'pendente' ? 'Aguardando RH' : 'Substituído' }}
+              </span>
+              <button
+                type="button"
+                class="btn ghost sm danger"
+                [disabled]="removendo()"
+                (click)="removerCertificado(h.id)"
+              >
+                Remover
+              </button>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+</main>
+
+<app-footer />

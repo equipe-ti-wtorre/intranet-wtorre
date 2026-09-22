@@ -1,7 +1,7 @@
 const BLOB_BASE = 'https://nubankparqueassets.blob.core.windows.net/email-assets';
 
 /** Domínios que não devem gerar assinatura (ex.: alias padrão do tenant M365). */
-const DOMINIOS_EXCLUIDOS = new Set(['wtorre.onmicrosoft.com']);
+const DOMINIOS_EXCLUIDOS = new Set(['wtorre.onmicrosoft.com', 'allianzparque.com.br']);
 
 const DOMINIOS = {
   'nubankparque.com': {
@@ -12,15 +12,6 @@ const DOMINIOS = {
     wNome: '500',
     wResto: '400',
     fontFace: true,
-  },
-  'allianzparque.com.br': {
-    cor: '#005399',
-    entidade: 'Real Arenas',
-    banner: `${BLOB_BASE}/banner_allianz_parque.gif`,
-    font: 'Helvetica,Arial,sans-serif',
-    wNome: 'bold',
-    wResto: 'normal',
-    fontFace: false,
   },
   'basecoworking.space': {
     cor: '#005399',

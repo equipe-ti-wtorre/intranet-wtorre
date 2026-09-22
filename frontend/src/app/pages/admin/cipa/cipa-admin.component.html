@@ -1,0 +1,569 @@
+<div class="admin-page cipa-admin">
+  <section class="cipa-stats" aria-label="Resumo">
+    <article class="stat-card">
+      <div class="stat-card__icon stat-card__icon--blue" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+          <path d="M16 2v4M8 2v4M3 10h18"></path>
+        </svg>
+      </div>
+      <p class="stat-card__label">Total de eventos</p>
+      <p class="stat-card__value">{{ carregando() ? '—' : totalEventos() }}</p>
+      <p class="stat-card__foot">{{ novosMes() }} novo(s) este mês</p>
+    </article>
+    <article class="stat-card">
+      <div class="stat-card__icon stat-card__icon--green" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <p class="stat-card__label">Inscrições</p>
+      <p class="stat-card__value">{{ carregando() ? '—' : totalInscricoes() }}</p>
+      <p class="stat-card__foot">Todas as confirmações</p>
+    </article>
+    <article class="stat-card">
+      <div class="stat-card__icon stat-card__icon--purple" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 6l-9.5 9.5-5-5L1 18"></path>
+          <path d="M17 6h6v6"></path>
+        </svg>
+      </div>
+      <p class="stat-card__label">Eventos ativos</p>
+      <p class="stat-card__value">{{ carregando() ? '—' : eventosAtivos() }}</p>
+      <p class="stat-card__foot">Data hoje ou futura</p>
+    </article>
+  </section>
+
+  <section class="card cipa-panel">
+    <div class="cipa-panel__head">
+      <h2>Eventos Recentes</h2>
+      <button type="button" class="btn btn-primary cipa-new" (click)="novo()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"></path>
+        </svg>
+        Novo evento
+      </button>
+    </div>
+
+    @if (carregando()) {
+      <p class="empty">Carregando…</p>
+    } @else if (!eventos().length) {
+      <p class="empty">Nenhum evento cadastrado ainda.</p>
+    } @else {
+      <div class="table-scroll">
+        <table class="cipa-table">
+          <thead>
+            <tr>
+              <th>Evento</th>
+              <th>Data</th>
+              <th>Categoria</th>
+              <th>Estado</th>
+              <th class="cipa-th-actions">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (ev of eventos(); track ev.id) {
+              <tr>
+                <td>
+                  <span class="cipa-cell-title">{{ ev.titulo }}</span>
+                </td>
+                <td class="cipa-td-muted">{{ formatarData(ev.data) }}</td>
+                <td>{{ ev.categoria || '—' }}</td>
+                <td>
+                  <div class="cipa-badges">
+                    <span class="cipa-badge" [class.cipa-badge--off]="ev.estado === 'encerrado'">
+                      {{ ev.estado === 'aberto' ? 'Aberto' : 'Encerrado' }}
+                    </span>
+                    @if (ev.oculto_lista) {
+                      <span class="cipa-badge cipa-badge--oculto">Oculto</span>
+                    }
+                    @if (ev.link_publico) {
+                      <span class="cipa-badge cipa-badge--publico">Público</span>
+                    }
+                  </div>
+                </td>
+                <td class="cipa-td-actions">
+                  <div class="cipa-acts" role="toolbar" aria-label="Ações do evento">
+                    <button type="button" class="cipa-icon" title="Editar evento" aria-label="Editar evento" (click)="editar(ev)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                    </button>
+                    <button type="button" class="cipa-icon" title="Ver inscritos" aria-label="Ver inscritos" (click)="irInscritos(ev)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                    </button>
+                    <button type="button" class="cipa-icon" title="Imprimir lista" aria-label="Imprimir lista de inscritos" (click)="irInscritos(ev, true)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                      </svg>
+                    </button>
+                    <button type="button" class="cipa-icon" title="Descarregar Excel (XLSX)" aria-label="Gerar ficheiro Excel" (click)="exportarXlsx(ev)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                      </svg>
+                    </button>
+                    <button type="button" class="cipa-icon" title="Descarregar PDF" aria-label="Gerar ficheiro PDF" (click)="exportarPdf(ev)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <path d="M9 13h6"></path>
+                        <path d="M9 17h6"></path>
+                      </svg>
+                    </button>
+                    <button type="button" class="cipa-icon" title="Copiar link do evento" aria-label="Copiar link do evento" (click)="copiarLink(ev)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                    </button>
+                    <button type="button" class="cipa-icon cipa-icon--danger" title="Excluir evento" aria-label="Excluir evento e todas as inscrições" (click)="excluir(ev)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<app-admin-modal
+  [open]="modalAberto()"
+  [title]="modalTitulo()"
+  [saveLabel]="modalSaveLabel()"
+  size="xlarge"
+  [salvando]="salvando()"
+  [saveDisabled]="!formValido()"
+  (save)="salvar()"
+  (cancel)="fecharModal()"
+>
+  <p class="cipa-form-hint">
+    @if (editandoCodigo()) {
+      Atualize os dados do evento na Agenda RH.
+    } @else {
+      Preencha os dados para publicar um evento na agenda.
+    }
+  </p>
+  <div class="cipa-form">
+    <div class="field cipa-form__full">
+      <label>Dia *</label>
+      <input type="date" [ngModel]="data()" (ngModelChange)="data.set($event)" />
+    </div>
+    <div class="field cipa-form__full">
+      <label>Título *</label>
+      <textarea
+        rows="3"
+        maxlength="500"
+        placeholder="Nome do evento. Use Enter para quebrar a linha."
+        [ngModel]="titulo()"
+        (ngModelChange)="titulo.set($event)"
+      ></textarea>
+    </div>
+    <div class="field cipa-form__full">
+      <label>Participantes (texto)</label>
+      <textarea
+        rows="3"
+        placeholder="Nomes ou descrição dos participantes"
+        [ngModel]="texto()"
+        (ngModelChange)="texto.set($event)"
+      ></textarea>
+    </div>
+    <div class="field">
+      <label>Categoria *</label>
+      <input
+        type="text"
+        maxlength="120"
+        placeholder="Ex.: Tecnologia, Educação"
+        [ngModel]="categoria()"
+        (ngModelChange)="categoria.set($event)"
+      />
+    </div>
+    <div class="field">
+      <label>Localização *</label>
+      <input
+        type="text"
+        maxlength="255"
+        placeholder="Ex.: São Paulo, SP — Auditório principal"
+        [ngModel]="localizacao()"
+        (ngModelChange)="localizacao.set($event)"
+      />
+    </div>
+    <div class="field cipa-form__full">
+      <label>Estado na agenda pública</label>
+      <select [ngModel]="estado()" (ngModelChange)="estado.set($event)">
+        <option value="aberto">Ativo (visível e aceita inscrições)</option>
+        <option value="encerrado">Encerrado (oculto na agenda)</option>
+      </select>
+    </div>
+    <p class="hint-block cipa-form__full">Eventos encerrados deixam de aparecer na lista pública.</p>
+    <label class="check cipa-form__full">
+      <input type="checkbox" [ngModel]="ocultoLista()" (ngModelChange)="ocultoLista.set($event)" />
+      Ocultar da lista de eventos no painel app
+    </label>
+    <p class="hint-block cipa-form__full">
+      O evento deixa de aparecer na agenda, mas o link direto continua a funcionar para quem estiver na audiência ou se o link público estiver ativo.
+    </p>
+    <label class="check cipa-form__full">
+      <input type="checkbox" [ngModel]="linkPublico()" (ngModelChange)="linkPublico.set($event)" />
+      Link público (sem login)
+    </label>
+    <p class="hint-block cipa-form__full">
+      Quem tiver o link pode abrir a página e inscrever-se sem conta Microsoft (nome, e-mail e CPF). Na agenda autenticada, o evento aparece para todos os colaboradores.
+    </p>
+
+    <div class="field cipa-form__full">
+      <label>
+        @if (editandoCodigo()) {
+          Imagem do card (JPEG, PNG ou WebP, máx. 5 MB)
+        } @else {
+          Imagem do card (JPEG, PNG ou WebP, máx. 5 MB) *
+        }
+      </label>
+      <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onArquivo($event)" />
+      @if (preview()) {
+        <button type="button" class="linkbtn" (click)="limparImagem()">Remover imagem</button>
+      }
+    </div>
+
+    <div class="card-preview cipa-form__full">
+      <div
+        class="card-preview__hero"
+        [class.is-cropped]="imagemRecortada()"
+        [style.--crop-h]="imagemRecortada() ? imagemAltura() + 'px' : null"
+      >
+        <div
+          class="card-preview__banner"
+          [class.has-image]="!!preview()"
+          [class.is-dragging]="arrastando()"
+          [class.is-cropped]="imagemRecortada()"
+          [style.justify-content]="imagemJustifyCss()"
+          [style.align-items]="imagemAlignCss()"
+          (pointerdown)="onBannerPointerDown($event)"
+          (pointermove)="onBannerPointerMove($event)"
+          (pointerup)="onBannerPointerUp()"
+          (pointercancel)="onBannerPointerUp()"
+        >
+          @if (preview(); as src) {
+            <img
+              class="card-preview__img"
+              [src]="src"
+              alt=""
+              [style.width.%]="imagemTamanho()"
+            />
+          }
+        </div>
+        <aside class="card-preview__aside">
+          @if (categoria()) {
+            <p
+              class="card-preview__cat"
+              [class.is-selected]="textoCampo() === 'categoria'"
+              [style.font-size.px]="estiloCss('categoria').tamanho"
+              [style.text-align]="estiloCss('categoria').align"
+              [style.justify-content]="estiloCss('categoria').justify"
+              (click)="selecionarTexto('categoria', $event)"
+            >
+              <span class="dot" aria-hidden="true"></span>
+              {{ categoria() }}
+            </p>
+          }
+          @if (titulo()) {
+            <h2
+              [class.is-selected]="textoCampo() === 'titulo'"
+              [style.font-size.px]="estiloCss('titulo').tamanho"
+              [style.text-align]="estiloCss('titulo').align"
+              (click)="selecionarTexto('titulo', $event)"
+            >
+              {{ titulo() }}
+            </h2>
+          }
+          @if (texto()) {
+            <p
+              class="card-preview__lead"
+              [class.is-selected]="textoCampo() === 'texto'"
+              [style.font-size.px]="estiloCss('texto').tamanho"
+              [style.text-align]="estiloCss('texto').align"
+              (click)="selecionarTexto('texto', $event)"
+            >
+              {{ texto() }}
+            </p>
+          }
+          @if (data()) {
+            <p
+              class="card-preview__meta"
+              [class.is-selected]="textoCampo() === 'data'"
+              [style.font-size.px]="estiloCss('data').tamanho"
+              [style.text-align]="estiloCss('data').align"
+              [style.justify-content]="estiloCss('data').justify"
+              (click)="selecionarTexto('data', $event)"
+            >
+              {{ previewData() }}
+            </p>
+          }
+          @if (localizacao()) {
+            <p
+              class="card-preview__meta"
+              [class.is-selected]="textoCampo() === 'localizacao'"
+              [style.font-size.px]="estiloCss('localizacao').tamanho"
+              [style.text-align]="estiloCss('localizacao').align"
+              [style.justify-content]="estiloCss('localizacao').justify"
+              (click)="selecionarTexto('localizacao', $event)"
+            >
+              {{ localizacao() }}
+            </p>
+          }
+          @if (previewVagas(); as maxVagas) {
+            <p
+              class="card-preview__meta"
+              [class.is-selected]="textoCampo() === 'vagas'"
+              [style.font-size.px]="estiloCss('vagas').tamanho"
+              [style.text-align]="estiloCss('vagas').align"
+              [style.justify-content]="estiloCss('vagas').justify"
+              (click)="selecionarTexto('vagas', $event)"
+            >
+              Até {{ maxVagas }} participante{{ maxVagas === 1 ? '' : 's' }}
+            </p>
+          }
+          @if (duracao()) {
+            <p
+              class="card-preview__meta"
+              [class.is-selected]="textoCampo() === 'duracao'"
+              [style.font-size.px]="estiloCss('duracao').tamanho"
+              [style.text-align]="estiloCss('duracao').align"
+              [style.justify-content]="estiloCss('duracao').justify"
+              (click)="selecionarTexto('duracao', $event)"
+            >
+              Duração {{ duracao() }} minuto{{ duracao() === 1 ? '' : 's' }}
+            </p>
+          }
+          @if (texto()) {
+            <div
+              class="card-preview__about"
+              [class.is-selected]="textoCampo() === 'sobre'"
+              [style.text-align]="estiloCss('sobre').align"
+              (click)="selecionarTexto('sobre', $event)"
+            >
+              <p [style.font-size.px]="estiloCss('sobre').tamanho">{{ texto() }}</p>
+            </div>
+          }
+        </aside>
+      </div>
+
+      <div class="card-preview__controls">
+        <fieldset class="card-preview__group">
+          <legend>Imagem</legend>
+          <label class="card-preview__slider">
+            <span>Tamanho da imagem {{ imagemTamanho() }}%</span>
+            <input
+              type="range"
+              min="40"
+              max="100"
+              step="1"
+              [ngModel]="imagemTamanho()"
+              (ngModelChange)="onTamanhoInput($event)"
+              [disabled]="!preview()"
+            />
+          </label>
+          <label class="card-preview__slider">
+            <span>Altura do card {{ imagemRecortada() ? imagemAltura() + 'px' : 'Automática' }}</span>
+            <input
+              type="range"
+              min="0"
+              [max]="imagemAlturaMax"
+              step="10"
+              [ngModel]="imagemAltura()"
+              (ngModelChange)="onAlturaInput($event)"
+              [disabled]="!preview()"
+            />
+          </label>
+          <label class="card-preview__slider">
+            <span>Horizontal {{ imagemPosX() }}%</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              [ngModel]="imagemPosX()"
+              (ngModelChange)="onPosXInput($event)"
+              [disabled]="!preview()"
+            />
+          </label>
+          <label class="card-preview__slider">
+            <span>Vertical {{ imagemPosY() }}%</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              [ngModel]="imagemPosY()"
+              (ngModelChange)="onPosYInput($event)"
+              [disabled]="!preview()"
+            />
+          </label>
+          <button type="button" class="linkbtn linkbtn--inline" (click)="resetImagemLayout()" [disabled]="!preview()">
+            Repor imagem
+          </button>
+          <p class="card-preview__hint">
+            Altura automática mostra a imagem completa. Ajuste a altura para recortar. Arraste para posicionar.
+          </p>
+        </fieldset>
+
+        <fieldset class="card-preview__group">
+          <legend>Texto {{ campoMeta().label }}</legend>
+          <div class="card-preview__campos" role="group" aria-label="Campo de texto">
+            @for (campo of textoCampos; track campo) {
+              <button
+                type="button"
+                [class.on]="textoCampo() === campo"
+                (click)="selecionarTexto(campo)"
+              >
+                {{ textoCampoMeta[campo].label }}
+              </button>
+            }
+          </div>
+          <label class="card-preview__slider">
+            <span>Tamanho {{ estiloSelecionado().tamanho }}px</span>
+            <input
+              type="range"
+              [min]="campoMeta().min"
+              [max]="campoMeta().max"
+              step="1"
+              [ngModel]="estiloSelecionado().tamanho"
+              (ngModelChange)="onTextoTamanhoInput($event)"
+            />
+          </label>
+          <div class="card-preview__align" role="group" aria-label="Alinhamento do texto">
+            @for (op of alinhamentos; track op.id) {
+              <button
+                type="button"
+                [class.on]="estiloSelecionado().alinhamento === op.id"
+                (click)="setAlinhamento(op.id)"
+              >
+                {{ op.label }}
+              </button>
+            }
+          </div>
+          <button type="button" class="linkbtn linkbtn--inline" (click)="resetTextoLayout()">
+            Repor este texto
+          </button>
+          <button type="button" class="linkbtn linkbtn--inline" (click)="resetTodosTextos()">
+            Repor todos
+          </button>
+          <p class="card-preview__hint">Clique num texto do preview para o ajustar à parte.</p>
+        </fieldset>
+      </div>
+    </div>
+
+    <fieldset class="cipa-slots cipa-form__full">
+      <legend>Horários e vagas (min. .ics na 1ª linha)</legend>
+      @for (slot of slots(); track $index; let i = $index) {
+        <div class="slot-row">
+          <div class="field">
+            <label>Horário *</label>
+            <input type="time" [ngModel]="slot.horario" (ngModelChange)="patchSlot(i, { horario: $event })" />
+          </div>
+          <div class="field">
+            <label>Vagas *</label>
+            <input
+              type="number"
+              min="1"
+              [ngModel]="slot.vagas"
+              (ngModelChange)="patchSlot(i, { vagas: $event })"
+            />
+          </div>
+          @if (i === 0) {
+            <div class="field">
+              <label>.ics (min)</label>
+              <input
+                type="number"
+                min="5"
+                max="1440"
+                step="1"
+                [ngModel]="duracao()"
+                (ngModelChange)="duracao.set(+$event)"
+              />
+            </div>
+          } @else {
+            <div class="field slot-remove-wrap">
+              <label aria-hidden="true">&nbsp;</label>
+              <button type="button" class="linkbtn slot-remove" (click)="removeSlot(i)">Remover</button>
+            </div>
+          }
+        </div>
+      }
+      <button type="button" class="linkbtn" (click)="addSlot()">+ Horário</button>
+    </fieldset>
+
+    <div class="section-t cipa-form__full">Quem pode ver o formulário</div>
+    <p class="hint-block cipa-form__full">
+      Busque colaboradores no Active Directory. Só quem estiver nesta lista vê o evento e pode se inscrever.
+      Lista vazia: o evento fica oculto para o público.
+    </p>
+    <div class="dest-search cipa-form__full">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+      <input
+        type="search"
+        placeholder="Buscar colaborador no AD (nome, e-mail, cargo ou departamento)…"
+        autocomplete="off"
+        [ngModel]="buscaTexto()"
+        (ngModelChange)="onBuscaInput($event)"
+      />
+      @if (resultadosBusca().length) {
+        <ul class="busca-resultados">
+          @for (c of resultadosBusca(); track c.id) {
+            <li>
+              <button type="button" class="busca-item" (click)="addVisualizador(c)">
+                <strong>{{ c.nome }}</strong>
+                <span>{{ c.email || '—' }}{{ c.departamento ? ' · ' + c.departamento : '' }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+    <div class="dest-meta cipa-form__full">
+      <span class="dest-meta__label">Adicionados</span>
+      <span class="dest-meta__count">{{ visualizadores().length }}</span>
+    </div>
+    @if (visualizadores().length) {
+      <div class="dest-chips cipa-form__full">
+        @for (v of visualizadores(); track v.colaborador_id + v.email) {
+          <article class="dest-chip">
+            <span class="dest-chip__avatar">{{ iniciais(v.nome) }}</span>
+            <span class="dest-chip__info">
+              <span class="dest-chip__name">{{ v.nome }}</span>
+              <span class="dest-chip__mail">{{ v.email }}</span>
+            </span>
+            <button type="button" class="dest-chip__remove" (click)="removeVisualizador(v)" title="Remover">
+              ×
+            </button>
+          </article>
+        }
+      </div>
+    } @else {
+      <p class="dest-empty cipa-form__full">Nenhum colaborador selecionado.</p>
+    }
+  </div>
+</app-admin-modal>

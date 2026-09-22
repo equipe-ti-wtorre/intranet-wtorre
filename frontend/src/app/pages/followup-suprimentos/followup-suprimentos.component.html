@@ -193,15 +193,26 @@
 
     @if (carregando()) {
       <div class="empty"><b>Carregando…</b>Buscando solicitações.</div>
-    } @else if (erro()) {
+    } @else if (erro() && !(modoBusca() && !solicitacoes().length)) {
       <div class="empty empty-err"><b>Não foi possível carregar</b>{{ erro() }}</div>
+    } @else if (modoBusca() && !solicitacoes().length) {
+      <div class="empty">
+        <b>Nenhuma solicitação encontrada</b>
+        @if (erro()) {
+          {{ erro() }}
+        } @else if (buscaEscopo() === 'documento') {
+          Não existe contrato/pedido com o número “{{ buscaNumero() }}”.
+        } @else {
+          Não existe requisição com o número “{{ buscaNumero() }}”.
+        }
+      </div>
     } @else if (!listaExibida().length) {
       <div class="empty">
         <b>Nenhuma solicitação encontrada</b>
         @if (modoBusca() && buscaEscopo() === 'documento') {
-          Não existe contrato/pedido com o número “{{ buscaNumero() }}”.
+          Nenhum contrato/pedido deste tipo com o número “{{ buscaNumero() }}”. Troque a aba acima.
         } @else if (modoBusca()) {
-          Não existe requisição com o número “{{ buscaNumero() }}”.
+          Nenhuma requisição deste tipo com o número “{{ buscaNumero() }}”. Troque a aba acima.
         } @else if (ccFiltro()) {
           Nenhuma solicitação para o centro de custo selecionado.
         } @else if (filialFiltro()) {

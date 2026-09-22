@@ -143,9 +143,12 @@
 .group-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
   padding-top: 2px;
+  max-width: 420px;
 }
 
 .field-label {
@@ -252,6 +255,10 @@
 }
 
 /* Modal grupo */
+.modal-preview-btn {
+  margin-right: auto;
+}
+
 .modal-grupo-form {
   display: flex;
   flex-direction: column;
@@ -593,6 +600,21 @@ tbody tr.exp-row td {
   padding: 12px 18px 14px 40px;
 }
 
+.exp-section + .exp-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-solid, var(--line));
+}
+
+.exp-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-dim, #8a93a8);
+  margin-bottom: 4px;
+}
+
 .sub-row {
   display: flex;
   align-items: center;
@@ -634,6 +656,22 @@ tbody tr.exp-row td {
 .sub-name {
   font-weight: 600;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sub-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--wtorre, var(--accent));
+  background: rgba(29, 84, 230, 0.08);
+  border: 0.5px solid rgba(29, 84, 230, 0.2);
+  border-radius: 20px;
+  padding: 1px 7px;
 }
 
 .sub-email {
@@ -678,7 +716,7 @@ tbody tr.exp-row td {
   position: fixed;
   inset: 0;
   background: rgba(13, 20, 36, 0.4);
-  z-index: 100;
+  z-index: 510;
 }
 
 .preview-panel {
@@ -688,15 +726,16 @@ tbody tr.exp-row td {
   bottom: 0;
   width: min(720px, 100vw);
   background: var(--panel, #fff);
-  z-index: 101;
+  z-index: 511;
   display: flex;
   flex-direction: column;
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
 
   header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 12px;
     padding: 20px 24px;
     border-bottom: 1px solid var(--line-solid, var(--line));
 
@@ -706,6 +745,26 @@ tbody tr.exp-row td {
       font-weight: 700;
       margin: 0;
     }
+  }
+
+  .preview-heading {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .preview-subject {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--ink-dim, #8a93a8);
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .preview-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   .x {
@@ -757,5 +816,16 @@ tbody tr.exp-row td {
   .sub-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .group-row {
+    flex-wrap: wrap;
+  }
+
+  .group-actions {
+    max-width: 100%;
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 20px;
   }
 }

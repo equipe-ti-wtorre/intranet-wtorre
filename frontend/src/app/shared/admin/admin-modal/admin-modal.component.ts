@@ -23,7 +23,10 @@ export class AdminModalComponent {
   readonly saveLabel = input('Salvar');
   readonly cancelLabel = input('Cancelar');
   readonly showSave = input(true);
+  readonly savingLabel = input('Salvando...');
   readonly size = input<AdminModalSize>('default');
+  /** Empilha o modal acima de painéis laterais (ex.: preview de e-mail). */
+  readonly elevated = input(false);
 
   readonly save = output<void>();
   readonly cancel = output<void>();

@@ -18,6 +18,8 @@ import {
 import { ramalAuthGuard, ramalGuestGuard, ramalAdminGuard } from './guards/ramal.guard';
 import { rustdeskGuard, rustdeskRouteMatch } from './guards/rustdesk.guard';
 import { pesquisasPublicoTokenMatch } from './pages/pesquisas/shared/pesquisas-public-url';
+import { nscViewerGuard } from './guards/nsc-viewer.guard';
+import { cipaCodigoRouteMatch } from './guards/cipa-codigo.matcher';
 
 export const routes: Routes = [
   {
@@ -306,6 +308,32 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'nao-se-cale',
+    canActivate: [authGuard, nscViewerGuard],
+    loadComponent: () =>
+      import('./pages/nao-se-cale/nao-se-cale.component').then((m) => m.NaoSeCaleComponent),
+  },
+  {
+    path: 'agenda_rh',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/cipa/cipa-lista.component').then((m) => m.CipaListaComponent),
+  },
+  {
+    path: 'cipa',
+    redirectTo: 'agenda_rh',
+    pathMatch: 'full',
+  },
+  {
+    path: 'cipa/evento/:codigo',
+    redirectTo: ({ params }) => `/${params['codigo']}`,
+  },
+  {
+    matcher: cipaCodigoRouteMatch,
+    loadComponent: () =>
+      import('./pages/cipa/cipa-detalhe.component').then((m) => m.CipaDetalheComponent),
+  },
+  {
     path: 'p/:slug',
     canActivate: [authGuard],
     loadComponent: () =>
@@ -502,6 +530,40 @@ export const routes: Routes = [
             (m) => m.SolicitacaoColaboradorAdminComponent
           ),
         data: { adminTitle: 'Solicitação de Colaborador' },
+      },
+      {
+        path: 'nao-se-cale',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/nao-se-cale/nao-se-cale-admin.component').then(
+            (m) => m.NaoSeCaleAdminComponent
+          ),
+        data: { adminTitle: 'Não se Cale' },
+      },
+      {
+        path: 'agenda_rh',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/cipa/cipa-admin.component').then((m) => m.CipaAdminComponent),
+        data: { adminTitle: 'Agenda RH' },
+      },
+      {
+        path: 'agenda_rh/:codigo/inscritos',
+        canActivate: [moduloGuardFromRoute],
+        loadComponent: () =>
+          import('./pages/admin/cipa/cipa-inscritos-admin.component').then(
+            (m) => m.CipaInscritosAdminComponent
+          ),
+        data: { adminTitle: 'Inscrições Agenda RH' },
+      },
+      {
+        path: 'cipa',
+        redirectTo: 'agenda_rh',
+        pathMatch: 'full',
+      },
+      {
+        path: 'cipa/:codigo/inscritos',
+        redirectTo: ({ params }) => `/admin/agenda_rh/${params['codigo']}/inscritos`,
       },
       {
         path: 'perfis',

@@ -269,6 +269,33 @@ async function downloadDriveItemContent(token, driveId, fileRef) {
   return Buffer.from(arrayBuffer);
 }
 
+async function getUserManager(tenant, oid) {
+  if (!tenant || !oid) return null;
+  const token = await getAppToken(tenant);
+  const url =
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(oid)}` +
+    `?$select=id&$expand=manager($select=id,mail,displayName,userPrincipalName)`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const error = new Error(err.error?.message || 'Falha ao consultar gestor no Graph');
+    error.status = res.status;
+    throw error;
+  }
+  const data = await res.json();
+  const manager = data.manager;
+  if (!manager?.id) return null;
+  const email = (manager.mail || manager.userPrincipalName || '').trim() || null;
+  return {
+    ad_id: manager.id,
+    email,
+    nome: manager.displayName ? String(manager.displayName).trim() : null,
+  };
+}
+
 async function updateUser(tenant, adId, patch) {
   if (!adId || !patch || !Object.keys(patch).length) {
     throw new Error('Nada para atualizar no Graph.');
@@ -303,6 +330,7 @@ module.exports = {
   testConnection,
   listAllUsers,
   fetchMailboxUserPurposes,
+  getUserManager,
   updateUser,
   normalizeShareUrl,
   encodeShareUrl,

@@ -49,6 +49,14 @@ router.post(
   ...adminGuard,
   controller.reenviarEmail
 );
+router.post(
+  '/admin/solicitacoes/:id/encaminhar',
+  ...adminGuard,
+  controller.encaminharEmail
+);
+
+router.post('/admin/preview-template', ...adminGuard, controller.previewTemplate);
+router.post('/admin/enviar-teste', ...adminGuard, controller.enviarTeste);
 
 router.get('/admin/grupos', ...adminGuard, controller.listarGrupos);
 router.post('/admin/grupos', ...adminGuard, controller.criarGrupo);

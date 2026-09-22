@@ -9,3 +9,21 @@ backend/storage/icones-custom/
 *.sql.zip
 .vscode/
 *.code-workspace
+
+# Uploads e arquivos gerados em runtime
+backend/storage/nsc-certificados/*
+!backend/storage/nsc-certificados/.gitkeep
+backend/storage/cipa-imagens/
+backend/storage/documentos/
+backend/storage/documentos-thumbs/
+backend/storage/rustdesk/*.zip
+frontend/.well-known/
+
+# Uploads e arquivos gerados em runtime
+backend/storage/nsc-certificados/*
+!backend/storage/nsc-certificados/.gitkeep
+backend/storage/cipa-imagens/
+backend/storage/documentos/
+backend/storage/documentos-thumbs/
+backend/storage/rustdesk/*.zip
+frontend/.well-known/

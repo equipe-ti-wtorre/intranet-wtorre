@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { FormsModule } from '@angular/forms';
-import { DatePipe, NgClass } from '@angular/common';
+import { DatePipe, NgClass, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { AlertasService } from '../../../services/alertas.service';
@@ -18,6 +18,10 @@ import {
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
 
 type AbaSolicitacao = 'grupos' | 'individuais' | 'acesso' | 'historico';
+type ModoDestinoEmail = 'teste' | 'encaminhar';
+
+const PREFIXO_ENCAMINHADO = /^Encaminhado\s*[—–-]\s*/i;
+const PREFIXO_INDIVIDUAL = /^E-mail individual\s*[—–-]\s*/i;
 
 const ASSUNTO_PADRAO = 'Nova solicitação de colaborador — {nome} ({tipo})';
 const ASSUNTO_PLACEHOLDERS =
@@ -26,7 +30,7 @@ const ASSUNTO_PLACEHOLDERS =
 @Component({
   selector: 'app-solicitacao-colaborador-admin',
   standalone: true,
-  imports: [FormsModule, DatePipe, NgClass, AdminModalComponent],
+  imports: [FormsModule, DatePipe, NgClass, NgTemplateOutlet, AdminModalComponent],
   templateUrl: './solicitacao-colaborador-admin.component.html',
   styleUrl: './solicitacao-colaborador-admin.component.scss',
 })
@@ -37,6 +41,7 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
   private readonly busca$ = new Subject<string>();
   private readonly buscaDestinatarios$ = new Subject<string>();
   private readonly buscaIndividual$ = new Subject<string>();
+  private readonly buscaTeste$ = new Subject<string>();
 
   readonly assuntoPadrao = ASSUNTO_PADRAO;
   readonly assuntoPlaceholders = ASSUNTO_PLACEHOLDERS;
@@ -87,6 +92,23 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
 
   readonly previewHtml = signal<SafeHtml | ''>('');
   readonly previewAberto = signal(false);
+  readonly previewAssunto = signal('');
+  readonly previewEhExemplo = signal(false);
+  readonly previewCampos = signal<string[]>([]);
+  readonly previewAssuntoTemplate = signal<string | null>(null);
+  readonly carregandoPreview = signal(false);
+
+  readonly modalTesteAberto = signal(false);
+  readonly enviandoTeste = signal(false);
+  readonly testeCampos = signal<string[]>([]);
+  readonly testeAssunto = signal('');
+  readonly testeEmail = signal('');
+  readonly testeBuscaTexto = signal('');
+  readonly resultadosTeste = signal<UsuarioAdBusca[]>([]);
+  readonly destinoModo = signal<ModoDestinoEmail>('teste');
+  readonly encaminharSolicitacaoId = signal<number | null>(null);
+  readonly encaminharGrupoId = signal<number | null>(null);
+  readonly encaminharEmailIndividualId = signal<number | null>(null);
 
   readonly abaAtiva = signal<AbaSolicitacao>('grupos');
 
@@ -103,6 +125,17 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
   readonly modalIndividualAberto = computed(() => this.editandoIndividualId() !== null);
   readonly tituloModalIndividual = computed(() =>
     this.editandoIndividualNovo() ? 'Novo e-mail individual' : 'Editar e-mail individual'
+  );
+  readonly tituloModalDestino = computed(() =>
+    this.destinoModo() === 'encaminhar' ? 'Encaminhar e-mail' : 'Enviar e-mail teste'
+  );
+  readonly hintModalDestino = computed(() =>
+    this.destinoModo() === 'encaminhar'
+      ? 'Envia o e-mail desta solicitação (dados reais) para um destinatário. E-mails individuais mantêm o assunto configurado. Somente domínio interno.'
+      : 'O e-mail usa dados de exemplo e o assunto recebe o prefixo [TESTE]. Destinatário: somente domínio interno.'
+  );
+  readonly saveLabelDestino = computed(() =>
+    this.destinoModo() === 'encaminhar' ? 'Encaminhar' : 'Enviar teste'
   );
 
   constructor() {
@@ -139,6 +172,13 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
       .pipe(debounceTime(300), distinctUntilChanged(), switchMap(buscaAd))
       .subscribe({
         next: (list) => this.resultadosIndividual.set(list),
+        error: () => this.erro.set('Erro na busca de destinatários.'),
+      });
+
+    this.buscaTeste$
+      .pipe(debounceTime(300), distinctUntilChanged(), switchMap(buscaAd))
+      .subscribe({
+        next: (list) => this.resultadosTeste.set(list),
         error: () => this.erro.set('Erro na busca de destinatários.'),
       });
   }
@@ -616,9 +656,11 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
   private ultimosEnviosPorDestino(envios: SolicitacaoEnvio[]): SolicitacaoEnvio[] {
     const map = new Map<string, SolicitacaoEnvio>();
     for (const e of envios) {
-      const key = e.email_individual_id
+      const encaminhado = PREFIXO_ENCAMINHADO.test(e.grupo_nome || '');
+      const base = e.email_individual_id
         ? `i:${e.email_individual_id}`
         : `g:${e.grupo_id ?? e.grupo_nome}`;
+      const key = encaminhado ? `fwd:${e.id}` : base;
       const prev = map.get(key);
       if (!prev || (e.enviado_em && prev.enviado_em && e.enviado_em > prev.enviado_em)) {
         map.set(key, e);
@@ -631,13 +673,229 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
     return this.enviosPorSolicitacao()[id] || [];
   }
 
+  enviosGrupos(id: number): SolicitacaoEnvio[] {
+    return this.enviosExpandidos(id).filter(
+      (e) => !e.email_individual_id && !this.isEnvioEncaminhado(e)
+    );
+  }
+
+  enviosIndividuais(id: number): SolicitacaoEnvio[] {
+    return this.enviosExpandidos(id).filter(
+      (e) => !!e.email_individual_id && !this.isEnvioEncaminhado(e)
+    );
+  }
+
+  enviosEncaminhados(id: number): SolicitacaoEnvio[] {
+    return this.enviosExpandidos(id).filter((e) => this.isEnvioEncaminhado(e));
+  }
+
+  nomeEnvio(e: SolicitacaoEnvio): string {
+    let nome = (e.grupo_nome || '').trim();
+    nome = nome.replace(PREFIXO_ENCAMINHADO, '').replace(PREFIXO_INDIVIDUAL, '').trim();
+    return nome || e.destinatarios?.[0] || '—';
+  }
+
+  isEnvioIndividual(e: SolicitacaoEnvio): boolean {
+    return !!e.email_individual_id && !this.isEnvioEncaminhado(e);
+  }
+
+  isEnvioEncaminhado(e: SolicitacaoEnvio): boolean {
+    return PREFIXO_ENCAMINHADO.test(e.grupo_nome || '');
+  }
+
+  verTemplateGrupo(g: SolicitacaoGrupo): void {
+    this.abrirPreviewTemplate(g.campos, g.assunto);
+  }
+
+  verTemplateIndividual(item: SolicitacaoEmailIndividual): void {
+    this.abrirPreviewTemplate(item.campos, item.assunto);
+  }
+
+  previewModalGrupo(): void {
+    this.abrirPreviewTemplate(this.grupoCamposSel(), this.grupoAssunto().trim() || null);
+  }
+
+  previewModalIndividual(): void {
+    this.abrirPreviewTemplate(this.individualCamposSel(), this.individualAssunto().trim() || null);
+  }
+
+  private abrirPreviewTemplate(campos: string[], assunto?: string | null): void {
+    if (!campos?.length) {
+      this.erro.set('Selecione ao menos um campo para visualizar o template.');
+      return;
+    }
+    this.carregandoPreview.set(true);
+    this.service.previewTemplate({ campos, assunto: assunto || null }).subscribe({
+      next: (r) => {
+        this.carregandoPreview.set(false);
+        this.abrirPainelPreview(r.html, r.subject, {
+          exemplo: true,
+          campos,
+          assuntoTemplate: assunto || null,
+        });
+      },
+      error: (err: HttpErrorResponse) => {
+        this.carregandoPreview.set(false);
+        this.erro.set(err.error?.mensagem || 'Erro no preview.');
+      },
+    });
+  }
+
+  private abrirPainelPreview(
+    html: string,
+    subject: string | undefined,
+    opts: { exemplo: boolean; campos?: string[]; assuntoTemplate?: string | null }
+  ): void {
+    this.previewHtml.set(this.sanitizer.bypassSecurityTrustHtml(html));
+    this.previewAssunto.set(subject || '');
+    this.previewEhExemplo.set(opts.exemplo);
+    this.previewCampos.set(opts.campos ? [...opts.campos] : []);
+    this.previewAssuntoTemplate.set(opts.assuntoTemplate ?? null);
+    this.previewAberto.set(true);
+  }
+
+  abrirEnvioTesteGrupo(g: SolicitacaoGrupo): void {
+    this.abrirEnvioTeste(g.campos, g.assunto);
+  }
+
+  abrirEnvioTesteIndividual(item: SolicitacaoEmailIndividual): void {
+    this.abrirEnvioTeste(item.campos, item.assunto);
+  }
+
+  abrirEnvioTesteDoPreview(): void {
+    this.abrirEnvioTeste(this.previewCampos(), this.previewAssuntoTemplate());
+  }
+
+  abrirEnvioTeste(campos: string[], assunto?: string | null): void {
+    if (!campos?.length) {
+      this.erro.set('Selecione ao menos um campo para enviar o teste.');
+      return;
+    }
+    this.destinoModo.set('teste');
+    this.encaminharSolicitacaoId.set(null);
+    this.encaminharGrupoId.set(null);
+    this.encaminharEmailIndividualId.set(null);
+    this.testeCampos.set([...campos]);
+    this.testeAssunto.set(assunto || '');
+    this.testeEmail.set('');
+    this.testeBuscaTexto.set('');
+    this.resultadosTeste.set([]);
+    this.modalTesteAberto.set(true);
+  }
+
+  abrirEncaminharEnvio(solicitacaoId: number, e: SolicitacaoEnvio): void {
+    if (!e.grupo_id && !e.email_individual_id) {
+      this.erro.set('Não é possível encaminhar este envio.');
+      return;
+    }
+    this.destinoModo.set('encaminhar');
+    this.encaminharSolicitacaoId.set(solicitacaoId);
+    this.encaminharGrupoId.set(e.grupo_id ?? null);
+    this.encaminharEmailIndividualId.set(e.email_individual_id ?? null);
+    this.testeEmail.set('');
+    this.testeBuscaTexto.set('');
+    this.resultadosTeste.set([]);
+    this.modalTesteAberto.set(true);
+  }
+
+  onBuscaTeste(q: string): void {
+    this.testeBuscaTexto.set(q);
+    this.buscaTeste$.next(q);
+  }
+
+  selecionarEmailTesteDoAd(col: UsuarioAdBusca): void {
+    const email = col.email?.trim().toLowerCase();
+    if (!email) {
+      this.erro.set('Colaborador sem e-mail cadastrado no AD.');
+      return;
+    }
+    this.testeEmail.set(email);
+    this.testeBuscaTexto.set('');
+    this.resultadosTeste.set([]);
+  }
+
+  fecharModalTeste(): void {
+    this.modalTesteAberto.set(false);
+    this.testeBuscaTexto.set('');
+    this.resultadosTeste.set([]);
+    this.encaminharSolicitacaoId.set(null);
+    this.encaminharGrupoId.set(null);
+    this.encaminharEmailIndividualId.set(null);
+    this.destinoModo.set('teste');
+  }
+
+  enviarEmailTeste(): void {
+    const email = this.testeEmail().trim().toLowerCase();
+    if (!email) {
+      this.erro.set('Informe o e-mail de destino.');
+      return;
+    }
+    if (this.destinoModo() === 'encaminhar') {
+      this.confirmarEncaminhar(email);
+      return;
+    }
+    this.enviandoTeste.set(true);
+    this.service
+      .enviarTeste({
+        campos: this.testeCampos(),
+        assunto: this.testeAssunto().trim() || null,
+        email,
+      })
+      .subscribe({
+        next: () => {
+          this.enviandoTeste.set(false);
+          this.fecharModalTeste();
+          this.mensagem.set(`E-mail teste enviado para ${email}.`);
+        },
+        error: (e: HttpErrorResponse) => {
+          this.enviandoTeste.set(false);
+          this.erro.set(e.error?.mensagem || 'Erro ao enviar e-mail teste.');
+        },
+      });
+  }
+
+  private confirmarEncaminhar(email: string): void {
+    const solicitacaoId = this.encaminharSolicitacaoId();
+    if (!solicitacaoId) {
+      this.erro.set('Solicitação inválida para encaminhar.');
+      return;
+    }
+    const body: { email: string; grupoId?: number; emailIndividualId?: number } = { email };
+    const emailIndividualId = this.encaminharEmailIndividualId();
+    const grupoId = this.encaminharGrupoId();
+    if (emailIndividualId) body.emailIndividualId = emailIndividualId;
+    else if (grupoId) body.grupoId = grupoId;
+    else {
+      this.erro.set('Origem do encaminhamento inválida.');
+      return;
+    }
+
+    this.enviandoTeste.set(true);
+    this.service.encaminharEmail(solicitacaoId, body).subscribe({
+      next: () => {
+        this.enviandoTeste.set(false);
+        this.fecharModalTeste();
+        this.mensagem.set(`E-mail encaminhado para ${email}.`);
+        this.service.obterSolicitacaoAdmin(solicitacaoId).subscribe({
+          next: (d) => {
+            this.enviosPorSolicitacao.update((map) => ({
+              ...map,
+              [solicitacaoId]: this.ultimosEnviosPorDestino(d.envios),
+            }));
+          },
+        });
+      },
+      error: (e: HttpErrorResponse) => {
+        this.enviandoTeste.set(false);
+        this.erro.set(e.error?.mensagem || 'Erro ao encaminhar e-mail.');
+      },
+    });
+  }
+
   previewEnvio(solicitacaoId: number, e: SolicitacaoEnvio): void {
     if (e.email_individual_id) {
       this.service.previewEmailIndividual(solicitacaoId, e.email_individual_id).subscribe({
-        next: (r) => {
-          this.previewHtml.set(this.sanitizer.bypassSecurityTrustHtml(r.html));
-          this.previewAberto.set(true);
-        },
+        next: (r) => this.abrirPainelPreview(r.html, r.subject, { exemplo: false }),
         error: (err: HttpErrorResponse) =>
           this.erro.set(err.error?.mensagem || 'Erro no preview.'),
       });
@@ -645,10 +903,7 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
     }
     if (!e.grupo_id) return;
     this.service.previewEmail(solicitacaoId, e.grupo_id).subscribe({
-      next: (r) => {
-        this.previewHtml.set(this.sanitizer.bypassSecurityTrustHtml(r.html));
-        this.previewAberto.set(true);
-      },
+      next: (r) => this.abrirPainelPreview(r.html, r.subject, { exemplo: false }),
       error: (err: HttpErrorResponse) => this.erro.set(err.error?.mensagem || 'Erro no preview.'),
     });
   }
@@ -693,6 +948,10 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
   fecharPreview(): void {
     this.previewAberto.set(false);
     this.previewHtml.set('');
+    this.previewAssunto.set('');
+    this.previewEhExemplo.set(false);
+    this.previewCampos.set([]);
+    this.previewAssuntoTemplate.set(null);
   }
 
   badgeClass(status: string): string {
@@ -716,6 +975,7 @@ export class SolicitacaoColaboradorAdminComponent implements OnInit {
       novo: 'Novo',
       reposicao: 'Reposição',
       mudanca: 'Mudança',
+      efetivacao: 'Efetivação',
     };
     return map[tipo] || tipo;
   }

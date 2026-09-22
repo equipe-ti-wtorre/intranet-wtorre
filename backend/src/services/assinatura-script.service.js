@@ -1,7 +1,25 @@
 const fs = require('fs');
 const path = require('path');
+const { env } = require('../config/env');
 const { isDominioMapeado, isEmailPermitido } = require('../utils/assinatura-domains');
 const configService = require('./assinatura-config.service');
+
+function isLoopbackBase(url) {
+  try {
+    const parsed = new URL(String(url || ''));
+    const host = parsed.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return true;
+  }
+}
+
+function resolverBasePublica(publicBaseUrl) {
+  const candidata = String(publicBaseUrl || '').replace(/\/+$/, '');
+  if (candidata && !isLoopbackBase(candidata)) return candidata;
+  if (env.publicAppUrl && !isLoopbackBase(env.publicAppUrl)) return env.publicAppUrl;
+  return 'https://intranet.nubankparque.com';
+}
 
 const TEMPLATE_PATH = path.join(
   __dirname,
@@ -47,10 +65,10 @@ function lerTemplateBase() {
   return lerTemplateBaseBytes().toString('utf8');
 }
 
-function embutirScriptBase64(scriptBytes) {
-  const b64 = scriptBytes.toString('base64');
+function embutirBase64(label, bytes) {
+  const b64 = Buffer.from(bytes).toString('base64');
   const linhas = b64.match(/.{1,76}/g) || [];
-  return linhas.map((linha) => `::B64::${linha}`).join('\r\n');
+  return linhas.map((linha) => `::${label}::${linha}`).join('\r\n');
 }
 
 function validarEmailPadrao(assinaturas, emailPadrao) {
@@ -68,11 +86,17 @@ function gerarLauncher(assinaturas, emailPadrao, publicBaseUrl) {
   validarAssinaturas(assinaturas);
   validarEmailPadrao(assinaturas, emailPadrao);
 
-  const token = configService.create(assinaturas, emailPadrao.trim().toLowerCase());
-  const configUrl = `${publicBaseUrl}/api/v1/assinaturas/config/${token}`;
-  const scriptEmbutido = embutirScriptBase64(lerTemplateBaseBytes());
+  const email = emailPadrao.trim().toLowerCase();
+  const token = configService.create(assinaturas, email);
+  const configUrl = `${resolverBasePublica(publicBaseUrl)}/api/v1/assinaturas/config/${token}`;
+  const payload = configService.toResponsePayload({
+    assinaturas,
+    emailPadrao: email,
+  });
+  const scriptEmbutido = embutirBase64('B64', lerTemplateBaseBytes());
+  const configEmbutida = embutirBase64('CFG', Buffer.from(JSON.stringify(payload), 'utf8'));
 
-  // O script .ps1 é embutido no .bat (base64) para evitar bloqueio do WAF/nginx em URLs *.ps1
+  // PS1 e JSON embutidos em base64 para o instalador funcionar sem callback HTTP
   return `@echo off
 chcp 65001 >nul
 setlocal
@@ -81,7 +105,7 @@ echo.
 echo  Instalador de Assinaturas
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$dst = Join-Path $env:TEMP 'Instalar-Assinaturas.ps1'; $b64 = (Select-String -LiteralPath '%~f0' -Pattern '^::B64::(.*)$' | ForEach-Object { $_.Matches.Groups[1].Value }) -join ''; $bytes = [Convert]::FromBase64String($b64); $utf8 = New-Object System.Text.UTF8Encoding $true; [IO.File]::WriteAllText($dst, $utf8.GetString($bytes).TrimStart([char]0xFEFF), $utf8); & $dst -ConfigUrl $env:CONFIG_URL"
+  "$src='%~f0'; $utf8=New-Object System.Text.UTF8Encoding $true; $ps1=Join-Path $env:TEMP 'Instalar-Assinaturas.ps1'; $cfg=Join-Path $env:TEMP 'Instalar-Assinaturas.json'; $b64=(Select-String -LiteralPath $src -Pattern '^::B64::(.*)$' | ForEach-Object { $_.Matches.Groups[1].Value }) -join ''; $cfgB64=(Select-String -LiteralPath $src -Pattern '^::CFG::(.*)$' | ForEach-Object { $_.Matches.Groups[1].Value }) -join ''; [IO.File]::WriteAllText($ps1, $utf8.GetString([Convert]::FromBase64String($b64)).TrimStart([char]0xFEFF), $utf8); if ($cfgB64) { [IO.File]::WriteAllText($cfg, $utf8.GetString([Convert]::FromBase64String($cfgB64)), $utf8) }; & $ps1 -ConfigUrl $env:CONFIG_URL -ConfigJsonPath $cfg"
 if errorlevel 1 (
   echo.
   echo  ERRO na instalacao. Verifique sua conexao e tente novamente.
@@ -92,6 +116,7 @@ echo.
 pause
 goto :eof
 ${scriptEmbutido}
+${configEmbutida}
 `;
 }
 

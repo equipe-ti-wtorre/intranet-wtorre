@@ -4,6 +4,7 @@ const TIPO_LABELS = {
   novo: 'Novo',
   reposicao: 'Reposição',
   mudanca: 'Mudança',
+  efetivacao: 'Efetivação',
 };
 
 function formatData(value) {

@@ -172,6 +172,12 @@ async function resumoByUsuario(usuario) {
   }));
 }
 
+/** Compara pedido_contrato de forma numérica (aceita zeros à esquerda / espaços). */
+const PEDIDO_CONTRATO_NUM =
+  `pedido_contrato IS NOT NULL
+     AND TRIM(pedido_contrato) <> ''
+     AND CAST(TRIM(pedido_contrato) AS UNSIGNED) = ?`;
+
 async function findByNumero(nRequisicao, escopo = 'todos') {
   const pool = getPool();
   const n = Math.trunc(Number(nRequisicao));
@@ -194,11 +200,13 @@ async function findByNumero(nRequisicao, escopo = 'todos') {
   if (esc === 'documento') {
     const [rows] = await pool.execute(
       `SELECT * FROM followup_solicitacoes
-       WHERE pedido_contrato = ?
-         AND tipo_documento IS NOT NULL
-         AND TRIM(tipo_documento) <> ''
-       ORDER BY tipo_documento ASC, cod_filial ASC, id ASC`,
-      [String(n)]
+       WHERE ${PEDIDO_CONTRATO_NUM}
+       ORDER BY
+         CASE WHEN tipo_documento IS NULL OR TRIM(tipo_documento) = '' THEN 0 ELSE 1 END,
+         tipo_documento ASC,
+         cod_filial ASC,
+         id ASC`,
+      [n]
     );
     return rows.map(mapSolicitacao);
   }
@@ -206,13 +214,13 @@ async function findByNumero(nRequisicao, escopo = 'todos') {
   const [rows] = await pool.execute(
     `SELECT * FROM followup_solicitacoes
      WHERE n_requisicao = ?
-        OR pedido_contrato = ?
+        OR (${PEDIDO_CONTRATO_NUM})
      ORDER BY
        CASE WHEN n_requisicao = ? THEN 0 ELSE 1 END,
        tipo_documento ASC,
        cod_filial ASC,
        id ASC`,
-    [n, String(n), n]
+    [n, n, n]
   );
   return rows.map(mapSolicitacao);
 }
