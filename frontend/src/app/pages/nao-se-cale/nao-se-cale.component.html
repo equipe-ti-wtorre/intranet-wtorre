@@ -1,13 +1,24 @@
 <app-public-chrome />
 
-<main class="nsc-page wrap">
+<main class="nsc-page wrap" [class.wide]="aba() === 'equipe'">
   <header class="page-head">
-    <h1>Meu certificado — Não se Cale</h1>
+    <h1>Não se Cale</h1>
     <p>
       O Protocolo Não se Cale é uma capacitação obrigatória por lei (Leis 17.621/2023 e 17.635/2023)
       para profissionais que atuam em eventos. Envie aqui seu certificado oficial e acompanhe a validade.
     </p>
   </header>
+
+  @if (acesso()?.pode_ver_equipe) {
+    <nav class="nsc-tabs" aria-label="Certificados">
+      <button type="button" class="nsc-tab" [class.on]="aba() === 'meu'" (click)="aba.set('meu')">
+        Meu certificado
+      </button>
+      <button type="button" class="nsc-tab" [class.on]="aba() === 'equipe'" (click)="aba.set('equipe')">
+        Certificados da equipe
+      </button>
+    </nav>
+  }
 
   @if (carregando()) {
     <section class="card">Carregando seu status…</section>
@@ -16,6 +27,8 @@
       <p>{{ erro() }}</p>
       <button type="button" class="btn ghost" (click)="carregar()">Tentar de novo</button>
     </section>
+  } @else if (aba() === 'equipe' && acesso()?.pode_ver_equipe && acesso(); as ac) {
+    <app-nao-se-cale-equipe [acesso]="ac" />
   } @else if (dados(); as d) {
     <div
       class="hero"
@@ -199,7 +212,7 @@
       <div class="info">
         <h3>Precisa emitir ou renovar?</h3>
         <p>
-          A capacitação é <b>gratuita e 100% online</b> (cerca de 30h) e o certificado oficial é
+          A capacitação é <b>gratuita e 100% online</b> (cerca de 15h) e o certificado oficial é
           emitido pela Secretaria de Políticas para a Mulher / Univesp.
         </p>
         <p>Só vale o certificado oficial — não pague por inscrições.</p>
@@ -281,6 +294,8 @@
         }
       }
     </div>
+  } @else if (acesso()?.pode_ver_equipe) {
+    <section class="card">Use a aba <b>Certificados da equipe</b> para ver a lista.</section>
   }
 </main>
 

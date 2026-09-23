@@ -216,4 +216,41 @@ async function executarJob() {
   return totais;
 }
 
-module.exports = { executarJob };
+async function enviarLembretesManuais(lista) {
+  const config = await nscRepo.getConfig();
+  const totais = { enviados: 0, ignorados: 0, avaliados: lista.length };
+  for (const colab of lista) {
+    if (!['pendente', 'a_vencer', 'vencido', 'aguardando_aprovacao'].includes(colab.status)) {
+      totais.ignorados += 1;
+      continue;
+    }
+    if (!colab.email) {
+      totais.ignorados += 1;
+      continue;
+    }
+    const html = colaboradorHtml({
+      nome: colab.nome,
+      status: colab.status,
+      validade: colab.validade_efetiva,
+      dias: colab.dias_restantes,
+    });
+    const subject =
+      colab.status === 'vencido'
+        ? 'Não se Cale — certificado vencido'
+        : colab.status === 'a_vencer'
+          ? `Não se Cale — certificado vence em ${colab.dias_restantes} dia(s)`
+          : 'Não se Cale — envie seu certificado';
+    const r = await enviarComLog({
+      adObjectId: colab.ad_object_id,
+      tipo: 'lembrete_manual',
+      destinatario: colab.email,
+      subject,
+      html,
+    });
+    if (r.ok) totais.enviados += 1;
+    else totais.ignorados += 1;
+  }
+  return totais;
+}
+
+module.exports = { executarJob, enviarLembretesManuais };

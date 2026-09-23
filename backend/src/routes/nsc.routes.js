@@ -27,7 +27,13 @@ router.post(
 );
 router.get('/meu/certificado', ...viewerGuard, controller.meuCertificado);
 router.delete('/meu/certificado', ...viewerGuard, controller.removerMeu);
+router.get('/equipe', requireJwt, controller.listarEquipe);
+router.get('/equipe/relatorio.xlsx', requireJwt, controller.exportarEquipeXlsx);
+router.post('/equipe/lembretes', requireJwt, controller.lembrarEquipe);
+router.post('/equipe/aprovacoes/:envioId/aprovar', requireJwt, controller.aprovarEquipe);
+router.post('/equipe/aprovacoes/:envioId/rejeitar', requireJwt, controller.rejeitarEquipe);
 router.get('/equipe/:adObjectId/certificado', requireJwt, controller.equipeCertificado);
+router.get('/equipe/:adObjectId', requireJwt, controller.detalheEquipe);
 
 router.get('/admin/aprovacoes', ...adminGuard, controller.listarAprovacoes);
 router.post('/admin/aprovacoes/:envioId/aprovar', ...adminGuard, controller.aprovar);
@@ -54,5 +60,10 @@ router.delete(
   ...adminGuard,
   controller.removerAdmin
 );
+router.get('/admin/visualizadores', ...adminGuard, controller.listarVisualizadores);
+router.post('/admin/visualizadores', ...adminGuard, controller.criarVisualizador);
+router.patch('/admin/visualizadores/:id', ...adminGuard, controller.atualizarVisualizador);
+router.delete('/admin/visualizadores/:id', ...adminGuard, controller.removerVisualizador);
+router.get('/admin/acesso-log', ...adminGuard, controller.listarAcessoLog);
 
 module.exports = router;

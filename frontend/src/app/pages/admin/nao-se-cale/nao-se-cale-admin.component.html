@@ -34,6 +34,14 @@
 
   <section class="card nsc-unified-card">
     <nav class="admin-tabs" aria-label="Não se Cale">
+      <button type="button" class="admin-tab" [class.active]="aba() === 'empresas'" (click)="selecionarAba('empresas')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M3 21h18M5 21V9h6v12M11 21V5h8v16M8 13h.01M8 17h.01M15 9h.01M15 13h.01M15 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Empresas</span>
+      </button>
       <button type="button" class="admin-tab" [class.active]="aba() === 'departamentos'" (click)="selecionarAba('departamentos')">
         <span class="tab-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none">
@@ -89,6 +97,15 @@
           </svg>
         </span>
         <span class="tab-label">Histórico</span>
+      </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'acesso'" (click)="selecionarAba('acesso')">
+        <span class="tab-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="2" />
+            <path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H8a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V8c0 .7.4 1.3 1 1.5H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="tab-label">Acesso</span>
       </button>
     </nav>
 
@@ -302,7 +319,7 @@
                       </button>
                     </div>
                     @if (!r.gestores?.length) {
-                      <p class="nsc-muted">Nenhum gestor vinculado. O aviso usa só o gestor do AD, se existir.</p>
+                      <p class="nsc-muted">Nenhum gestor vinculado. Quem vincular aqui vê os certificados deste departamento e recebe os avisos.</p>
                     } @else {
                       <div class="gestor-chips">
                         @for (g of r.gestores; track g.ad_object_id) {
@@ -345,6 +362,88 @@
                       } @empty {
                         <tr>
                           <td colspan="3" class="nsc-muted">Nenhum colaborador neste departamento.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+
+    @if (aba() === 'empresas') {
+      <div class="nsc-pane">
+        <div class="section-t">Empresas do diretório AD</div>
+        <p class="nsc-lead">
+          Colaboradores agrupados pela empresa sincronizada do Active Directory (domínio do e-mail).
+          A obrigatoriedade do certificado continua definida por departamento ou pessoa.
+        </p>
+        <div class="toolbar">
+          <input
+            type="search"
+            placeholder="Buscar por nome, cargo, departamento ou empresa…"
+            [ngModel]="buscaEmpresa()"
+            (ngModelChange)="buscaEmpresa.set($event)"
+          />
+        </div>
+        @if (!porEmpresa().length) {
+          <p class="nsc-muted">Nenhum colaborador encontrado.</p>
+        } @else {
+          @for (e of porEmpresa(); track e.empresa) {
+            <div class="dept-block" [class.open]="empresaAberto() === e.empresa">
+              <div class="dept-row" (click)="toggleEmpresa(e.empresa)">
+                <div>
+                  <div class="dn">{{ e.empresa }}</div>
+                </div>
+                <div class="dc">
+                  {{ e.total }} colaborador(es)
+                  · {{ e.obrigatorios }} obrigatório(s)
+                  · {{ e.validos }} válido(s)
+                  · {{ e.a_vencer }} a vencer
+                  · {{ e.vencidos }} vencido(s)
+                  · {{ e.pendentes }} pendente(s)
+                </div>
+                <span class="dept-chev" aria-hidden="true">{{ empresaAberto() === e.empresa ? '▾' : '▸' }}</span>
+              </div>
+              @if (empresaAberto() === e.empresa) {
+                <div class="dept-body">
+                  <table class="nsc-table">
+                    <thead>
+                      <tr>
+                        <th>Colaborador</th>
+                        <th>Cargo</th>
+                        <th>Departamento</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (c of colabsDaEmpresa(e.empresa); track c.ad_object_id) {
+                        <tr>
+                          <td>{{ c.nome }}</td>
+                          <td>{{ c.cargo || '—' }}</td>
+                          <td>{{ c.departamento || '—' }}</td>
+                          <td>
+                            @if (c.obrigatorio_efetivo) {
+                              <span
+                                class="badge"
+                                [class.b-ok]="toneStatus(c.status) === 'ok'"
+                                [class.b-wait]="toneStatus(c.status) === 'wait'"
+                                [class.b-bad]="toneStatus(c.status) === 'bad'"
+                                [class.b-neutral]="toneStatus(c.status) === 'neutral'"
+                              >
+                                {{ labelStatus(c.status) }}
+                              </span>
+                            } @else {
+                              <span class="badge b-neutral">Não obrigatório</span>
+                            }
+                          </td>
+                        </tr>
+                      } @empty {
+                        <tr>
+                          <td colspan="4" class="nsc-muted">Nenhum colaborador nesta empresa.</td>
                         </tr>
                       }
                     </tbody>
@@ -628,6 +727,191 @@
               </tbody>
             </table>
           }
+        </div>
+      </div>
+    }
+
+    @if (aba() === 'acesso') {
+      <div class="nsc-pane nsc-acesso-pane">
+        <div class="section-t">Quem pode ver os certificados da equipe</div>
+        <p class="nsc-lead">
+          Os <b>gestores vinculados</b> na aba Departamentos já entram como Gestor daquele recorte.
+          Inclua aqui quem precisa de perfil <b>Total</b> ou um Gestor extra (empresas e/ou outros
+          departamentos). Quem não estiver em nenhuma das duas listas continua só com “Meu certificado”.
+        </p>
+        <div class="nsc-acesso-grid">
+          <div>
+            <div class="nsc-acesso-head">
+              <h3>Pessoas com acesso</h3>
+              <span class="nsc-muted">Gestores do departamento + inclusão manual</span>
+            </div>
+            <div class="table-card">
+              @if (visualizadoresCarregando()) {
+                <p class="nsc-muted">Carregando pessoas…</p>
+              } @else if (!visualizadores().length) {
+                <p class="nsc-muted empty">Nenhuma pessoa cadastrada ainda.</p>
+              } @else {
+                <table class="nsc-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Perfil</th>
+                      <th>Recorte</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (v of visualizadores(); track v.ad_object_id) {
+                      <tr>
+                        <td>
+                          <div class="u-nm">{{ v.nome || '—' }}</div>
+                          <div class="u-sub">{{ v.email || labelOrigem(v) }}</div>
+                        </td>
+                        <td>{{ labelPerfil(v.perfil) }}</td>
+                        <td>{{ labelRecorte(v) }}</td>
+                        <td class="nsc-actions">
+                          @if (v.origem !== 'departamento') {
+                            <button type="button" class="btn ghost sm" (click)="editarVisualizador(v)">Editar</button>
+                            <button type="button" class="btn ghost sm danger" (click)="removerVisualizador(v)">Remover</button>
+                          } @else {
+                            <span class="nsc-muted">Aba Departamentos</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+
+            <div class="nsc-acesso-head" style="margin-top: 22px">
+              <h3>Registro de acessos</h3>
+              <button type="button" class="link-btn" (click)="verLogCompleto()">Ver log completo</button>
+            </div>
+            <div class="table-card">
+              @if (!acessoLogs().length) {
+                <p class="nsc-muted empty">Nenhum acesso registrado ainda.</p>
+              } @else {
+                <table class="nsc-table">
+                  <tbody>
+                    @for (l of acessoLogs(); track l.id) {
+                      <tr>
+                        <td>{{ labelLog(l) }}</td>
+                        <td>{{ l.criado_em | date: 'dd/MM/yyyy HH:mm' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          </div>
+
+          <aside class="nsc-acesso-form">
+            <h3>{{ visualizadorForm().id ? 'Editar acesso' : 'Adicionar pessoa' }}</h3>
+            <label class="nsc-field-label">Colaborador</label>
+            <input
+              type="search"
+              placeholder="Buscar por nome, cargo ou e-mail"
+              [ngModel]="visualizadorBusca()"
+              (ngModelChange)="onVisualizadorBusca($event)"
+              [disabled]="!!visualizadorForm().id"
+            />
+            <p class="nsc-muted">Lista já sincronizada do diretório. Sem busca no Entra.</p>
+            @if (!visualizadorForm().id && visualizadorSugestoes().length) {
+              <ul class="nsc-sugestoes">
+                @for (s of visualizadorSugestoes(); track s.ad_object_id) {
+                  <li>
+                    <button type="button" (click)="escolherVisualizador(s)">
+                      <b>{{ s.nome }}</b>
+                      <span>{{ s.cargo || '—' }}{{ s.departamento ? ' · ' + s.departamento : '' }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+            @if (visualizadorForm().ad_object_id) {
+              <p class="nsc-muted">Selecionado: {{ visualizadorForm().nome }}</p>
+            }
+            <button type="button" class="link-btn" (click)="abrirPickerAcesso()">
+              Incluir várias pessoas
+            </button>
+
+            <label class="nsc-field-label">Perfil</label>
+            <label class="nsc-radio">
+              <input
+                type="radio"
+                name="perfil"
+                [checked]="visualizadorForm().perfil === 'total'"
+                (change)="definirPerfil('total')"
+              />
+              Total — vê todos os obrigatórios; baixar, exportar, lembrar e aprovar
+            </label>
+            <label class="nsc-radio">
+              <input
+                type="radio"
+                name="perfil"
+                [checked]="visualizadorForm().perfil === 'gestor'"
+                (change)="definirPerfil('gestor')"
+              />
+              Gestor — recorte por departamento e/ou empresa; baixar e lembrar
+            </label>
+
+            @if (visualizadorForm().perfil === 'gestor') {
+              <label class="nsc-field-label">Empresas</label>
+              <div class="nsc-chips">
+                @for (e of visualizadorForm().empresas; track e) {
+                  <button type="button" class="chip" (click)="removeEmpresaVisualizador(e)">{{ e }} ×</button>
+                }
+              </div>
+              <div class="nsc-depto-add">
+                <select
+                  [ngModel]="visualizadorEmpresaNova()"
+                  (ngModelChange)="visualizadorEmpresaNova.set($event)"
+                >
+                  <option value="">+ empresa</option>
+                  @for (e of empresasLista(); track e) {
+                    <option [value]="e">{{ e }}</option>
+                  }
+                </select>
+                <button type="button" class="btn ghost sm" (click)="addEmpresaVisualizador()">Incluir</button>
+              </div>
+
+              <label class="nsc-field-label">Departamentos</label>
+              <div class="nsc-chips">
+                @for (d of visualizadorForm().departamentos; track d) {
+                  <button type="button" class="chip" (click)="removeDeptoVisualizador(d)">{{ d }} ×</button>
+                }
+              </div>
+              <div class="nsc-depto-add">
+                <select
+                  [ngModel]="visualizadorDeptoNovo()"
+                  (ngModelChange)="visualizadorDeptoNovo.set($event)"
+                >
+                  <option value="">+ departamento</option>
+                  @for (d of departamentos(); track d) {
+                    <option [value]="d">{{ d }}</option>
+                  }
+                </select>
+                <button type="button" class="btn ghost sm" (click)="addDeptoVisualizador()">Incluir</button>
+              </div>
+            }
+
+            <p class="nsc-muted">
+              Os certificados contêm dados pessoais (LGPD). Conceda apenas o necessário — cada acesso
+              a PDF e cada exportação ficam registrados.
+            </p>
+            <div class="nsc-form-actions">
+              <button type="button" class="btn ghost" (click)="cancelarVisualizador()">Cancelar</button>
+              <button
+                type="button"
+                class="btn"
+                [disabled]="visualizadorSalvando()"
+                (click)="salvarVisualizador()"
+              >
+                {{ visualizadorSalvando() ? 'Salvando…' : visualizadorForm().id ? 'Salvar acesso' : 'Incluir pessoa' }}
+              </button>
+            </div>
+          </aside>
         </div>
       </div>
     }

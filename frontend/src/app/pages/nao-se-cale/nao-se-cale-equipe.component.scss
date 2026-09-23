@@ -1,0 +1,253 @@
+:host {
+  display: block;
+}
+
+.eq-scope {
+  font-size: 13px;
+  color: #5b5f72;
+  margin-bottom: 16px;
+}
+
+.eq-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.eq-kpi {
+  background: #fff;
+  border: 1px solid #e7e9f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.eq-kpi .n {
+  font-family: 'Sora', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.eq-kpi .l {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.eq-kpi .s {
+  font-size: 12px;
+  color: #8a8fa3;
+}
+
+.eq-kpi.ok .n { color: #1a7f47; }
+.eq-kpi.wait .n { color: #b5651a; }
+.eq-kpi.bad .n { color: #c0392b; }
+
+.eq-toolbar {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #e7e9f0;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.eq-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.eq-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  border: 1px solid #e7e9f0;
+  background: #fff;
+  border-radius: 999px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chip.on {
+  background: #eef3ff;
+  border-color: #1d54e6;
+  color: #1d54e6;
+  font-weight: 600;
+}
+
+.eq-table-wrap {
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e7e9f0;
+  border-radius: 14px;
+}
+
+.eq-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.eq-table th,
+.eq-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #eef0f5;
+  vertical-align: middle;
+}
+
+.eq-table th {
+  color: #8a8fa3;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.who {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.av {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #eef3ff;
+  color: #1d54e6;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex: 0 0 34px;
+}
+
+.nm { font-weight: 600; }
+.sub { color: #8a8fa3; font-size: 12px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.b-ok { background: #e6f7ee; color: #1a7f47; }
+.b-wait { background: #fff2e0; color: #b5651a; }
+.b-bad { background: #fdeaea; color: #c0392b; }
+.b-neutral { background: #eef0f5; color: #5b5f72; }
+
+.acts {
+  white-space: nowrap;
+}
+
+.icon-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.link {
+  border: 0;
+  background: none;
+  color: #1d54e6;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.eq-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #8a8fa3;
+}
+
+.pager { display: flex; gap: 8px; }
+
+.btn {
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: #1d54e6;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn.ghost {
+  background: #fff;
+  color: #18182b;
+  border: 1px solid #e7e9f0;
+}
+
+.btn.sm { height: 34px; padding: 0 12px; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+
+.muted { color: #8a8fa3; }
+.eq-erro { color: #c0392b; }
+
+.eq-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 18, 32, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+  padding: 20px;
+}
+
+.eq-modal-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px;
+  width: min(520px, 100%);
+}
+
+.eq-modal-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 960px) {
+  .eq-kpis,
+  .eq-toolbar {
+    grid-template-columns: 1fr;
+  }
+}

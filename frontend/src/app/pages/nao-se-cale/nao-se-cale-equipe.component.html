@@ -1,0 +1,176 @@
+<div class="eq-scope">
+  Aba restrita ao perfil <b>{{ acesso().grupo_nome || 'Não se Cale' }}</b>
+  · escopo: {{ acesso().label_escopo || 'definido no admin' }}
+</div>
+
+@if (kpis(); as k) {
+  <div class="eq-kpis">
+    <div class="eq-kpi">
+      <div class="n">{{ k.obrigatorios }}</div>
+      <div class="l">Obrigatórios</div>
+      <div class="s">{{ pctRegulares(k) }}% regulares</div>
+    </div>
+    <div class="eq-kpi ok">
+      <div class="n">{{ k.vigentes }}</div>
+      <div class="l">Vigentes</div>
+      <div class="s">regulares para eventos</div>
+    </div>
+    <div class="eq-kpi wait">
+      <div class="n">{{ k.a_vencer }}</div>
+      <div class="l">A vencer em 30 dias</div>
+      <div class="s">renovação próxima</div>
+    </div>
+    <div class="eq-kpi bad">
+      <div class="n">{{ k.vencidos }}</div>
+      <div class="l">Vencidos</div>
+      <div class="s">impedidos de atuar</div>
+    </div>
+    <div class="eq-kpi">
+      <div class="n">{{ k.sem_certificado }}</div>
+      <div class="l">Sem certificado</div>
+      <div class="s">nunca enviaram</div>
+    </div>
+  </div>
+}
+
+<div class="eq-toolbar">
+  <div class="field">
+    <label>Buscar colaborador</label>
+    <input
+      type="search"
+      placeholder="Nome ou cargo"
+      [ngModel]="busca()"
+      (ngModelChange)="onBusca($event)"
+    />
+  </div>
+  <div class="field">
+    <label>Departamento</label>
+    <select [ngModel]="departamento()" (ngModelChange)="onDepto($event)">
+      <option value="">Todos</option>
+      @for (d of departamentos(); track d) {
+        <option [value]="d">{{ d }}</option>
+      }
+    </select>
+  </div>
+  <div class="eq-actions">
+    @if (permissoes().lembrar) {
+      <button type="button" class="btn ghost" [disabled]="lembrando()" (click)="lembrar()">
+        {{ lembrando() ? 'Enviando…' : 'Lembrar pendentes e vencidos' }}
+      </button>
+    }
+    @if (permissoes().exportar) {
+      <button type="button" class="btn" [disabled]="exportando()" (click)="exportar()">
+        {{ exportando() ? 'Exportando…' : 'Exportar planilha' }}
+      </button>
+    }
+  </div>
+</div>
+
+<div class="eq-chips">
+  @for (c of chips(); track c.id || 'todos') {
+    <button type="button" class="chip" [class.on]="statusFiltro() === c.id" (click)="setStatus(c.id)">
+      {{ c.label }} {{ c.n }}
+    </button>
+  }
+</div>
+
+@if (carregando()) {
+  <p class="muted">Carregando certificados da equipe…</p>
+} @else if (erro()) {
+  <p class="eq-erro">{{ erro() }}</p>
+} @else {
+  <div class="eq-table-wrap">
+    <table class="eq-table">
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Departamento</th>
+          <th>Status</th>
+          <th>Validade</th>
+          <th>Último envio</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (c of paginaAtual(); track c.ad_object_id) {
+          <tr>
+            <td>
+              <div class="who">
+                <span class="av">{{ iniciais(c.nome) }}</span>
+                <div>
+                  <div class="nm">{{ c.nome }}</div>
+                  <div class="sub">{{ c.cargo || '—' }}</div>
+                </div>
+              </div>
+            </td>
+            <td>{{ c.departamento || '—' }}</td>
+            <td>
+              <span
+                class="badge"
+                [class.b-ok]="tone(c.status) === 'ok'"
+                [class.b-wait]="tone(c.status) === 'wait'"
+                [class.b-bad]="tone(c.status) === 'bad'"
+                [class.b-neutral]="tone(c.status) === 'neutral'"
+              >
+                {{ labelStatus(c.status) }}
+              </span>
+            </td>
+            <td>
+              <div>{{ formatDate(c.validade_efetiva) }}</div>
+              <div class="sub">{{ validadeSub(c) }}</div>
+            </td>
+            <td>{{ c.atualizado_em | date: 'dd/MM/yyyy' }}</td>
+            <td class="acts">
+              @if (permissoes().lembrar && (c.status === 'pendente' || c.status === 'vencido' || c.status === 'a_vencer')) {
+                <button type="button" class="icon-btn" title="Lembrar" (click)="lembrar(c.ad_object_id)">🔔</button>
+              }
+              @if (permissoes().baixar && c.arquivo_id) {
+                <button type="button" class="icon-btn" title="Baixar" (click)="baixar(c, true)">⬇</button>
+              }
+              <button type="button" class="link" (click)="abrirDetalhe(c)">Detalhes</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6" class="muted">Nenhum colaborador neste filtro.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <div class="eq-foot">
+    <span>Exibindo {{ paginaAtual().length }} de {{ totalFiltrado() }} colaboradores obrigatórios · ordenado por urgência</span>
+    <div class="pager">
+      <button type="button" class="btn ghost sm" [disabled]="pagina() <= 1" (click)="anterior()">Anterior</button>
+      <button type="button" class="btn ghost sm" [disabled]="pagina() >= totalPaginas()" (click)="proxima()">Próxima</button>
+    </div>
+  </div>
+}
+
+@if (detalheAberto() && detalhe(); as d) {
+  <div class="eq-modal" (click)="fecharDetalhe()">
+    <div class="eq-modal-card" (click)="$event.stopPropagation()">
+      <h3>{{ d.colaborador.nome }}</h3>
+      <p class="sub">{{ d.colaborador.cargo || '—' }} · {{ d.colaborador.departamento || '—' }}</p>
+      <p>
+        Status: <b>{{ labelStatus(d.colaborador.status) }}</b>
+        · validade {{ formatDate(d.colaborador.validade_efetiva) }}
+      </p>
+      <div class="eq-modal-acts">
+        @if (permissoes().baixar && d.vigente) {
+          <button type="button" class="btn ghost" (click)="baixar(d.colaborador, false)">Ver certificado</button>
+          <button type="button" class="btn ghost" (click)="baixar(d.colaborador, true)">Baixar</button>
+        }
+        @if (permissoes().aprovar && d.historico.some((h) => h.aprovacao === 'pendente')) {
+          <button type="button" class="btn" (click)="aprovar(d.historico.find((h) => h.aprovacao === 'pendente')!.id)">
+            Aprovar
+          </button>
+          <button type="button" class="btn ghost" (click)="rejeitar(d.historico.find((h) => h.aprovacao === 'pendente')!.id)">
+            Recusar
+          </button>
+        }
+        <button type="button" class="btn ghost" (click)="fecharDetalhe()">Fechar</button>
+      </div>
+    </div>
+  </div>
+}

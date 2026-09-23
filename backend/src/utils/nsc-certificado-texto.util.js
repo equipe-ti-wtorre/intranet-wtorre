@@ -49,36 +49,95 @@ function temMarcadoresOficiais(text) {
   );
 }
 
+const LETRAS_NOME = 'A-Za-zÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç';
+
+function palavraNomeValida(word) {
+  const w = String(word || '').trim();
+  if (!w) return false;
+  const n = normalizeText(w);
+  if (PARTICULAS.has(n)) return true;
+  if (n.length < 3 || n.length > 20) return false;
+  if (!/^[a-z]+$/.test(n) || !/[aeiou]/.test(n)) return false;
+  return (
+    new RegExp(`^[${LETRAS_NOME}]{3,20}$`).test(w) &&
+    (/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+$/.test(w) || /^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ]{3,20}$/.test(w))
+  );
+}
+
+function palavrasNomeValidas(text) {
+  return String(text || '')
+    .replace(new RegExp(`[^${LETRAS_NOME}\\s'-]`, 'g'), ' ')
+    .split(/\s+/)
+    .filter(palavraNomeValida);
+}
+
 function limparNome(raw) {
+  const palavras = palavrasNomeValidas(raw);
+  if (palavras.length >= 2) {
+    const nome = palavras.join(' ').replace(/^(que|o|a)\s+/i, '').trim();
+    if (nome.length >= 3 && nome.length <= 90) return nome;
+  }
   let nome = String(raw || '')
-    .replace(/[_.=•·\-–—;:,]+/g, ' ')
+    .replace(/[_.=•·\-–—;:,/\\]+/g, ' ')
     .replace(/[0-9].*$/g, ' ')
-    .replace(/[^A-Za-zÀ-ÿ\s'.-]/g, ' ')
+    .replace(new RegExp(`[^${LETRAS_NOME}\\s'-]`, 'g'), ' ')
     .replace(/\s+/g, ' ')
     .trim();
   nome = nome.replace(/^(que|o|a)\s+/i, '').trim();
   if (nome.length < 3 || nome.length > 90) return null;
-  if (!/[A-Za-zÀ-ÿ]{2,}/.test(nome)) return null;
-  return nome;
-}
-
-function extractNomeCabecalho(text) {
-  const before = String(text || '').split(/data\s*de\s*emiss/i)[0];
-  const compact = before.replace(/\s+/g, ' ').trim();
-  if (!compact || compact.length > 90) return null;
-  if (/certificamos|protocolo|curso de/i.test(compact)) return null;
-  return limparNome(compact);
-}
-
-function nomeParecePessoa(nome) {
-  if (!nome) return null;
-  if (/concluiu|certificamos|protocolo|curso|capacitac|nao se cale|univesp|procon/i.test(nome)) {
+  if (!new RegExp(`[${LETRAS_NOME}]{2,}`).test(nome)) return null;
+  if (!/^[A-Za-zÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç]+(?:\s+[A-Za-zÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç]+){1,5}$/.test(nome)) {
     return null;
   }
   return nome;
 }
 
-function extractNome(text) {
+function nomeParecePessoa(nome) {
+  if (!nome) return null;
+  if (
+    /concluiu|certificamos|protocolo|curso|capacitac|nao se cale|univesp|procon|microsoft|print|pdf|governo|secretaria|estabelecimento|custom|certificado/i.test(
+      nome
+    )
+  ) {
+    return null;
+  }
+  const tokens = tokenizeName(nome);
+  if (tokens.length < 2) return null;
+  if (tokens.length === 2 && /^(sao )?paulo$|janeiro|mulher|^leis$/.test(normalizeText(nome))) {
+    return null;
+  }
+  if (palavrasNomeValidas(nome).length < 2) return null;
+  return nome;
+}
+
+function extractNomeDoColaborador(text, nomeColaborador) {
+  const tokens = tokenizeName(nomeColaborador);
+  if (tokens.length < 2) return null;
+  const n = normalizeText(text);
+  const colab = normalizeText(nomeColaborador);
+  if (colab.length >= 6 && n.includes(colab)) return limparNome(nomeColaborador);
+  const significativos = tokens.filter((t) => t.length > 2);
+  if (significativos.length >= 2 && significativos.every((t) => n.includes(t))) {
+    return limparNome(nomeColaborador);
+  }
+  return null;
+}
+
+function extractNomeCabecalho(text) {
+  const before = String(text || '')
+    .split(/data\s*de\s*emiss/i)[0]
+    .split(/Microsoft\s*:/i)[0]
+    .split(/Print\s+To\s+PDF/i)[0];
+  const words = palavrasNomeValidas(before);
+  if (words.length < 2) return null;
+  for (let n = Math.min(5, words.length); n >= 2; n -= 1) {
+    const nome = nomeParecePessoa(words.slice(-n).join(' '));
+    if (nome) return nome;
+  }
+  return null;
+}
+
+function extractNome(text, nomeColaborador) {
   const raw = String(text || '').replace(/\s+/g, ' ');
   const padroes = [
     /certificamos\s*que[,.\s:_-]*(.+?)[,.\s]*concluiu/i,
@@ -91,7 +150,7 @@ function extractNome(text) {
     const nome = nomeParecePessoa(limparNome(m[1]));
     if (nome) return nome;
   }
-  return extractNomeCabecalho(text);
+  return extractNomeDoColaborador(raw, nomeColaborador) || extractNomeCabecalho(text);
 }
 
 function toIsoDateParts(dia, mes, ano) {
@@ -246,7 +305,7 @@ function validarTextoCertificado(text, nomeColaborador, opts = {}) {
     };
   }
 
-  const nome = extractNome(text);
+  const nome = extractNome(text, nomeColaborador);
   if (!nome) {
     return { ok: false, erro: 'Não foi possível ler o nome no certificado.' };
   }

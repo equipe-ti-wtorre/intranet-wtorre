@@ -14,6 +14,24 @@ export function formatarDataNsc(iso: string | null | undefined): string {
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
+export function toneStatusNsc(status: NscStatus): 'ok' | 'wait' | 'bad' | 'neutral' {
+  if (status === 'valido') return 'ok';
+  if (status === 'a_vencer' || status === 'aguardando_aprovacao') return 'wait';
+  if (status === 'vencido') return 'bad';
+  return 'neutral';
+}
+
+export function iniciaisNsc(nome: string | null | undefined): string {
+  const parts = String(nome || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return '—';
+  const a = parts[0][0] || '';
+  const b = (parts.length > 1 ? parts[parts.length - 1][0] : parts[0][1]) || '';
+  return `${a}${b}`.toUpperCase();
+}
+
 export function labelStatusNsc(status: NscStatus): string {
   const map: Record<NscStatus, string> = {
     valido: 'Válido',

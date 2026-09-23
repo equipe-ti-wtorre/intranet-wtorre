@@ -296,6 +296,63 @@ async function getUserManager(tenant, oid) {
   };
 }
 
+async function searchGroups(tenant, query, top = 15) {
+  const q = String(query || '').trim();
+  if (!tenant || q.length < 2) return [];
+  const token = await getAppToken(tenant);
+  const escaped = q.replace(/'/g, "''");
+  const url =
+    `https://graph.microsoft.com/v1.0/groups?$top=${Math.min(Number(top) || 15, 25)}` +
+    `&$select=id,displayName,description` +
+    `&$filter=startswith(displayName,'${escaped}')`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const error = new Error(err.error?.message || 'Falha ao buscar grupos no Graph');
+    error.status = res.status;
+    throw error;
+  }
+  const data = await res.json();
+  return (data.value || []).map((g) => ({
+    id: g.id,
+    nome: g.displayName || '',
+    descricao: g.description || null,
+  }));
+}
+
+async function checkMemberGroups(tenant, userOid, groupIds) {
+  const ids = [...new Set((groupIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!tenant || !userOid || !ids.length) return [];
+  const token = await getAppToken(tenant);
+  const found = [];
+  for (let i = 0; i < ids.length; i += 20) {
+    const chunk = ids.slice(i, i + 20);
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userOid)}/checkMemberGroups`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ groupIds: chunk }),
+      }
+    );
+    if (res.status === 404) continue;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const error = new Error(err.error?.message || 'Falha ao verificar grupos do usuário no Graph');
+      error.status = res.status;
+      throw error;
+    }
+    const data = await res.json();
+    for (const id of data.value || []) found.push(id);
+  }
+  return found;
+}
+
 async function updateUser(tenant, adId, patch) {
   if (!adId || !patch || !Object.keys(patch).length) {
     throw new Error('Nada para atualizar no Graph.');
@@ -331,6 +388,8 @@ module.exports = {
   listAllUsers,
   fetchMailboxUserPurposes,
   getUserManager,
+  searchGroups,
+  checkMemberGroups,
   updateUser,
   normalizeShareUrl,
   encodeShareUrl,

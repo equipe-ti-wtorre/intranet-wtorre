@@ -18,6 +18,9 @@ import {
   NscAprovacaoItem,
   NscAprovacaoStatus,
   NscValidacao,
+  NscEquipeResposta,
+  NscVisualizador,
+  NscAcessoLog,
 } from '../models/nsc.model';
 
 @Injectable({ providedIn: 'root' })
@@ -75,12 +78,14 @@ export class NscService {
   listarColaboradores(filtros: {
     busca?: string;
     departamento?: string;
+    empresa?: string;
     status?: NscStatus | '';
     somente_obrigatorios?: boolean;
   }): Observable<NscColaboradoresResposta> {
     let params = new HttpParams();
     if (filtros.busca) params = params.set('busca', filtros.busca);
     if (filtros.departamento) params = params.set('departamento', filtros.departamento);
+    if (filtros.empresa) params = params.set('empresa', filtros.empresa);
     if (filtros.status) params = params.set('status', filtros.status);
     if (filtros.somente_obrigatorios) params = params.set('somente_obrigatorios', '1');
     return this.http.get<NscColaboradoresResposta>(this.api('/admin/colaboradores'), { params });
@@ -214,6 +219,94 @@ export class NscService {
     if (filtros.busca) params = params.set('busca', filtros.busca);
     return this.http.get<{ notificacoes: NscNotificacaoLog[] }>(this.api('/admin/notificacoes'), {
       params,
+    });
+  }
+
+  listarEquipe(filtros: {
+    busca?: string;
+    departamento?: string;
+    status?: NscStatus | '';
+  } = {}): Observable<NscEquipeResposta> {
+    let params = new HttpParams();
+    if (filtros.busca) params = params.set('busca', filtros.busca);
+    if (filtros.departamento) params = params.set('departamento', filtros.departamento);
+    if (filtros.status) params = params.set('status', filtros.status);
+    return this.http.get<NscEquipeResposta>(this.api('/equipe'), { params });
+  }
+
+  detalheEquipe(adObjectId: string): Observable<NscCertificadoDetalhe> {
+    return this.http.get<NscCertificadoDetalhe>(
+      this.api(`/equipe/${encodeURIComponent(adObjectId)}`)
+    );
+  }
+
+  urlCertificadoEquipe(adObjectId: string, download = false, envioId?: number): string {
+    const params = new URLSearchParams();
+    if (download) params.set('download', '1');
+    if (envioId) params.set('envioId', String(envioId));
+    return this.api(`/equipe/${encodeURIComponent(adObjectId)}/certificado?${params}`);
+  }
+
+  baixarEquipe(adObjectId: string, download = false, envioId?: number): Observable<Blob> {
+    return this.http.get(this.urlCertificadoEquipe(adObjectId, download, envioId), {
+      responseType: 'blob',
+    });
+  }
+
+  exportarEquipeXlsx(departamento?: string): Observable<Blob> {
+    let params = new HttpParams();
+    if (departamento) params = params.set('departamento', departamento);
+    return this.http.get(this.api('/equipe/relatorio.xlsx'), { params, responseType: 'blob' });
+  }
+
+  lembrarEquipe(body: {
+    ad_object_id?: string;
+    busca?: string;
+    departamento?: string;
+    status?: string;
+  } = {}): Observable<{ enviados: number; ignorados: number; avaliados: number }> {
+    return this.http.post<{ enviados: number; ignorados: number; avaliados: number }>(
+      this.api('/equipe/lembretes'),
+      body
+    );
+  }
+
+  aprovarEquipe(envioId: number, motivo: string): Observable<NscAprovacaoItem> {
+    return this.http.post<NscAprovacaoItem>(this.api(`/equipe/aprovacoes/${envioId}/aprovar`), {
+      motivo,
+    });
+  }
+
+  rejeitarEquipe(envioId: number, motivo: string): Observable<NscAprovacaoItem> {
+    return this.http.post<NscAprovacaoItem>(this.api(`/equipe/aprovacoes/${envioId}/rejeitar`), {
+      motivo,
+    });
+  }
+
+  listarVisualizadores(): Observable<{ visualizadores: NscVisualizador[] }> {
+    return this.http.get<{ visualizadores: NscVisualizador[] }>(this.api('/admin/visualizadores'));
+  }
+
+  criarVisualizador(
+    body: Partial<NscVisualizador> & { ad_object_ids?: string[] }
+  ): Observable<NscVisualizador | { visualizadores: NscVisualizador[] }> {
+    return this.http.post<NscVisualizador | { visualizadores: NscVisualizador[] }>(
+      this.api('/admin/visualizadores'),
+      body
+    );
+  }
+
+  atualizarVisualizador(id: number, body: Partial<NscVisualizador>): Observable<NscVisualizador> {
+    return this.http.patch<NscVisualizador>(this.api(`/admin/visualizadores/${id}`), body);
+  }
+
+  removerVisualizador(id: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(this.api(`/admin/visualizadores/${id}`));
+  }
+
+  listarAcessoLog(limite = 80): Observable<{ logs: NscAcessoLog[] }> {
+    return this.http.get<{ logs: NscAcessoLog[] }>(this.api('/admin/acesso-log'), {
+      params: new HttpParams().set('limite', String(limite)),
     });
   }
 

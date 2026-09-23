@@ -2,19 +2,27 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { NscMeu, NscStatus, NscValidacao } from '../../models/nsc.model';
+import { NscAcesso, NscMeu, NscStatus, NscValidacao } from '../../models/nsc.model';
 import { AlertasService } from '../../services/alertas.service';
 import { NscService } from '../../services/nsc.service';
 import { AdminDropzoneComponent } from '../../shared/admin/admin-dropzone/admin-dropzone.component';
 import { FooterComponent } from '../../shared/footer/footer.component';
 import { PublicChromeComponent } from '../../shared/public-chrome/public-chrome.component';
+import { NaoSeCaleEquipeComponent } from './nao-se-cale-equipe.component';
 
 type HeroTone = 'ok' | 'wait' | 'bad' | 'neutral';
 
 @Component({
   selector: 'app-nao-se-cale',
   standalone: true,
-  imports: [PublicChromeComponent, FooterComponent, FormsModule, DatePipe, AdminDropzoneComponent],
+  imports: [
+    PublicChromeComponent,
+    FooterComponent,
+    FormsModule,
+    DatePipe,
+    AdminDropzoneComponent,
+    NaoSeCaleEquipeComponent,
+  ],
   templateUrl: './nao-se-cale.component.html',
   styleUrl: './nao-se-cale.component.scss',
 })
@@ -26,6 +34,8 @@ export class NaoSeCaleComponent implements OnInit, OnDestroy {
   readonly carregando = signal(true);
   readonly enviando = signal(false);
   readonly erro = signal('');
+  readonly acesso = signal<NscAcesso | null>(null);
+  readonly aba = signal<'meu' | 'equipe'>('meu');
   readonly dados = signal<NscMeu | null>(null);
   readonly arquivo = signal<File | null>(null);
   readonly validadeManual = signal('');
@@ -51,11 +61,26 @@ export class NaoSeCaleComponent implements OnInit, OnDestroy {
   carregar(): void {
     this.carregando.set(true);
     this.erro.set('');
-    this.api.meu().subscribe({
-      next: (res) => {
-        this.dados.set(res);
-        this.validadeManual.set(res.validade_manual || '');
-        this.carregando.set(false);
+    this.api.podeVisualizar().subscribe({
+      next: (acesso) => {
+        this.acesso.set(acesso);
+        this.api.meu().subscribe({
+          next: (res) => {
+            this.dados.set(res);
+            this.validadeManual.set(res.validade_manual || '');
+            this.carregando.set(false);
+          },
+          error: (err: HttpErrorResponse) => {
+            if (acesso.pode_ver_equipe && err.status === 404) {
+              this.dados.set(null);
+              this.aba.set('equipe');
+              this.carregando.set(false);
+              return;
+            }
+            this.erro.set(err.error?.mensagem || 'Não foi possível carregar seu certificado.');
+            this.carregando.set(false);
+          },
+        });
       },
       error: (err: HttpErrorResponse) => {
         this.erro.set(err.error?.mensagem || 'Não foi possível carregar seu certificado.');

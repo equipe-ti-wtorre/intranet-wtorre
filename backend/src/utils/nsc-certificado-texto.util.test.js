@@ -103,6 +103,32 @@ describe('nsc-certificado-texto', () => {
     assert.match(outro.erro, /não coincide/);
   });
 
+  it('lê o nome no PDF impresso (Print to PDF) com slot vazio', () => {
+    const impresso = `
+      Mauricio Stade Izidoro Microsoft: Print To PDF Custom Certificado
+      Certificamos que, , concluiu o Curso de Capacitação do Protocolo "Não se Cale",
+      com a carga horária de 15h, promovido pelo Governo do Estado de São Paulo,
+      destinado a combater a violência contra a mulher nos estabelecimentos
+      regulamentados pelas Leis nº 17.621 e 17.635, de 2023.
+      UNIVESP PROCON SP Secretaria da Mulher
+    `;
+    assert.equal(extractNome(impresso), 'Mauricio Stade Izidoro');
+    assert.equal(extractNome(impresso, 'Mauricio Stade Izidoro'), 'Mauricio Stade Izidoro');
+    const r = validarTextoCertificado(impresso, 'Mauricio Stade Izidoro');
+    assert.equal(r.nome, 'Mauricio Stade Izidoro');
+    assert.equal(r.nome_confere, true);
+    assert.match(r.erro, /data de emissão/);
+  });
+
+  it('ignora lixo binário do PDF e fica só com o nome', () => {
+    const sujo = `
+      IrqMXElýh Át/ED ü çñ i à8 Îë ÕGåH . =ü Mauricio Stade Izidoro Microsoft: Print To PDF
+      Certificamos que, , concluiu o Curso de Capacitação do Protocolo "Não se Cale"
+      Leis nº 17.621 e 17.635 UNIVESP
+    `;
+    assert.equal(extractNome(sujo), 'Mauricio Stade Izidoro');
+  });
+
   it('devolve o nome quando só a data de emissão falta', () => {
     const semData = `
       CERTIFICADO

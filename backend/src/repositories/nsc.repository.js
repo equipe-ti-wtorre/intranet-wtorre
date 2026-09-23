@@ -210,6 +210,16 @@ async function listGestores() {
   return rows.map(mapGestor);
 }
 
+async function listDepartamentosDoGestor(adObjectId) {
+  if (!adObjectId) return [];
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT departamento_ou FROM nsc_departamento_gestor WHERE ad_object_id = ? ORDER BY departamento_ou ASC',
+    [adObjectId]
+  );
+  return rows.map((r) => String(r.departamento_ou || '').trim()).filter(Boolean);
+}
+
 async function listGestoresPorDepartamento(departamentoOu) {
   if (!departamentoOu) return [];
   const pool = getPool();
@@ -274,7 +284,7 @@ async function limparOverrideNegativoPorDepartamento(departamentoOu) {
   return result.affectedRows || 0;
 }
 
-async function listJoinColaboradores({ busca, departamento } = {}) {
+async function listJoinColaboradores({ busca, departamento, empresa } = {}) {
   const pool = getPool();
   const conditions = ['c.ativo = 1'];
   const values = [];
@@ -283,15 +293,23 @@ async function listJoinColaboradores({ busca, departamento } = {}) {
     conditions.push('c.departamento = ?');
     values.push(departamento);
   }
+  if (empresa === 'Sem empresa') {
+    conditions.push("(c.empresa IS NULL OR TRIM(c.empresa) = '')");
+  } else if (empresa) {
+    conditions.push('c.empresa = ?');
+    values.push(empresa);
+  }
   if (busca) {
     const like = `%${busca}%`;
-    conditions.push('(c.nome LIKE ? OR c.email LIKE ? OR c.cargo LIKE ? OR c.departamento LIKE ?)');
-    values.push(like, like, like, like);
+    conditions.push(
+      '(c.nome LIKE ? OR c.email LIKE ? OR c.cargo LIKE ? OR c.departamento LIKE ? OR c.empresa LIKE ?)'
+    );
+    values.push(like, like, like, like, like);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
   const [rows] = await pool.execute(
-    `SELECT c.ad_id, c.nome, c.cargo, c.departamento, c.email, c.tenant_id, c.sincronizado_em,
+    `SELECT c.ad_id, c.nome, c.cargo, c.departamento, c.empresa, c.email, c.tenant_id, c.sincronizado_em,
             cert.id AS cert_id, cert.sam_account_name, cert.obrigatorio_override,
             cert.arquivo_id, cert.data_emissao, cert.validade_manual, cert.atualizado_em,
             r.obrigatorio AS regra_obrigatorio
@@ -309,6 +327,7 @@ async function listJoinColaboradores({ busca, departamento } = {}) {
       nome: row.nome,
       cargo: row.cargo,
       departamento: row.departamento,
+      empresa: row.empresa || null,
       email: row.email,
       tenant_id: row.tenant_id,
       sincronizado_em: row.sincronizado_em,
@@ -332,7 +351,7 @@ async function listJoinColaboradores({ busca, departamento } = {}) {
 async function findJoinByAdId(adObjectId) {
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT c.ad_id, c.nome, c.cargo, c.departamento, c.email, c.tenant_id, c.sincronizado_em,
+    `SELECT c.ad_id, c.nome, c.cargo, c.departamento, c.empresa, c.email, c.tenant_id, c.sincronizado_em,
             cert.id AS cert_id, cert.sam_account_name, cert.obrigatorio_override,
             cert.arquivo_id, cert.data_emissao, cert.validade_manual, cert.atualizado_em,
             r.obrigatorio AS regra_obrigatorio
@@ -351,6 +370,7 @@ async function findJoinByAdId(adObjectId) {
       nome: row.nome,
       cargo: row.cargo,
       departamento: row.departamento,
+      empresa: row.empresa || null,
       email: row.email,
       tenant_id: row.tenant_id,
       sincronizado_em: row.sincronizado_em,
@@ -684,6 +704,241 @@ async function listarNotificacoes({ tipo, status, busca, limite } = {}) {
   return rows.map(mapNotificacao);
 }
 
+function parseDepartamentosJson(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map((d) => String(d || '').trim()).filter(Boolean);
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((d) => String(d || '').trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function mapAcessoUsuario(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    ad_object_id: row.ad_object_id,
+    nome: row.nome || null,
+    email: row.email || null,
+    perfil: row.perfil === 'gestor' ? 'gestor' : 'total',
+    departamentos: parseDepartamentosJson(row.departamentos_json),
+    empresas: parseDepartamentosJson(row.empresas_json),
+    criado_em: row.criado_em || null,
+    atualizado_em: row.atualizado_em || null,
+  };
+}
+
+function mapAcessoGrupo(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    grupo_ad_id: row.grupo_ad_id,
+    grupo_nome: row.grupo_nome,
+    grupo_descricao: row.grupo_descricao || null,
+    escopo: row.escopo || 'global',
+    departamentos: parseDepartamentosJson(row.departamentos_json),
+    pode_baixar: !!row.pode_baixar,
+    pode_exportar: !!row.pode_exportar,
+    pode_lembrar: !!row.pode_lembrar,
+    pode_aprovar: !!row.pode_aprovar,
+    criado_em: row.criado_em || null,
+    atualizado_em: row.atualizado_em || null,
+  };
+}
+
+function mapAcessoLog(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    usuario_id: row.usuario_id ?? null,
+    usuario_email: row.usuario_email || null,
+    usuario_nome: row.usuario_nome || null,
+    acao: row.acao,
+    alvo_ad_object_id: row.alvo_ad_object_id || null,
+    alvo_nome: row.alvo_nome || null,
+    detalhe: row.detalhe || null,
+    criado_em: row.criado_em || null,
+  };
+}
+
+async function listAcessoGrupos() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM nsc_acesso_grupo ORDER BY grupo_nome ASC, id ASC'
+  );
+  return rows.map(mapAcessoGrupo);
+}
+
+async function findAcessoGrupoById(id) {
+  const pool = getPool();
+  const [rows] = await pool.execute('SELECT * FROM nsc_acesso_grupo WHERE id = ? LIMIT 1', [id]);
+  return mapAcessoGrupo(rows[0]);
+}
+
+async function upsertAcessoGrupo(data) {
+  const pool = getPool();
+  const departamentosJson = JSON.stringify(data.departamentos || []);
+  if (data.id) {
+    await pool.execute(
+      `UPDATE nsc_acesso_grupo
+       SET grupo_ad_id = ?, grupo_nome = ?, grupo_descricao = ?, escopo = ?,
+           departamentos_json = ?, pode_baixar = ?, pode_exportar = ?,
+           pode_lembrar = ?, pode_aprovar = ?
+       WHERE id = ?`,
+      [
+        data.grupo_ad_id,
+        data.grupo_nome,
+        data.grupo_descricao || null,
+        data.escopo,
+        departamentosJson,
+        data.pode_baixar ? 1 : 0,
+        data.pode_exportar ? 1 : 0,
+        data.pode_lembrar ? 1 : 0,
+        data.pode_aprovar ? 1 : 0,
+        data.id,
+      ]
+    );
+    return findAcessoGrupoById(data.id);
+  }
+  const [result] = await pool.execute(
+    `INSERT INTO nsc_acesso_grupo (
+       grupo_ad_id, grupo_nome, grupo_descricao, escopo, departamentos_json,
+       pode_baixar, pode_exportar, pode_lembrar, pode_aprovar
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.grupo_ad_id,
+      data.grupo_nome,
+      data.grupo_descricao || null,
+      data.escopo,
+      departamentosJson,
+      data.pode_baixar ? 1 : 0,
+      data.pode_exportar ? 1 : 0,
+      data.pode_lembrar ? 1 : 0,
+      data.pode_aprovar ? 1 : 0,
+    ]
+  );
+  return findAcessoGrupoById(result.insertId);
+}
+
+async function deleteAcessoGrupo(id) {
+  const pool = getPool();
+  await pool.execute('DELETE FROM nsc_acesso_grupo WHERE id = ?', [id]);
+}
+
+async function listAcessoUsuarios() {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM nsc_acesso_usuario ORDER BY nome ASC, id ASC'
+  );
+  return rows.map(mapAcessoUsuario);
+}
+
+async function findAcessoUsuarioById(id) {
+  const pool = getPool();
+  const [rows] = await pool.execute('SELECT * FROM nsc_acesso_usuario WHERE id = ? LIMIT 1', [id]);
+  return mapAcessoUsuario(rows[0]);
+}
+
+async function findAcessoUsuarioByAdId(adObjectId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    'SELECT * FROM nsc_acesso_usuario WHERE ad_object_id = ? LIMIT 1',
+    [adObjectId]
+  );
+  return mapAcessoUsuario(rows[0]);
+}
+
+async function upsertAcessoUsuario(data) {
+  const pool = getPool();
+  const departamentosJson = JSON.stringify(data.departamentos || []);
+  const empresasJson = JSON.stringify(data.empresas || []);
+  if (data.id) {
+    await pool.execute(
+      `UPDATE nsc_acesso_usuario
+       SET ad_object_id = ?, nome = ?, email = ?, perfil = ?,
+           departamentos_json = ?, empresas_json = ?
+       WHERE id = ?`,
+      [
+        data.ad_object_id,
+        data.nome || null,
+        data.email || null,
+        data.perfil,
+        departamentosJson,
+        empresasJson,
+        data.id,
+      ]
+    );
+    return findAcessoUsuarioById(data.id);
+  }
+  const existing = await findAcessoUsuarioByAdId(data.ad_object_id);
+  if (existing) {
+    await pool.execute(
+      `UPDATE nsc_acesso_usuario
+       SET nome = ?, email = ?, perfil = ?, departamentos_json = ?, empresas_json = ?
+       WHERE id = ?`,
+      [
+        data.nome || existing.nome,
+        data.email || existing.email,
+        data.perfil,
+        departamentosJson,
+        empresasJson,
+        existing.id,
+      ]
+    );
+    return findAcessoUsuarioById(existing.id);
+  }
+  const [result] = await pool.execute(
+    `INSERT INTO nsc_acesso_usuario (
+       ad_object_id, nome, email, perfil, departamentos_json, empresas_json
+     ) VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      data.ad_object_id,
+      data.nome || null,
+      data.email || null,
+      data.perfil,
+      departamentosJson,
+      empresasJson,
+    ]
+  );
+  return findAcessoUsuarioById(result.insertId);
+}
+
+async function deleteAcessoUsuario(id) {
+  const pool = getPool();
+  await pool.execute('DELETE FROM nsc_acesso_usuario WHERE id = ?', [id]);
+}
+
+async function registrarAcessoLog(data) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO nsc_acesso_log (
+       usuario_id, usuario_email, usuario_nome, acao,
+       alvo_ad_object_id, alvo_nome, detalhe
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.usuarioId || null,
+      data.usuarioEmail || null,
+      data.usuarioNome || null,
+      data.acao,
+      data.alvoAdObjectId || null,
+      data.alvoNome || null,
+      data.detalhe || null,
+    ]
+  );
+}
+
+async function listarAcessoLog({ limite } = {}) {
+  const pool = getPool();
+  const limit = Number.isInteger(limite) && limite > 0 && limite <= 500 ? limite : 80;
+  const [rows] = await pool.execute(
+    `SELECT * FROM nsc_acesso_log ORDER BY criado_em DESC, id DESC LIMIT ${limit}`
+  );
+  return rows.map(mapAcessoLog);
+}
+
 module.exports = {
   getConfig,
   saveConfig,
@@ -694,6 +949,7 @@ module.exports = {
   upsertRegra,
   limparOverrideNegativoPorDepartamento,
   listGestores,
+  listDepartamentosDoGestor,
   listGestoresPorDepartamento,
   substituirGestores,
   listJoinColaboradores,
@@ -714,6 +970,17 @@ module.exports = {
   jaEnviouDesde,
   registrarNotificacao,
   listarNotificacoes,
+  listAcessoGrupos,
+  findAcessoGrupoById,
+  upsertAcessoGrupo,
+  deleteAcessoGrupo,
+  listAcessoUsuarios,
+  findAcessoUsuarioById,
+  findAcessoUsuarioByAdId,
+  upsertAcessoUsuario,
+  deleteAcessoUsuario,
+  registrarAcessoLog,
+  listarAcessoLog,
   mapConfig,
   mapCertificacao,
   mapEnvio,

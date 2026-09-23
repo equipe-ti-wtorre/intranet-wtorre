@@ -1,8 +1,9 @@
 const fs = require('fs');
 const nscService = require('../services/nsc.service');
 const nscAcesso = require('../services/nsc-acesso.service');
-const graphService = require('../services/graph.service');
-const tenantsRepo = require('../repositories/tenants.repository');
+const nscPermissao = require('../services/nsc-permissao.service');
+const nscNotificacoes = require('../services/nsc-notificacoes.service');
+const nscRepo = require('../repositories/nsc.repository');
 const auditRepo = require('../repositories/auditLog.repository');
 const { sanitizeFilename } = require('../config/nsc-upload');
 
@@ -55,11 +56,16 @@ function streamEnvio(res, envio, filePath, download) {
 
 async function acesso(req, res) {
   try {
-    const pode = await nscAcesso.usuarioPodeVisualizar(req.user, req.userModulos || []);
-    return res.json({ pode_visualizar: pode });
+    return res.json(await nscPermissao.resolverAcesso(req.user, req.userModulos || []));
   } catch (err) {
     return handleError(res, err);
   }
+}
+
+async function acessoEquipe(req, flag) {
+  const acesso = await nscPermissao.resolverAcesso(req.user, req.userModulos || []);
+  nscPermissao.exigirPermissao(acesso, flag);
+  return acesso;
 }
 
 async function exigirVisualizacao(req, res, next) {
@@ -158,35 +164,199 @@ async function meuCertificado(req, res) {
   }
 }
 
+async function listarEquipe(req, res) {
+  try {
+    const acesso = await acessoEquipe(req);
+    return res.json(await nscService.listarEquipe(req.query, acesso));
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function detalheEquipe(req, res) {
+  try {
+    const acesso = await acessoEquipe(req);
+    const snap = await nscService.resolverPorAdId(req.params.adObjectId);
+    if (!snap || !nscPermissao.colaboradorNoEscopo(snap, acesso)) {
+      return res.status(404).json({ mensagem: 'Colaborador não encontrado no seu escopo.' });
+    }
+    return res.json(await nscService.detalheCertificado(req.params.adObjectId));
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
 async function equipeCertificado(req, res) {
   try {
+    const acesso = await acessoEquipe(req, 'baixar');
     const adObjectId = req.params.adObjectId;
-    if (!req.user?.microsoft_id) {
-      return res.status(403).json({ mensagem: 'Acesso restrito ao gestor direto.' });
-    }
     const snap = await nscService.resolverPorAdId(adObjectId);
-    if (!snap) {
-      return res.status(404).json({ mensagem: 'Colaborador não encontrado.' });
-    }
-    if (!snap.tenant_id) {
-      return res.status(403).json({ mensagem: 'Não foi possível validar o vínculo de gestão.' });
-    }
-    const tenant = await tenantsRepo.findById(snap.tenant_id);
-    const manager = tenant
-      ? await graphService.getUserManager(tenant, adObjectId)
-      : null;
-    const isGestor =
-      manager?.ad_id &&
-      String(manager.ad_id).toLowerCase() === String(req.user.microsoft_id).toLowerCase();
-    if (!isGestor) {
-      return res.status(403).json({ mensagem: 'Acesso restrito ao gestor direto.' });
+    if (!snap || !nscPermissao.colaboradorNoEscopo(snap, acesso)) {
+      return res.status(404).json({ mensagem: 'Colaborador não encontrado no seu escopo.' });
     }
     const envio = await nscService.obterEnvioParaServir(adObjectId, req.query.envioId);
+    await nscPermissao.registrarLog(req.user, req.query.download === '1' ? 'baixou' : 'visualizou', {
+      alvoAdObjectId: adObjectId,
+      alvoNome: snap.nome,
+      detalhe: envio?.nome_arquivo || null,
+    });
     if (req.query.miniatura === '1') {
       return streamMiniatura(res, envio);
     }
     const filePath = nscService.caminhoAbsoluto(envio);
     return streamEnvio(res, envio, filePath, req.query.download === '1');
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function exportarEquipeXlsx(req, res) {
+  try {
+    const acesso = await acessoEquipe(req, 'exportar');
+    const { buffer, filename } = await nscService.exportarEquipeXlsx(req.query, acesso);
+    await nscPermissao.registrarLog(req.user, 'exportou', {
+      detalhe: filename,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function lembrarEquipe(req, res) {
+  try {
+    const acesso = await acessoEquipe(req, 'lembrar');
+    const body = req.body || {};
+    const dados = await nscService.listarEquipe(
+      {
+        busca: body.busca,
+        departamento: body.departamento,
+        status: body.status,
+      },
+      acesso
+    );
+    let alvo = dados.colaboradores.filter((c) =>
+      ['pendente', 'a_vencer', 'vencido'].includes(c.status)
+    );
+    const um = String(body.ad_object_id || '').trim();
+    if (um) {
+      alvo = alvo.filter((c) => String(c.ad_object_id).toLowerCase() === um.toLowerCase());
+      if (!alvo.length) {
+        return res.status(404).json({ mensagem: 'Colaborador fora do escopo ou sem pendência.' });
+      }
+    }
+    const result = await nscNotificacoes.enviarLembretesManuais(alvo);
+    await nscPermissao.registrarLog(req.user, 'lembrou', {
+      alvoAdObjectId: um || null,
+      alvoNome: alvo.length === 1 ? alvo[0].nome : null,
+      detalhe: `${result.enviados} lembrete(s)`,
+    });
+    return res.json(result);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function assertEnvioNoEscopo(envioId, acesso) {
+  const atual = await nscRepo.findEnvioById(Number(envioId));
+  if (!atual) {
+    const err = new Error('Envio não encontrado.');
+    err.status = 404;
+    throw err;
+  }
+  const snap = await nscService.resolverPorAdId(atual.ad_object_id);
+  if (!snap || !nscPermissao.colaboradorNoEscopo(snap, acesso)) {
+    const err = new Error('Colaborador fora do seu escopo.');
+    err.status = 403;
+    throw err;
+  }
+  return atual;
+}
+
+async function aprovarEquipe(req, res) {
+  try {
+    const acesso = await acessoEquipe(req, 'aprovar');
+    await assertEnvioNoEscopo(req.params.envioId, acesso);
+    const envio = await nscService.aprovarCertificado(
+      req.params.envioId,
+      req.body || {},
+      req.user
+    );
+    await auditRepo.log({ ...auditMeta(req), action: 'NSC_APROVAR_CERTIFICADO' });
+    return res.json(envio);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function rejeitarEquipe(req, res) {
+  try {
+    const acesso = await acessoEquipe(req, 'aprovar');
+    await assertEnvioNoEscopo(req.params.envioId, acesso);
+    const envio = await nscService.rejeitarCertificado(
+      req.params.envioId,
+      req.body || {},
+      req.user
+    );
+    await auditRepo.log({ ...auditMeta(req), action: 'NSC_REJEITAR_CERTIFICADO' });
+    return res.json(envio);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function listarVisualizadores(req, res) {
+  try {
+    return res.json({ visualizadores: await nscService.listarVisualizadores() });
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function criarVisualizador(req, res) {
+  try {
+    const body = req.body || {};
+    if (Array.isArray(body.ad_object_ids)) {
+      const visualizadores = await nscService.salvarVisualizadoresLote(body);
+      await auditRepo.log({ ...auditMeta(req), action: 'NSC_ACESSO_VISUALIZADOR' });
+      return res.status(201).json({ visualizadores });
+    }
+    const visualizador = await nscService.salvarVisualizador(body);
+    await auditRepo.log({ ...auditMeta(req), action: 'NSC_ACESSO_VISUALIZADOR' });
+    return res.status(201).json(visualizador);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function atualizarVisualizador(req, res) {
+  try {
+    const visualizador = await nscService.salvarVisualizador(req.body || {}, Number(req.params.id));
+    await auditRepo.log({ ...auditMeta(req), action: 'NSC_ACESSO_VISUALIZADOR' });
+    return res.json(visualizador);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function removerVisualizador(req, res) {
+  try {
+    await nscService.removerVisualizador(Number(req.params.id));
+    await auditRepo.log({ ...auditMeta(req), action: 'NSC_ACESSO_VISUALIZADOR_REMOVER' });
+    return res.json({ ok: true });
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
+async function listarAcessoLog(req, res) {
+  try {
+    return res.json({ logs: await nscService.listarAcessoLog(req.query) });
   } catch (err) {
     return handleError(res, err);
   }
@@ -391,4 +561,15 @@ module.exports = {
   listarAprovacoes,
   aprovar,
   rejeitar,
+  listarEquipe,
+  detalheEquipe,
+  exportarEquipeXlsx,
+  lembrarEquipe,
+  aprovarEquipe,
+  rejeitarEquipe,
+  listarVisualizadores,
+  criarVisualizador,
+  atualizarVisualizador,
+  removerVisualizador,
+  listarAcessoLog,
 };

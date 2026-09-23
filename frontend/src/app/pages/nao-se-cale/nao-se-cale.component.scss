@@ -31,6 +31,34 @@
   padding-block: 22px 70px;
 }
 
+.nsc-page.wide {
+  max-width: 1180px;
+}
+
+.nsc-tabs {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+
+.nsc-tab {
+  border: 0;
+  background: none;
+  padding: 0 0 10px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.nsc-tab.on {
+  color: var(--wtorre);
+  border-bottom-color: var(--wtorre);
+}
+
 .page-head {
   margin-bottom: 22px;
 }

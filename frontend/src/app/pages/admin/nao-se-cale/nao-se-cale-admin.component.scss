@@ -157,6 +157,7 @@
 }
 
 .nsc-admin .toolbar input[type='text'],
+.nsc-admin .toolbar input[type='search'],
 .nsc-admin .toolbar select {
   height: 40px;
   border: 1px solid var(--line);
@@ -167,7 +168,8 @@
   background: #fff;
 }
 
-.nsc-admin .toolbar input[type='text'] {
+.nsc-admin .toolbar input[type='text'],
+.nsc-admin .toolbar input[type='search'] {
   flex: 1;
   min-width: 200px;
 }
@@ -1187,5 +1189,133 @@
     margin-left: 0;
     width: 100%;
     justify-content: center;
+  }
+}
+
+.nsc-acesso-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.nsc-acesso-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.nsc-acesso-head h3,
+.nsc-acesso-form h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin: 0;
+}
+
+.nsc-acesso-form {
+  background: #f8f9fc;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.nsc-acesso-form .link-btn {
+  display: inline-block;
+  margin: 8px 0 12px;
+  padding: 0;
+}
+
+.nsc-acesso-form input[type='search'],
+.nsc-acesso-form select {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.nsc-radio,
+.nsc-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.nsc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.nsc-chips .chip {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nsc-depto-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nsc-sugestoes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.nsc-sugestoes button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.nsc-sugestoes button:hover {
+  background: var(--wtorre-50);
+}
+
+.nsc-sugestoes span {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.nsc-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.link-btn {
+  border: 0;
+  background: none;
+  color: var(--wtorre);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .nsc-acesso-grid {
+    grid-template-columns: 1fr;
   }
 }

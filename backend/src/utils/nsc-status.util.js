@@ -141,6 +141,7 @@ function snapshotColaborador(colab, cert, regraObrigatorio, config, extra = {}) 
     nome: colab.nome,
     cargo: colab.cargo,
     departamento: colab.departamento,
+    empresa: colab.empresa || null,
     email: colab.email,
     tenant_id: colab.tenant_id ?? null,
     obrigatorio_efetivo: obrigatorio,

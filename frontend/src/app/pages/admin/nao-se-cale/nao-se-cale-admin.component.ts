@@ -5,15 +5,18 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Subject, debounceTime, distinctUntilChanged, forkJoin, Observable } from 'rxjs';
 import {
+  NscAcessoLog,
   NscAprovacaoItem,
   NscAprovacaoStatus,
   NscCertificadoDetalhe,
   NscColaboradorAdmin,
   NscConfig,
   NscNotificacaoLog,
+  NscPerfilAcesso,
   NscRegraDepartamento,
   NscResumo,
   NscStatus,
+  NscVisualizador,
 } from '../../../models/nsc.model';
 import { AlertasService } from '../../../services/alertas.service';
 import { NscService } from '../../../services/nsc.service';
@@ -28,11 +31,47 @@ import { previewCertificadoBlob } from '../../../utils/nsc-certificado-preview';
 
 type AbaNsc =
   | 'departamentos'
+  | 'empresas'
   | 'colaboradores'
   | 'aprovacoes'
   | 'relatorios'
   | 'notificacoes'
-  | 'historico';
+  | 'historico'
+  | 'acesso';
+
+const SEM_EMPRESA = 'Sem empresa';
+
+interface NscEmpresaGrupo {
+  empresa: string;
+  total: number;
+  obrigatorios: number;
+  validos: number;
+  a_vencer: number;
+  vencidos: number;
+  pendentes: number;
+}
+
+interface NscVisualizadorForm {
+  id: number | null;
+  ad_object_id: string;
+  nome: string;
+  email: string;
+  perfil: NscPerfilAcesso;
+  departamentos: string[];
+  empresas: string[];
+}
+
+function formVisualizadorVazio(): NscVisualizadorForm {
+  return {
+    id: null,
+    ad_object_id: '',
+    nome: '',
+    email: '',
+    perfil: 'total',
+    departamentos: [],
+    empresas: [],
+  };
+}
 
 type NscDisparoId =
   | 'antecedencia_60'
@@ -195,7 +234,7 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
   private thumbObjectUrl: string | null = null;
   private thumbSeq = 0;
 
-  readonly aba = signal<AbaNsc>('departamentos');
+  readonly aba = signal<AbaNsc>('empresas');
   readonly carregando = signal(false);
   readonly salvando = signal(false);
   readonly erro = signal('');
@@ -232,7 +271,9 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
   readonly contagensDepto = signal<Record<string, number>>({});
   readonly todosAd = signal<NscColaboradorAdmin[]>([]);
   readonly deptoAberto = signal<string | null>(null);
-  readonly pickerModo = signal<'colaboradores' | 'gestores'>('colaboradores');
+  readonly empresaAberto = signal<string | null>(null);
+  readonly buscaEmpresa = signal('');
+  readonly pickerModo = signal<'colaboradores' | 'gestores' | 'acesso'>('colaboradores');
   readonly pickerDepto = signal('');
 
   readonly modalAberto = signal(false);
@@ -250,13 +291,79 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
   readonly pickerNaLista = signal<NscColaboradorAdmin[]>([]);
   private pickerBaselineIds = new Set<string>();
 
+  readonly visualizadores = signal<NscVisualizador[]>([]);
+  readonly acessoLogs = signal<NscAcessoLog[]>([]);
+  readonly acessoLogCompleto = signal(false);
+  readonly visualizadoresCarregando = signal(false);
+  readonly visualizadorForm = signal<NscVisualizadorForm>(formVisualizadorVazio());
+  readonly visualizadorBusca = signal('');
+  readonly visualizadorDeptoNovo = signal('');
+  readonly visualizadorEmpresaNova = signal('');
+  readonly visualizadorSalvando = signal(false);
+
+  readonly porEmpresa = computed((): NscEmpresaGrupo[] => {
+    const q = this.buscaEmpresa().trim().toLowerCase();
+    const map = new Map<string, NscColaboradorAdmin[]>();
+    for (const c of this.todosAd()) {
+      const empresa = String(c.empresa || '').trim() || SEM_EMPRESA;
+      if (q) {
+        const hay = `${c.nome} ${c.cargo || ''} ${c.departamento || ''} ${empresa}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      const list = map.get(empresa) || [];
+      list.push(c);
+      map.set(empresa, list);
+    }
+    return [...map.entries()]
+      .sort((a, b) => {
+        if (a[0] === SEM_EMPRESA) return 1;
+        if (b[0] === SEM_EMPRESA) return -1;
+        return a[0].localeCompare(b[0], 'pt-BR');
+      })
+      .map(([empresa, itens]) => ({
+        empresa,
+        total: itens.length,
+        obrigatorios: itens.filter((c) => c.obrigatorio_efetivo).length,
+        validos: itens.filter((c) => c.obrigatorio_efetivo && c.status === 'valido').length,
+        a_vencer: itens.filter((c) => c.obrigatorio_efetivo && c.status === 'a_vencer').length,
+        vencidos: itens.filter((c) => c.obrigatorio_efetivo && c.status === 'vencido').length,
+        pendentes: itens.filter((c) => c.obrigatorio_efetivo && c.status === 'pendente').length,
+      }));
+  });
+
   readonly departamentos = computed(() => {
     const set = new Set<string>();
     for (const c of this.colaboradores()) {
       if (c.departamento) set.add(c.departamento);
     }
+    for (const c of this.todosAd()) {
+      if (c.departamento) set.add(c.departamento);
+    }
     for (const r of this.regras()) set.add(r.departamento_ou);
     return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  });
+
+  readonly empresasLista = computed(() => {
+    const set = new Set<string>();
+    for (const c of this.todosAd()) {
+      const empresa = String(c.empresa || '').trim();
+      if (empresa) set.add(empresa);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  });
+
+  readonly visualizadorSugestoes = computed(() => {
+    const q = this.visualizadorBusca().trim().toLowerCase();
+    if (q.length < 2) return [];
+    const atual = this.visualizadorForm().ad_object_id.toLowerCase();
+    const ja = new Set(
+      this.visualizadores()
+        .map((v) => v.ad_object_id.toLowerCase())
+        .filter((id) => id !== atual)
+    );
+    return this.todosAd()
+      .filter((c) => !ja.has(c.ad_object_id.toLowerCase()) && casaBusca(c, q))
+      .slice(0, 8);
   });
 
   readonly relatorioDeptos = computed(() => {
@@ -309,27 +416,35 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
   readonly previewHtml = signal<SafeHtml | null>(null);
   readonly carregandoPreview = signal(false);
 
-  readonly pickerTitulo = computed(() =>
-    this.pickerModo() === 'gestores'
-      ? 'Vincular gestores ao departamento'
-      : 'Adicionar colaboradores à certificação'
-  );
-  readonly pickerSubtitulo = computed(() =>
-    this.pickerModo() === 'gestores'
-      ? `Quem recebe avisos de vencimento em ${this.pickerDepto() || 'departamento'}.`
-      : 'Inclua quem atua em eventos e deve apresentar o certificado Não se Cale.'
-  );
-  readonly pickerSaveLabel = computed(() =>
-    this.pickerModo() === 'gestores' ? 'Guardar gestores' : 'Adicionar à lista'
-  );
-  readonly pickerKickerDireita = computed(() =>
-    this.pickerModo() === 'gestores' ? 'Gestores do departamento' : 'Na certificação'
-  );
-  readonly pickerRodape = computed(() =>
-    this.pickerModo() === 'gestores'
-      ? 'Clique em Incluir para vincular o gestor'
-      : 'Clique em Incluir para adicionar à certificação'
-  );
+  readonly pickerTitulo = computed(() => {
+    if (this.pickerModo() === 'gestores') return 'Vincular gestores ao departamento';
+    if (this.pickerModo() === 'acesso') return 'Incluir pessoas com acesso';
+    return 'Adicionar colaboradores à certificação';
+  });
+  readonly pickerSubtitulo = computed(() => {
+    if (this.pickerModo() === 'gestores') {
+      return `Quem recebe avisos de vencimento em ${this.pickerDepto() || 'departamento'}.`;
+    }
+    if (this.pickerModo() === 'acesso') {
+      return 'Selecione uma ou várias pessoas da lista sincronizada. O perfil do formulário será aplicado a todas.';
+    }
+    return 'Inclua quem atua em eventos e deve apresentar o certificado Não se Cale.';
+  });
+  readonly pickerSaveLabel = computed(() => {
+    if (this.pickerModo() === 'gestores') return 'Guardar gestores';
+    if (this.pickerModo() === 'acesso') return 'Aplicar perfil';
+    return 'Adicionar à lista';
+  });
+  readonly pickerKickerDireita = computed(() => {
+    if (this.pickerModo() === 'gestores') return 'Gestores do departamento';
+    if (this.pickerModo() === 'acesso') return 'Com acesso à equipe';
+    return 'Na certificação';
+  });
+  readonly pickerRodape = computed(() => {
+    if (this.pickerModo() === 'gestores') return 'Clique em Incluir para vincular o gestor';
+    if (this.pickerModo() === 'acesso') return 'Clique em Incluir para conceder acesso';
+    return 'Clique em Incluir para adicionar à certificação';
+  });
 
   ngOnInit(): void {
     this.busca$.pipe(debounceTime(300), distinctUntilChanged()).subscribe((q) => {
@@ -362,6 +477,13 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
     }
     if (aba === 'aprovacoes') {
       this.carregarAprovacoes();
+    }
+    if (aba === 'acesso') {
+      if (!this.todosAd().length) this.carregarContagens();
+      this.carregarAcesso();
+    }
+    if (aba === 'empresas' && !this.todosAd().length) {
+      this.carregarContagens();
     }
   }
 
@@ -412,6 +534,28 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
 
   toggleDepto(nome: string): void {
     this.deptoAberto.update((atual) => (atual === nome ? null : nome));
+  }
+
+  nomeEmpresa(c: NscColaboradorAdmin): string {
+    return String(c.empresa || '').trim() || SEM_EMPRESA;
+  }
+
+  qtdEmpresa(nome: string): number {
+    return this.colabsDaEmpresa(nome).length;
+  }
+
+  colabsDaEmpresa(nome: string): NscColaboradorAdmin[] {
+    const q = this.buscaEmpresa().trim().toLowerCase();
+    return this.todosAd().filter((c) => {
+      if (this.nomeEmpresa(c) !== nome) return false;
+      if (!q) return true;
+      const hay = `${c.nome} ${c.cargo || ''} ${c.departamento || ''} ${this.nomeEmpresa(c)}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  toggleEmpresa(nome: string): void {
+    this.empresaAberto.update((atual) => (atual === nome ? null : nome));
   }
 
   toneStatus(status: NscStatus): 'ok' | 'wait' | 'bad' | 'neutral' {
@@ -567,6 +711,10 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
   confirmarPicker(): void {
     if (this.pickerModo() === 'gestores') {
       this.confirmarPickerGestores();
+      return;
+    }
+    if (this.pickerModo() === 'acesso') {
+      this.confirmarPickerAcesso();
       return;
     }
     const agora = new Set(this.pickerNaLista().map((c) => c.ad_object_id));
@@ -1085,6 +1233,278 @@ export class NaoSeCaleAdminComponent implements OnInit, OnDestroy {
       },
       error: fallbackServidor,
     });
+  }
+
+  carregarAcesso(): void {
+    this.visualizadoresCarregando.set(true);
+    if (!this.regras().length) this.carregarRegras();
+    if (!this.todosAd().length) this.carregarContagens();
+    this.api.listarVisualizadores().subscribe({
+      next: (res) => {
+        this.visualizadores.set(res.visualizadores);
+        this.visualizadoresCarregando.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.visualizadoresCarregando.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Falha ao carregar pessoas com acesso.');
+      },
+    });
+    this.api.listarAcessoLog(this.acessoLogCompleto() ? 200 : 8).subscribe({
+      next: (res) => this.acessoLogs.set(res.logs),
+      error: () => this.acessoLogs.set([]),
+    });
+  }
+
+  verLogCompleto(): void {
+    this.acessoLogCompleto.set(true);
+    this.api.listarAcessoLog(200).subscribe({
+      next: (res) => this.acessoLogs.set(res.logs),
+    });
+  }
+
+  onVisualizadorBusca(value: string): void {
+    this.visualizadorBusca.set(value);
+    if (this.visualizadorForm().ad_object_id && value !== this.visualizadorForm().nome) {
+      this.patchVisualizadorForm({ ad_object_id: '', nome: '', email: '' });
+    }
+  }
+
+  escolherVisualizador(c: NscColaboradorAdmin): void {
+    const existente = this.visualizadores().find(
+      (v) => v.ad_object_id.toLowerCase() === c.ad_object_id.toLowerCase()
+    );
+    if (existente) {
+      this.editarVisualizador(existente);
+      return;
+    }
+    this.patchVisualizadorForm({
+      ad_object_id: c.ad_object_id,
+      nome: c.nome,
+      email: c.email || '',
+    });
+    this.visualizadorBusca.set(c.nome);
+  }
+
+  editarVisualizador(v: NscVisualizador): void {
+    this.visualizadorForm.set({
+      id: v.id,
+      ad_object_id: v.ad_object_id,
+      nome: v.nome || '',
+      email: v.email || '',
+      perfil: v.perfil,
+      departamentos: [...(v.departamentos || [])],
+      empresas: [...(v.empresas || [])],
+    });
+    this.visualizadorBusca.set(v.nome || '');
+    this.visualizadorDeptoNovo.set('');
+    this.visualizadorEmpresaNova.set('');
+  }
+
+  cancelarVisualizador(): void {
+    this.visualizadorForm.set(formVisualizadorVazio());
+    this.visualizadorBusca.set('');
+    this.visualizadorDeptoNovo.set('');
+    this.visualizadorEmpresaNova.set('');
+  }
+
+  patchVisualizadorForm(partial: Partial<NscVisualizadorForm>): void {
+    this.visualizadorForm.set({ ...this.visualizadorForm(), ...partial });
+  }
+
+  definirPerfil(perfil: NscPerfilAcesso): void {
+    if (perfil === 'total') {
+      this.patchVisualizadorForm({ perfil, departamentos: [], empresas: [] });
+      return;
+    }
+    this.patchVisualizadorForm({ perfil });
+  }
+
+  addDeptoVisualizador(): void {
+    const d = this.visualizadorDeptoNovo().trim();
+    if (!d) return;
+    const atual = this.visualizadorForm();
+    if (atual.departamentos.includes(d)) return;
+    this.patchVisualizadorForm({ departamentos: [...atual.departamentos, d] });
+    this.visualizadorDeptoNovo.set('');
+  }
+
+  removeDeptoVisualizador(d: string): void {
+    this.patchVisualizadorForm({
+      departamentos: this.visualizadorForm().departamentos.filter((x) => x !== d),
+    });
+  }
+
+  addEmpresaVisualizador(): void {
+    const e = this.visualizadorEmpresaNova().trim();
+    if (!e) return;
+    const atual = this.visualizadorForm();
+    if (atual.empresas.includes(e)) return;
+    this.patchVisualizadorForm({ empresas: [...atual.empresas, e] });
+    this.visualizadorEmpresaNova.set('');
+  }
+
+  removeEmpresaVisualizador(e: string): void {
+    this.patchVisualizadorForm({
+      empresas: this.visualizadorForm().empresas.filter((x) => x !== e),
+    });
+  }
+
+  payloadVisualizador(): {
+    ad_object_id: string;
+    perfil: NscPerfilAcesso;
+    departamentos: string[];
+    empresas: string[];
+  } | null {
+    const f = this.visualizadorForm();
+    if (f.perfil === 'gestor' && !f.departamentos.length && !f.empresas.length) {
+      this.alertas.erro('No perfil Gestor, marque ao menos um departamento ou uma empresa.');
+      return null;
+    }
+    return {
+      ad_object_id: f.ad_object_id,
+      perfil: f.perfil,
+      departamentos: f.perfil === 'gestor' ? f.departamentos : [],
+      empresas: f.perfil === 'gestor' ? f.empresas : [],
+    };
+  }
+
+  salvarVisualizador(): void {
+    const f = this.visualizadorForm();
+    if (!f.ad_object_id) {
+      this.alertas.erro('Busque e selecione uma pessoa da lista sincronizada.');
+      return;
+    }
+    const body = this.payloadVisualizador();
+    if (!body) return;
+    this.visualizadorSalvando.set(true);
+    const req$ = f.id
+      ? this.api.atualizarVisualizador(f.id, body)
+      : this.api.criarVisualizador(body);
+    req$.subscribe({
+      next: () => {
+        this.visualizadorSalvando.set(false);
+        this.alertas.sucesso(f.id ? 'Acesso atualizado.' : 'Pessoa incluída no acesso.');
+        this.cancelarVisualizador();
+        this.carregarAcesso();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.visualizadorSalvando.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Falha ao salvar o acesso.');
+      },
+    });
+  }
+
+  async removerVisualizador(v: NscVisualizador): Promise<void> {
+    if (!v.id || v.origem === 'departamento') {
+      this.alertas.erro('Este acesso vem dos gestores vinculados. Altere na aba Departamentos.');
+      return;
+    }
+    const ok = await this.alertas.confirmarExclusao({
+      titulo: 'Remover acesso',
+      texto: `Remover ${v.nome || 'esta pessoa'} do acesso à equipe?`,
+    });
+    if (!ok) return;
+    this.api.removerVisualizador(v.id).subscribe({
+      next: () => {
+        this.alertas.sucesso('Acesso removido.');
+        if (this.visualizadorForm().id === v.id) this.cancelarVisualizador();
+        this.carregarAcesso();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.alertas.erro(err.error?.mensagem || 'Falha ao remover.');
+      },
+    });
+  }
+
+  abrirPickerAcesso(): void {
+    const body = this.payloadVisualizador();
+    if (!body && this.visualizadorForm().perfil === 'gestor') return;
+    this.pickerModo.set('acesso');
+    this.pickerDepto.set('');
+    this.pickerAberto.set(true);
+    this.pickerCarregando.set(true);
+    this.pickerBusca.set('');
+    const ja = new Set(this.visualizadores().map((v) => v.ad_object_id.toLowerCase()));
+    const aplicar = (lista: NscColaboradorAdmin[]) => {
+      const disponiveis = ordenarPorNome(
+        lista.filter((c) => !ja.has(c.ad_object_id.toLowerCase()))
+      );
+      this.pickerNaLista.set([]);
+      this.pickerDisponiveis.set(disponiveis);
+      this.pickerBaselineIds = new Set();
+      this.pickerCarregando.set(false);
+    };
+    if (this.todosAd().length) {
+      aplicar(this.todosAd());
+      return;
+    }
+    this.api.listarColaboradores({ somente_obrigatorios: false }).subscribe({
+      next: (res) => aplicar(res.colaboradores),
+      error: (err: HttpErrorResponse) => {
+        this.pickerCarregando.set(false);
+        this.pickerAberto.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar o diretório.');
+      },
+    });
+  }
+
+  private confirmarPickerAcesso(): void {
+    const body = this.payloadVisualizador();
+    if (!body) {
+      this.pickerSalvando.set(false);
+      return;
+    }
+    const ids = this.pickerNaLista().map((c) => c.ad_object_id);
+    if (!ids.length) {
+      this.fecharPicker();
+      return;
+    }
+    this.pickerSalvando.set(true);
+    this.api
+      .criarVisualizador({
+        ad_object_ids: ids,
+        perfil: body.perfil,
+        departamentos: body.departamentos,
+        empresas: body.empresas,
+      })
+      .subscribe({
+        next: () => {
+          this.fecharPicker();
+          this.cancelarVisualizador();
+          this.carregarAcesso();
+          this.alertas.sucesso(
+            ids.length === 1 ? 'Pessoa incluída no acesso.' : `${ids.length} pessoas incluídas no acesso.`
+          );
+        },
+        error: (err: HttpErrorResponse) => {
+          this.pickerSalvando.set(false);
+          this.alertas.erro(err.error?.mensagem || 'Falha ao incluir as pessoas.');
+        },
+      });
+  }
+
+  labelPerfil(perfil: NscPerfilAcesso): string {
+    return perfil === 'gestor' ? 'Gestor' : 'Total';
+  }
+
+  labelOrigem(v: NscVisualizador): string {
+    return v.origem === 'departamento' ? 'Vinculado em Departamentos' : v.email || 'Manual';
+  }
+
+  labelRecorte(v: NscVisualizador): string {
+    if (v.perfil === 'total') return 'Todos os departamentos e empresas';
+    const partes = [...(v.empresas || []), ...(v.departamentos || [])];
+    return partes.join(', ') || '—';
+  }
+
+  labelLog(l: NscAcessoLog): string {
+    const quem = l.usuario_nome || l.usuario_email || 'Alguém';
+    if (l.acao === 'exportou') return `${quem} exportou a planilha da equipe`;
+    if (l.acao === 'lembrou') {
+      return l.alvo_nome ? `${quem} enviou lembrete a ${l.alvo_nome}` : `${quem} enviou lembretes`;
+    }
+    if (l.acao === 'baixou') return `${quem} baixou o certificado de ${l.alvo_nome || 'um colaborador'}`;
+    return `${quem} visualizou o certificado de ${l.alvo_nome || 'um colaborador'}`;
   }
 
   private revokePreview(): void {

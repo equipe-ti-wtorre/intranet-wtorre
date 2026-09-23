@@ -373,6 +373,7 @@ async function listarColaboradores(query) {
   const rows = await nscRepo.listJoinColaboradores({
     busca: query.busca?.trim() || undefined,
     departamento: query.departamento?.trim() || undefined,
+    empresa: query.empresa?.trim() || undefined,
   });
   const mappedBase = rows.filter((r) => r.colaborador.ad_id);
   const pendentes = await nscRepo.mapEnviosPendentes(mappedBase.map((r) => r.colaborador.ad_id));
@@ -868,6 +869,128 @@ function previewNotificacao(tipo, diasRaw) {
   throw httpError(400, 'Tipo de notificação inválido para pré-visualização.');
 }
 
+function filtrarPorEscopo(lista, acesso) {
+  const { colaboradorNoEscopo } = require('./nsc-permissao.service');
+  if (!acesso?.pode_ver_equipe) return [];
+  return lista.filter((c) => colaboradorNoEscopo(c, acesso));
+}
+
+function kpisEquipe(lista) {
+  const base = kpisDeLista(lista);
+  return {
+    ...base,
+    vigentes: base.validos,
+    sem_certificado: base.pendentes,
+  };
+}
+
+async function listarEquipe(query, acesso) {
+  const lista = filtrarPorEscopo(
+    await listarColaboradores({
+      ...query,
+      somente_obrigatorios: '1',
+    }),
+    acesso
+  );
+  const departamentos = [
+    ...new Set(lista.map((c) => String(c.departamento || '').trim()).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const ordem = {
+    vencido: 0,
+    aguardando_aprovacao: 1,
+    a_vencer: 2,
+    pendente: 3,
+    valido: 4,
+    nao_obrigatorio: 5,
+  };
+  const ordenada = [...lista].sort((a, b) => {
+    const d = (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9);
+    if (d) return d;
+    return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+  });
+  return {
+    acesso,
+    kpis: kpisEquipe(lista),
+    departamentos,
+    colaboradores: ordenada,
+    total: ordenada.length,
+  };
+}
+
+async function exportarEquipeXlsx(query, acesso) {
+  const depto = String(query?.departamento || '').trim();
+  const listaBase = filtrarPorEscopo(
+    await listarColaboradores({
+      busca: query?.busca,
+      departamento: depto && depto !== 'Sem departamento' ? depto : undefined,
+      somente_obrigatorios: '1',
+    }),
+    acesso
+  );
+  const lista =
+    depto === 'Sem departamento'
+      ? listaBase.filter((c) => !String(c.departamento || '').trim())
+      : listaBase;
+  return exportarRelatorioXlsxFromLista(lista, depto);
+}
+
+function exportarRelatorioXlsxFromLista(lista, depto) {
+  const dados = {
+    ...kpisDeLista(lista),
+    por_departamento: agruparPorDepartamento(lista),
+  };
+
+  const resumoRows = [
+    ['Indicador', 'Total'],
+    ['Obrigatórios', dados.obrigatorios],
+    ['Válidos', dados.validos],
+    ['A vencer', dados.a_vencer],
+    ['Vencidos', dados.vencidos],
+    ['Pendentes', dados.pendentes],
+    ['Irregulares', dados.irregulares],
+    [],
+    ['Departamento', 'Obrigatórios', 'Válidos', 'A vencer', 'Vencidos', 'Pendentes', 'Irregulares'],
+    ...dados.por_departamento.map((d) => [
+      d.departamento,
+      d.obrigatorios,
+      d.validos,
+      d.a_vencer,
+      d.vencidos,
+      d.pendentes,
+      d.irregulares,
+    ]),
+  ];
+
+  const colabRows = [
+    ['Nome', 'Cargo', 'Departamento', 'E-mail', 'Status', 'Validade', 'Dias restantes', 'Irregular'],
+    ...lista.map((c) => [
+      c.nome,
+      c.cargo || '',
+      nomeDepartamento(c),
+      c.email || '',
+      STATUS_LABEL[c.status] || c.status,
+      formatDataPt(c.validade_efetiva),
+      c.dias_restantes == null ? '' : c.dias_restantes,
+      c.irregular ? 'Sim' : 'Não',
+    ]),
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumoRows), 'Resumo');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(colabRows), 'Colaboradores');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const stamp = new Date().toISOString().slice(0, 10);
+  const slug = String(depto || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 30);
+  return {
+    buffer,
+    filename: `nsc-equipe${slug ? `-${slug}` : ''}-${stamp}.xlsx`,
+  };
+}
+
 module.exports = {
   getConfig,
   resolverPorAdId,
@@ -877,6 +1000,9 @@ module.exports = {
   removerMeuCertificado,
   removerCertificadoAdmin,
   listarColaboradores,
+  listarEquipe,
+  filtrarPorEscopo,
+  exportarEquipeXlsx,
   resumo,
   exportarRelatorioXlsx,
   listarNotificacoes,
@@ -894,4 +1020,150 @@ module.exports = {
   listarAprovacoes,
   aprovarCertificado,
   rejeitarCertificado,
+  listarVisualizadores,
+  salvarVisualizador,
+  salvarVisualizadoresLote,
+  removerVisualizador,
+  listarAcessoLog,
 };
+
+const PERFIS = new Set(['total', 'gestor']);
+
+function normalizarLista(values) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map((d) => String(d || '').trim()).filter(Boolean))];
+}
+
+async function dadosColaboradorAcesso(adObjectId, body) {
+  let nome = String(body?.nome || '').trim() || null;
+  let email = String(body?.email || '').trim() || null;
+  try {
+    const snap = await resolverPorAdId(adObjectId);
+    if (snap) {
+      nome = nome || snap.nome || null;
+      email = email || snap.email || null;
+    }
+  } catch {
+    /* usa o que veio no body */
+  }
+  return { nome, email };
+}
+
+function montarPayloadVisualizador(body, id) {
+  const adObjectId = String(body?.ad_object_id || '').trim();
+  const perfil = String(body?.perfil || '').trim();
+  if (!adObjectId) throw httpError(400, 'Informe o colaborador.');
+  if (!PERFIS.has(perfil)) throw httpError(400, 'Perfil inválido.');
+  const departamentos = perfil === 'gestor' ? normalizarLista(body?.departamentos) : [];
+  const empresas = perfil === 'gestor' ? normalizarLista(body?.empresas) : [];
+  if (perfil === 'gestor' && !departamentos.length && !empresas.length) {
+    throw httpError(400, 'Selecione ao menos um departamento ou uma empresa para o perfil Gestor.');
+  }
+  return {
+    id: id || body?.id || undefined,
+    ad_object_id: adObjectId,
+    perfil,
+    departamentos,
+    empresas,
+  };
+}
+
+async function listarVisualizadores() {
+  const [manuais, gestores] = await Promise.all([
+    nscRepo.listAcessoUsuarios(),
+    nscRepo.listGestores(),
+  ]);
+  const byAd = new Map();
+  for (const g of gestores) {
+    const key = String(g.ad_object_id || '').toLowerCase();
+    if (!key) continue;
+    const atual = byAd.get(key) || {
+      id: null,
+      ad_object_id: g.ad_object_id,
+      nome: g.nome || null,
+      email: g.email || null,
+      perfil: 'gestor',
+      departamentos: [],
+      empresas: [],
+      origem: 'departamento',
+    };
+    const depto = String(g.departamento_ou || '').trim();
+    if (depto && !atual.departamentos.includes(depto)) atual.departamentos.push(depto);
+    atual.nome = atual.nome || g.nome || null;
+    atual.email = atual.email || g.email || null;
+    byAd.set(key, atual);
+  }
+  for (const m of manuais) {
+    const key = String(m.ad_object_id || '').toLowerCase();
+    if (!key) continue;
+    const derivado = byAd.get(key);
+    if (m.perfil === 'total') {
+      byAd.set(key, { ...m, origem: 'manual' });
+      continue;
+    }
+    byAd.set(key, {
+      ...m,
+      departamentos: [
+        ...new Set([...(m.departamentos || []), ...(derivado?.departamentos || [])]),
+      ],
+      origem: 'manual',
+    });
+  }
+  return [...byAd.values()].sort((a, b) =>
+    String(a.nome || a.email || '').localeCompare(String(b.nome || b.email || ''), 'pt-BR')
+  );
+}
+
+async function salvarVisualizador(body, id) {
+  const payload = montarPayloadVisualizador(body, id);
+  if (id) {
+    const existing = await nscRepo.findAcessoUsuarioById(id);
+    if (!existing) throw httpError(404, 'Pessoa com acesso não encontrada.');
+  }
+  const { nome, email } = await dadosColaboradorAcesso(payload.ad_object_id, body);
+  return nscRepo.upsertAcessoUsuario({
+    ...payload,
+    nome: nome || body?.nome || null,
+    email: email || body?.email || null,
+  });
+}
+
+async function salvarVisualizadoresLote(body) {
+  const ids = Array.isArray(body?.ad_object_ids)
+    ? [...new Set(body.ad_object_ids.map((id) => String(id || '').trim()).filter(Boolean))]
+    : [];
+  if (!ids.length) throw httpError(400, 'Selecione ao menos uma pessoa.');
+  const perfil = String(body?.perfil || '').trim();
+  if (!PERFIS.has(perfil)) throw httpError(400, 'Perfil inválido.');
+  const departamentos = perfil === 'gestor' ? normalizarLista(body?.departamentos) : [];
+  const empresas = perfil === 'gestor' ? normalizarLista(body?.empresas) : [];
+  if (perfil === 'gestor' && !departamentos.length && !empresas.length) {
+    throw httpError(400, 'Selecione ao menos um departamento ou uma empresa para o perfil Gestor.');
+  }
+  const visualizadores = [];
+  for (const adObjectId of ids) {
+    visualizadores.push(
+      await salvarVisualizador({
+        ad_object_id: adObjectId,
+        perfil,
+        departamentos,
+        empresas,
+      })
+    );
+  }
+  return visualizadores;
+}
+
+async function removerVisualizador(id) {
+  const existing = await nscRepo.findAcessoUsuarioById(id);
+  if (!existing) throw httpError(404, 'Pessoa com acesso não encontrada.');
+  await nscRepo.deleteAcessoUsuario(id);
+  return existing;
+}
+
+async function listarAcessoLog(query) {
+  const limite = Number(query?.limite);
+  return nscRepo.listarAcessoLog({
+    limite: Number.isFinite(limite) ? limite : 80,
+  });
+}

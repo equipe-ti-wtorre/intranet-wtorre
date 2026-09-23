@@ -10,8 +10,68 @@ export type NscAprovacaoStatus = 'aprovado' | 'pendente' | 'rejeitado';
 
 export type NscOverride = boolean | null;
 
+export type NscPerfilAcesso = 'total' | 'gestor';
+
+export type NscEscopoAcesso = 'global' | 'recorte' | 'departamentos' | 'proprio_departamento';
+
+export interface NscAcessoPermissoes {
+  baixar: boolean;
+  exportar: boolean;
+  lembrar: boolean;
+  aprovar: boolean;
+}
+
 export interface NscAcesso {
   pode_visualizar: boolean;
+  pode_ver_equipe?: boolean;
+  escopo?: NscEscopoAcesso | null;
+  departamentos?: string[];
+  empresas?: string[];
+  permissoes?: NscAcessoPermissoes;
+  grupo_nome?: string | null;
+  label_escopo?: string | null;
+}
+
+export interface NscEquipeKpis {
+  obrigatorios: number;
+  vigentes: number;
+  validos: number;
+  a_vencer: number;
+  vencidos: number;
+  pendentes: number;
+  sem_certificado: number;
+  aguardando_aprovacao?: number;
+}
+
+export interface NscEquipeResposta {
+  acesso: NscAcesso;
+  kpis: NscEquipeKpis;
+  departamentos: string[];
+  colaboradores: NscColaboradorAdmin[];
+  total: number;
+}
+
+export interface NscVisualizador {
+  id: number | null;
+  ad_object_id: string;
+  nome: string | null;
+  email: string | null;
+  perfil: NscPerfilAcesso;
+  departamentos: string[];
+  empresas: string[];
+  origem?: 'manual' | 'departamento';
+}
+
+export interface NscAcessoLog {
+  id: number;
+  usuario_id: number | null;
+  usuario_email: string | null;
+  usuario_nome: string | null;
+  acao: string;
+  alvo_ad_object_id: string | null;
+  alvo_nome: string | null;
+  detalhe: string | null;
+  criado_em: string | null;
 }
 
 export interface NscEnvio {
@@ -90,6 +150,7 @@ export interface NscColaboradorAdmin {
   nome: string;
   cargo: string | null;
   departamento: string | null;
+  empresa?: string | null;
   email: string | null;
   obrigatorio_efetivo: boolean;
   obrigatorio_override: boolean | null;
@@ -99,6 +160,7 @@ export interface NscColaboradorAdmin {
   dias_restantes: number | null;
   irregular: boolean;
   atualizado_em: string | null;
+  arquivo_id?: number | null;
 }
 
 export interface NscColaboradoresResposta {
