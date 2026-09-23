@@ -27,7 +27,7 @@ export const PAGINAS_INTERNAS: PaginaInterna[] = [
   { path: '/salas', label: 'Reservar sala' },
   { path: '/followup-suprimentos', label: 'Follow-up de Suprimentos' },
   { path: '/massagem', label: 'Massagem' },
-  { path: '/pesquisas', label: 'Central de Pesquisas' },
+  { path: '/pesquisas', label: 'Formulários' },
   { path: '/ti/rustdesk', label: 'TI / Rust Desk' },
   { path: '/nao-se-cale', label: 'Não se Cale' },
   { path: '/agenda_rh', label: 'Agenda RH' },

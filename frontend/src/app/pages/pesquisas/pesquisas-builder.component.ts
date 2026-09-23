@@ -136,6 +136,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly capaUrl = signal<string | null>(null);
   readonly capaLocalUrl = signal<string | null>(null);
   readonly capaLayout = signal<CapaLayout>('left');
+  readonly capaFocoX = signal(50);
+  readonly capaFocoY = signal(50);
   readonly passo = signal<'layout' | 'builder'>('layout');
   readonly menuAddOpen = signal(false);
   readonly qrAberto = signal(false);
@@ -153,8 +155,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   ];
   readonly zoneHint = computed(() => {
     const map: Record<CapaLayout, string> = {
-      top: 'Vai aparecer no topo do formulário.',
-      bottom: 'Vai aparecer no rodapé do formulário.',
+      top: 'Vai aparecer no topo do formulário. Na prévia, arraste a imagem para escolher o enquadramento.',
+      bottom: 'Vai aparecer no rodapé do formulário. Na prévia, arraste a imagem para escolher o enquadramento.',
       left: 'Vai aparecer na lateral esquerda do formulário.',
       right: 'Vai aparecer na lateral direita do formulário.',
     };
@@ -240,6 +242,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.templateCodigo.set(form.template?.codigo || form.templateCodigo || 'wtorre');
           this.capaUrl.set(form.capaUrl || null);
           this.capaLayout.set(form.capaLayout || 'top');
+          this.capaFocoX.set(form.capaFocoX ?? 50);
+          this.capaFocoY.set(form.capaFocoY ?? 50);
           this.passo.set('builder');
           this.carregando.set(false);
         },
@@ -354,6 +358,11 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   escolherLayout(layout: CapaLayout): void {
     this.capaLayout.set(layout);
     this.passo.set('builder');
+  }
+
+  onCapaFoco(foco: { x: number; y: number }): void {
+    this.capaFocoX.set(foco.x);
+    this.capaFocoY.set(foco.y);
   }
 
   abrirGaleria(): void {
@@ -999,6 +1008,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       exigirIdentidade: this.exigirIdentidade(),
       templateCodigo: this.templateCodigo(),
       capaLayout: this.capaLayout(),
+      capaFocoX: this.capaFocoX(),
+      capaFocoY: this.capaFocoY(),
       convidadosFonte: 'manual',
       base: this.publicoAlvo() === 'externos' ? this.baseLinhas || undefined : [],
       convidados: this.convidados().map((g) => ({

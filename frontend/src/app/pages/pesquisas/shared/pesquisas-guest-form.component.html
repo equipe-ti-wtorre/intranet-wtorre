@@ -5,11 +5,20 @@
   [style.--tpl-radius.px]="tpl().raioPx"
 >
   @if (mostraCapa() && capaLayout() === 'top') {
-    <div class="zone-top is-on"><img [src]="capaSrc()!" alt="" (error)="onCapaError()" /></div>
+    <div
+      class="zone-top is-on"
+      [class.zone-foco]="podeArrastarFoco()"
+      (pointerdown)="onFocoDown($event)"
+      (pointermove)="onFocoMove($event)"
+      (pointerup)="onFocoUp($event)"
+      (pointercancel)="onFocoUp($event)"
+    >
+      <img [src]="capaSrc()!" alt="" [style.object-position]="focoCss()" (error)="onCapaError()" (click)="onCapaClick($event)" />
+    </div>
   }
   <div class="frame-middle">
     @if (mostraCapa() && capaLayout() === 'left') {
-      <div class="zone-left is-on"><img [src]="capaSrc()!" alt="" (error)="onCapaError()" /></div>
+      <div class="zone-left is-on"><img [src]="capaSrc()!" alt="" (error)="onCapaError()" (click)="onCapaClick($event)" /></div>
     }
     <div
       class="canvas-white"
@@ -181,11 +190,20 @@
       </div>
     </div>
     @if (mostraCapa() && capaLayout() === 'right') {
-      <div class="zone-right is-on"><img [src]="capaSrc()!" alt="" (error)="onCapaError()" /></div>
+      <div class="zone-right is-on"><img [src]="capaSrc()!" alt="" (error)="onCapaError()" (click)="onCapaClick($event)" /></div>
     }
   </div>
   @if (mostraCapa() && capaLayout() === 'bottom') {
-    <div class="zone-bottom is-on"><img [src]="capaSrc()!" alt="" (error)="onCapaError()" /></div>
+    <div
+      class="zone-bottom is-on"
+      [class.zone-foco]="podeArrastarFoco()"
+      (pointerdown)="onFocoDown($event)"
+      (pointermove)="onFocoMove($event)"
+      (pointerup)="onFocoUp($event)"
+      (pointercancel)="onFocoUp($event)"
+    >
+      <img [src]="capaSrc()!" alt="" [style.object-position]="focoCss()" (error)="onCapaError()" (click)="onCapaClick($event)" />
+    </div>
   }
   <button
     type="button"

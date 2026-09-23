@@ -147,6 +147,8 @@ export interface PesquisasFormulario {
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
   capaLayout?: CapaLayout;
+  capaFocoX?: number;
+  capaFocoY?: number;
   temCapa?: boolean;
   baseResumo?: { total: number; temCpf: boolean; temEmail: boolean };
 }
@@ -179,6 +181,8 @@ export interface PesquisasResponderPayload {
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
   capaLayout?: CapaLayout;
+  capaFocoX?: number;
+  capaFocoY?: number;
   temBase?: boolean;
 }
 
@@ -266,6 +270,8 @@ export interface PesquisasPublicoMeta {
   template?: PesquisasTemplateVisual;
   capaUrl?: string | null;
   capaLayout?: CapaLayout;
+  capaFocoX?: number;
+  capaFocoY?: number;
 }
 
 export interface PesquisasPortalItem {

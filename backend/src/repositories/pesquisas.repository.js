@@ -10,6 +10,12 @@ function parseJson(value, fallback) {
   }
 }
 
+function focoCapa(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 50;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
 function toDateStr(value) {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -77,6 +83,8 @@ function mapFormulario(row) {
     exigirIdentidade: row.exigir_identidade == null ? true : !!row.exigir_identidade,
     templateCodigo: row.template_codigo || 'wtorre',
     capaLayout: row.capa_layout || 'top',
+    capaFocoX: focoCapa(row.capa_foco_x),
+    capaFocoY: focoCapa(row.capa_foco_y),
     capaContainer: row.capa_container || null,
     capaBlob: row.capa_blob || null,
     capaNome: row.capa_nome || null,
@@ -363,8 +371,9 @@ async function insertFormulario(data) {
       (criador_id, titulo, descricao, categoria, prazo, prazo_inicio, prazo_fim,
        publico_alvo, publico_departamento,
        tipo, status, secoes, logica_condicional, anonimo,
-       slug, evento_tipo, evento_tipo_outro, evento_ativo, exigir_identidade, template_codigo, capa_layout)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       slug, evento_tipo, evento_tipo_outro, evento_ativo, exigir_identidade, template_codigo, capa_layout,
+       capa_foco_x, capa_foco_y)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.criadorId,
       data.titulo,
@@ -387,6 +396,8 @@ async function insertFormulario(data) {
       data.exigirIdentidade === false ? 0 : 1,
       data.templateCodigo || 'wtorre',
       data.capaLayout || 'top',
+      focoCapa(data.capaFocoX),
+      focoCapa(data.capaFocoY),
     ]
   );
   return result.insertId;
@@ -400,7 +411,7 @@ async function updateFormularioMeta(id, data) {
        publico_alvo = ?, publico_departamento = ?, tipo = ?, status = ?,
        secoes = ?, logica_condicional = ?, anonimo = ?,
        evento_tipo = ?, evento_tipo_outro = ?, evento_ativo = ?, exigir_identidade = ?,
-       template_codigo = ?, capa_layout = ?
+       template_codigo = ?, capa_layout = ?, capa_foco_x = ?, capa_foco_y = ?
      WHERE id = ?`,
     [
       data.titulo,
@@ -422,6 +433,8 @@ async function updateFormularioMeta(id, data) {
       data.exigirIdentidade === false ? 0 : 1,
       data.templateCodigo || 'wtorre',
       data.capaLayout || 'top',
+      focoCapa(data.capaFocoX),
+      focoCapa(data.capaFocoY),
       id,
     ]
   );

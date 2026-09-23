@@ -25,6 +25,8 @@ export class PesquisasGuestFormComponent {
   readonly descricao = input('');
   readonly capaUrl = input<string | null>(null);
   readonly capaLayout = input<CapaLayout>('top');
+  readonly capaFocoX = input(50);
+  readonly capaFocoY = input(50);
   readonly template = input<PesquisasTemplateVisual | null>(null);
   readonly perguntas = input<PesquisasPergunta[]>([]);
   readonly secoes = input(false);
@@ -37,6 +39,8 @@ export class PesquisasGuestFormComponent {
   readonly arquivoChange = output<{ key: string; file: File | null }>();
   readonly blocosReorder = output<GuestReorderEvent>();
   readonly enviar = output<void>();
+  readonly ampliarCapa = output<void>();
+  readonly capaFocoChange = output<{ x: number; y: number }>();
 
   readonly escala = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   readonly rows = computed(() => this.groupRows(this.perguntas()));
@@ -48,6 +52,14 @@ export class PesquisasGuestFormComponent {
     const url = this.capaSrc();
     return !!url && this.capaQuebrouUrl() !== url;
   });
+  readonly podeArrastarFoco = computed(() => {
+    const layout = this.capaLayout();
+    return this.mode() === 'preview' && (layout === 'top' || layout === 'bottom');
+  });
+  readonly focoCss = computed(() => `${this.focoPct(this.capaFocoX())}% ${this.focoPct(this.capaFocoY())}%`);
+
+  private focoDrag: { id: number; x: number; y: number; focoX: number; focoY: number; w: number; h: number } | null =
+    null;
 
   private lastDrop: { targetKey: number; insertBefore: boolean; joinRow: boolean } | null = null;
   private dragKey: number | null = null;
@@ -58,6 +70,49 @@ export class PesquisasGuestFormComponent {
   onCapaError(): void {
     const url = this.capaSrc();
     if (url) this.capaQuebrouUrl.set(url);
+  }
+
+  onCapaClick(event: Event): void {
+    if (this.mode() !== 'answer') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.ampliarCapa.emit();
+  }
+
+  onFocoDown(event: PointerEvent): void {
+    if (!this.podeArrastarFoco()) return;
+    const zone = event.currentTarget;
+    if (!(zone instanceof HTMLElement)) return;
+    event.preventDefault();
+    zone.setPointerCapture(event.pointerId);
+    this.focoDrag = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      focoX: this.focoPct(this.capaFocoX()),
+      focoY: this.focoPct(this.capaFocoY()),
+      w: zone.clientWidth || 1,
+      h: zone.clientHeight || 1,
+    };
+  }
+
+  onFocoMove(event: PointerEvent): void {
+    const drag = this.focoDrag;
+    if (!drag || event.pointerId !== drag.id) return;
+    const x = this.focoPct(drag.focoX - ((event.clientX - drag.x) / drag.w) * 100);
+    const y = this.focoPct(drag.focoY - ((event.clientY - drag.y) / drag.h) * 100);
+    this.capaFocoChange.emit({ x, y });
+  }
+
+  onFocoUp(event: PointerEvent): void {
+    if (this.focoDrag?.id !== event.pointerId) return;
+    this.focoDrag = null;
+  }
+
+  private focoPct(value: number): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 50;
+    return Math.max(0, Math.min(100, Math.round(n)));
   }
 
   keyOf(q: PesquisasPergunta, idx = 0): string {

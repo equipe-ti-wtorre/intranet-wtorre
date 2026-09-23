@@ -219,7 +219,7 @@ export const routes: Routes = [
       {
         path: 'admin',
         pathMatch: 'full',
-        redirectTo: () => inject(Router).createUrlTree(['/admin/pesquisas']),
+        redirectTo: () => inject(Router).createUrlTree(['/admin/formularios']),
       },
     ],
   },
@@ -497,12 +497,17 @@ export const routes: Routes = [
       },
       {
         path: 'pesquisas',
+        pathMatch: 'full',
+        redirectTo: 'formularios',
+      },
+      {
+        path: 'formularios',
         canActivate: [moduloGuardFromRoute],
         loadComponent: () =>
           import('./pages/admin/pesquisas/pesquisas-admin.component').then(
             (m) => m.PesquisasAdminComponent
           ),
-        data: { adminTitle: 'Central de Pesquisas' },
+        data: { adminTitle: 'Gestão de formulários' },
       },
       {
         path: 'massagem/templates/novo',

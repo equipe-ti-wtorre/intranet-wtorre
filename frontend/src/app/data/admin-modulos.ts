@@ -19,7 +19,7 @@ export const ADMIN_MODULO_ROTAS: { codigo: string; rota: string }[] = [
   { codigo: 'solicitacao-colaborador', rota: 'solicitacao-colaborador' },
   { codigo: 'followup-suprimentos', rota: 'followup-suprimentos' },
   { codigo: 'massagem', rota: 'massagem' },
-  { codigo: 'pesquisas', rota: 'pesquisas' },
+  { codigo: 'pesquisas', rota: 'formularios' },
   { codigo: 'nao-se-cale', rota: 'nao-se-cale' },
   { codigo: 'agenda_rh', rota: 'agenda_rh' },
 ];

@@ -80,7 +80,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
         this.loading.set(false);
       },
       error: (err: HttpErrorResponse) => {
-        this.alertas.erro(err.error?.mensagem || 'Erro ao carregar a Central de Pesquisas.');
+        this.alertas.erro(err.error?.mensagem || 'Erro ao carregar os formulários.');
         this.loading.set(false);
       },
     });

@@ -21,13 +21,15 @@
             <ng-container *ngTemplateOutlet="portalCard" />
           }
         </div>
-        <div class="portal-bid-foot">
-          <div class="portal-bid-brands">
-            <img src="/logos/login/logo_nubankparque.svg" alt="Nubank Parque" />
-            <span class="portal-bid-brands-sep" aria-hidden="true"></span>
-            <img class="portal-bid-brand-wtorre" src="/logos/login/wtorre.svg" alt="WTorre" />
+        @if (passo() !== 'form') {
+          <div class="portal-bid-foot">
+            <div class="portal-bid-brands">
+              <img src="/logos/login/logo_nubankparque.svg" alt="Nubank Parque" />
+              <span class="portal-bid-brands-sep" aria-hidden="true"></span>
+              <img class="portal-bid-brand-wtorre" src="/logos/login/wtorre.svg" alt="WTorre" />
+            </div>
           </div>
-        </div>
+        }
       </div>
     } @else if (loading() && passo() !== 'form') {
       <p class="page-sub">Carregando…</p>
@@ -62,6 +64,14 @@
       <ng-container *ngTemplateOutlet="formCard; context: { $implicit: p }" />
     }
   </div>
+  @if (capaAmpliada() && capaUrl(); as src) {
+    <div class="capa-zoom" (click)="fecharCapa()">
+      <button type="button" class="capa-zoom-close" aria-label="Fechar" (click)="$event.stopPropagation(); fecharCapa()">
+        <app-pesq-icon name="x" [size]="18" />
+      </button>
+      <img [src]="src" alt="" (click)="$event.stopPropagation()" />
+    </div>
+  }
 </div>
 
 <ng-template #carrosselStage>
@@ -137,7 +147,7 @@
                 <span class="portal-count">{{ painel.pendentes.length }}</span>
               </div>
               @if (!painel.pendentes.length) {
-                <p class="portal-empty">Nenhuma pesquisa no momento.</p>
+                <p class="portal-empty">Nenhum formulário no momento.</p>
               } @else {
                 @for (item of painel.pendentes; track item.slug) {
                   <div class="portal-card">
@@ -212,6 +222,8 @@
       [descricao]="p.descricao"
       [capaUrl]="p.capaUrl || capaUrl()"
       [capaLayout]="p.capaLayout || capaLayout()"
+      [capaFocoX]="p.capaFocoX ?? 50"
+      [capaFocoY]="p.capaFocoY ?? 50"
       [template]="p.template || tpl()"
       [perguntas]="visiveis()"
       [secoes]="!!p.secoes"
@@ -220,6 +232,7 @@
       (valorChange)="onGuestValor($event)"
       (arquivoChange)="onGuestArquivo($event)"
       (enviar)="enviar()"
+      (ampliarCapa)="abrirCapa()"
     />
   </div>
 </ng-template>

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -77,6 +77,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     const url = this.capaUrl();
     return !!url && this.capaQuebrouUrl() !== url;
   });
+  readonly capaAmpliada = signal(false);
   private guestToken: string | null = null;
   private lookupTimer: ReturnType<typeof setTimeout> | null = null;
   private lookupSeq = 0;
@@ -92,6 +93,20 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   onCapaError(): void {
     const url = this.capaUrl();
     if (url) this.capaQuebrouUrl.set(url);
+  }
+
+  abrirCapa(): void {
+    if (!this.capaUrl()) return;
+    this.capaAmpliada.set(true);
+  }
+
+  fecharCapa(): void {
+    this.capaAmpliada.set(false);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeCapa(): void {
+    if (this.capaAmpliada()) this.fecharCapa();
   }
 
   ngOnInit(): void {

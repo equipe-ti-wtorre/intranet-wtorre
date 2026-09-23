@@ -15,7 +15,7 @@ function handleError(res, err) {
     return res.status(err.status).json({ mensagem: err.message });
   }
   console.error('[pesquisas]', err.code || err.name, err.message);
-  return res.status(500).json({ mensagem: 'Erro ao processar a Central de Pesquisas.' });
+  return res.status(500).json({ mensagem: 'Erro ao processar os formulários.' });
 }
 
 async function resumo(req, res) {

@@ -123,7 +123,7 @@
             type="text"
             [ngModel]="titulo()"
             (ngModelChange)="titulo.set($event)"
-            placeholder="Ex: Pesquisa de satisfação do evento"
+            placeholder="Ex: Formulário de satisfação do evento"
           />
         </div>
         <div class="field" style="margin-top: 16px">
@@ -261,13 +261,13 @@
             </button>
           </div>
           <div class="guest-import-row">
-            <button type="button" class="add-q-btn" (click)="exportarModeloConvidados()">
-              <app-pesq-icon name="download" [size]="15" />
-              Baixar modelo Excel
-            </button>
             <button type="button" class="add-q-btn" (click)="guestsExcelInput.click()">
               <app-pesq-icon name="table" [size]="15" />
               Importar CSV ou Excel
+            </button>
+            <button type="button" class="add-q-btn" (click)="exportarModeloConvidados()">
+              <app-pesq-icon name="download" [size]="15" />
+              Baixar modelo Excel
             </button>
             <input
               #guestsExcelInput
@@ -456,6 +456,8 @@
         [descricao]="descricao()"
         [capaUrl]="capaPreview()"
         [capaLayout]="capaLayout()"
+        [capaFocoX]="capaFocoX()"
+        [capaFocoY]="capaFocoY()"
         [template]="templateAtual()"
         [perguntas]="previewPerguntas()"
         [secoes]="false"
@@ -464,6 +466,7 @@
         (arquivoChange)="onPreviewArquivo($event)"
         (blocosReorder)="onPreviewReorder($event)"
         (enviar)="onPreviewEnviar()"
+        (capaFocoChange)="onCapaFoco($event)"
       />
     </aside>
   </div>

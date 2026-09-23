@@ -15,6 +15,12 @@ const EVENTO_TIPOS = ['show', 'jogo', 'outro'];
 const PERGUNTA_TIPOS = ['texto_curto', 'texto_longo', 'multipla_escolha', 'escala', 'sim_nao'];
 const BLOCO_TIPOS = ['pergunta', 'texto', 'anexo'];
 const CAPA_LAYOUTS = ['top', 'bottom', 'left', 'right'];
+
+function focoCapa(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 50;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
 const CONDICOES = ['qualquer', 'sim', 'nao', 'escala_gte_4'];
 const REQ_TIPOS = ['compra', 'ti', 'rh', 'manutencao', 'outro'];
 const PRIORIDADES = ['baixa', 'media', 'alta'];
@@ -338,6 +344,8 @@ function normalizeFormBody(body, { criadorId } = {}) {
     eventoAtivo,
     exigirIdentidade,
     capaLayout,
+    capaFocoX: focoCapa(body.capaFocoX),
+    capaFocoY: focoCapa(body.capaFocoY),
   };
 }
 
@@ -983,6 +991,8 @@ async function clonarFormulario(req) {
     exigirIdentidade: origem.exigirIdentidade,
     templateCodigo: origem.templateCodigo,
     capaLayout: origem.capaLayout,
+    capaFocoX: origem.capaFocoX,
+    capaFocoY: origem.capaFocoY,
   });
   await repo.replacePerguntas(novoId, perguntas);
   await repo.copyFormularioBase(id, novoId);
@@ -1186,6 +1196,8 @@ async function payloadResponder(req) {
     template: visual.template,
     capaUrl: visual.capaUrl,
     capaLayout: form.capaLayout || 'top',
+    capaFocoX: form.capaFocoX ?? 50,
+    capaFocoY: form.capaFocoY ?? 50,
     temBase: false,
   };
 }
@@ -1738,6 +1750,8 @@ async function publicoMeta(req) {
     template: visual.template,
     capaUrl: visual.capaUrl,
     capaLayout: form.capaLayout || 'top',
+    capaFocoX: form.capaFocoX ?? 50,
+    capaFocoY: form.capaFocoY ?? 50,
   };
 }
 
@@ -1875,6 +1889,8 @@ async function publicoHubMeta() {
     template,
     capaUrl: null,
     capaLayout: 'top',
+    capaFocoX: 50,
+    capaFocoY: 50,
   };
 }
 
@@ -1931,6 +1947,8 @@ async function publicoFormulario(req) {
     template: visual.template,
     capaUrl: visual.capaUrl,
     capaLayout: form.capaLayout || 'top',
+    capaFocoX: form.capaFocoX ?? 50,
+    capaFocoY: form.capaFocoY ?? 50,
     temBase: (await baseResumo(form.id)).total > 0,
   };
 }

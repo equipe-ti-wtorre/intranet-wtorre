@@ -10,8 +10,10 @@ const PAGINAS_INTERNAS = [
   { path: '/salas', label: 'Reservar sala' },
   { path: '/followup-suprimentos', label: 'Follow-up de Suprimentos' },
   { path: '/massagem', label: 'Massagem' },
-  { path: '/pesquisas', label: 'Central de Pesquisas' },
+  { path: '/pesquisas', label: 'Formulários' },
   { path: '/ti/rustdesk', label: 'TI / Rust Desk' },
+  { path: '/nao-se-cale', label: 'Não se Cale' },
+  { path: '/agenda_rh', label: 'Agenda RH' },
 ];
 
 const DOCUMENTOS_PATH_REGEX = /^\/documentos(\/[a-z0-9-]+)?$/;
@@ -25,7 +27,8 @@ function isPaginaInterna(path) {
     PATHS.has(path) ||
     DOCUMENTOS_PATH_REGEX.test(path) ||
     TREINAMENTOS_PATH_REGEX.test(path) ||
-    PAGINA_PUBLICA_REGEX.test(path)
+    PAGINA_PUBLICA_REGEX.test(path) ||
+    /^\/(agenda_rh|cipa)(\/evento\/[^/]+)?$/.test(path)
   );
 }
 
