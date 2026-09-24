@@ -2035,6 +2035,29 @@
   border-top: none;
 }
 
+.pesq-app .guest-row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.pesq-app .guest-row-actions .btn-secondary {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.pesq-app .help .linkish {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary, #5b3df5);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 @media (max-width: 820px) {
   .pesq-app .guest-add-grid,
   .pesq-app .guest-row,

@@ -131,14 +131,29 @@ export class PesquisasService {
 
   adicionarConvidado(
     id: number,
-    body: { nome?: string; cpf: string; email: string }
+    body: { nome?: string; cpf?: string; email?: string; limparDocumento?: boolean }
   ): Observable<PesquisasConvidado> {
     return this.http.post<PesquisasConvidado>(this.api(`/formularios/${id}/convidados`), body);
   }
 
+  atualizarConvidado(
+    id: number,
+    convidadoId: number,
+    body: { nome?: string; cpf?: string; email?: string; limparDocumento?: boolean }
+  ): Observable<PesquisasConvidado> {
+    return this.http.put<PesquisasConvidado>(
+      this.api(`/formularios/${id}/convidados/${convidadoId}`),
+      body
+    );
+  }
+
+  removerConvidado(id: number, convidadoId: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(this.api(`/formularios/${id}/convidados/${convidadoId}`));
+  }
+
   adicionarConvidadosLote(
     id: number,
-    convidados: { nome?: string; cpf: string; email: string }[]
+    convidados: { nome?: string; cpf?: string; email?: string }[]
   ): Observable<PesquisasConvidadosLoteResult> {
     return this.http.post<PesquisasConvidadosLoteResult>(
       this.api(`/formularios/${id}/convidados/lote`),

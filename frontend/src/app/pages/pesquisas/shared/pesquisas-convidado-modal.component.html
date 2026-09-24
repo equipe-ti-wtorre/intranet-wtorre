@@ -1,8 +1,8 @@
 <app-admin-modal
   [open]="open()"
-  title="Novo convidado"
-  subtitle="Quem estiver nesta lista consegue confirmar a identidade e responder o formulário."
-  saveLabel="Adicionar"
+  [title]="titulo()"
+  subtitle="Basta o nome, o CPF/CNPJ ou o e-mail."
+  [saveLabel]="saveLabel()"
   [salvando]="salvando()"
   [saveDisabled]="!valido()"
   (save)="salvar()"
@@ -13,7 +13,7 @@
     <input type="text" name="guestNome" autocomplete="name" [ngModel]="nome()" (ngModelChange)="nome.set($event)" />
   </div>
   <div class="field">
-    <label>CPF ou CNPJ *</label>
+    <label>CPF ou CNPJ</label>
     <input
       type="text"
       name="guestDocumento"
@@ -24,12 +24,21 @@
       (ngModelChange)="formatarDocumento($event)"
       (blur)="tocado.set(true)"
     />
+    @if (editando() && convidado()?.cpfMascara) {
+      <p class="help">
+        Documento atual: {{ convidado()?.cpfMascara }}.
+        Deixe em branco para manter.
+        <button type="button" class="linkish" (click)="alternarLimparDocumento()">
+          {{ limparDocumento() ? 'Manter documento' : 'Remover documento' }}
+        </button>
+      </p>
+    }
     @if (docErro()) {
       <p class="help warn">{{ docErro() }}</p>
     }
   </div>
   <div class="field">
-    <label>E-mail *</label>
+    <label>E-mail</label>
     <input
       type="text"
       name="guestEmail"

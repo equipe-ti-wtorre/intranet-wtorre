@@ -155,7 +155,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
     const ok = await this.alertas.confirmar({
       titulo: `Clonar “${item.title}”?`,
       texto:
-        'Será criada uma cópia em rascunho com o mesmo layout, perguntas e dados importados. Você poderá editar e publicar.',
+        'Será criada uma cópia em rascunho com o mesmo layout, perguntas e dados importados. A lista de convidados não entra na cópia. Você poderá editar e publicar.',
       confirmar: 'Clonar',
     });
     if (!ok) return;

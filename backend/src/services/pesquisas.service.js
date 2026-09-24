@@ -402,8 +402,9 @@ function extractGuestsFromRows(rows) {
         email = cell.toLowerCase().slice(0, 200);
       }
     }
-    if (!cpf || !email || seen.has(cpf)) continue;
-    seen.add(cpf);
+    const key = cpf ? `d:${cpf}` : email ? `e:${email}` : nome ? `n:${nome.toLowerCase()}` : '';
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
     guests.push({ nome, cpf, email });
   }
   return { guests, ignoradas: Math.max(0, list.length - guests.length) };
@@ -507,7 +508,7 @@ async function resolveConvidadosFromBody(body, formularioId) {
     if (rows && rows.length) {
       throw httpError(
         400,
-        'A planilha precisa de colunas de CPF/CNPJ e e-mail para cadastrar convidados.'
+        'A planilha precisa de nome, CPF/CNPJ ou e-mail para cadastrar convidados.'
       );
     }
   }
@@ -519,34 +520,58 @@ async function resolveConvidadosFromBody(body, formularioId) {
 
 async function normalizeConvidados(raw, formularioId) {
   if (!Array.isArray(raw)) return [];
-  const seen = new Set();
+  const seenDoc = new Set();
+  const seenEmail = new Set();
+  const seenNome = new Set();
   const out = [];
   for (const g of raw) {
     const nome = str(g.nome, 200) || null;
-    const email = str(g.email, 200).toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw httpError(400, 'Informe um e-mail válido para cada convidado.');
+    const emailRaw = str(g.email, 200).toLowerCase();
+    let email = null;
+    if (emailRaw) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+        throw httpError(400, 'Informe um e-mail válido para cada convidado.');
+      }
+      email = emailRaw;
     }
     const doc = digitsCpf(g.cpf);
-    let cpfHash;
-    let cpfMascara;
-    if (isDocumentoValido(doc)) {
+    let cpfHash = null;
+    let cpfMascara = null;
+    if (doc) {
+      if (!isDocumentoValido(doc)) {
+        throw httpError(400, 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).');
+      }
       cpfHash = cryptoService.hmacSha256(doc);
       cpfMascara = maskDocumento(doc);
-    } else if (formularioId && g.id) {
+    } else if (formularioId && g.id && !g.limparDocumento) {
       const prev = await repo.findConvidadoHash(formularioId, Number(g.id));
-      if (!prev) {
-        throw httpError(400, 'Cada convidado precisa de um CPF (11 dígitos) ou CNPJ (14 dígitos).');
+      if (prev?.cpfHash) {
+        cpfHash = prev.cpfHash;
+        cpfMascara = prev.cpfMascara || null;
       }
-      cpfHash = prev.cpfHash;
-      cpfMascara = prev.cpfMascara;
-    } else {
-      throw httpError(400, 'Cada convidado precisa de um CPF (11 dígitos) ou CNPJ (14 dígitos).');
     }
-    if (seen.has(cpfHash)) {
-      throw httpError(400, 'Há CPF ou CNPJ duplicados na lista de convidados.');
+    if (!nome && !email && !cpfHash) {
+      throw httpError(400, 'Informe ao menos o nome, o CPF/CNPJ ou o e-mail do convidado.');
     }
-    seen.add(cpfHash);
+    if (cpfHash) {
+      if (seenDoc.has(cpfHash)) {
+        throw httpError(400, 'Há CPF ou CNPJ duplicados na lista de convidados.');
+      }
+      seenDoc.add(cpfHash);
+    }
+    if (email) {
+      if (seenEmail.has(email)) {
+        throw httpError(400, 'Há e-mails duplicados na lista de convidados.');
+      }
+      seenEmail.add(email);
+    }
+    if (!cpfHash && !email && nome) {
+      const key = nome.toLowerCase();
+      if (seenNome.has(key)) {
+        throw httpError(400, 'Há nomes duplicados na lista de convidados.');
+      }
+      seenNome.add(key);
+    }
     out.push({ nome, email, cpfHash, cpfMascara });
   }
   return out;
@@ -996,7 +1021,6 @@ async function clonarFormulario(req) {
   });
   await repo.replacePerguntas(novoId, perguntas);
   await repo.copyFormularioBase(id, novoId);
-  await repo.copyConvidados(id, novoId);
   await repo.copyDestinatarios(id, novoId);
   try {
     await copiarCapaFormulario(id, novoId);
@@ -1040,12 +1064,6 @@ async function salvarFormulario(req, { publicar }) {
     if (!existing.slug) {
       await repo.setFormularioSlug(idParam, await uniquePublicToken());
     }
-    if (publicar && body.publicoAlvo === 'externos') {
-      const n = guests ? guests.length : await repo.countConvidados(idParam);
-      if (!n) {
-        throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
-      }
-    }
     if (body.publicoAlvo === 'externos') {
       await removerComunicadoFormulario(idParam);
     }
@@ -1060,9 +1078,6 @@ async function salvarFormulario(req, { publicar }) {
     await repo.replaceConvidados(id, guests);
   }
   await persistDestinatarios(id, body.publicoAlvo, usuarioIds, { publicar });
-  if (publicar && body.publicoAlvo === 'externos' && !(guests && guests.length)) {
-    throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
-  }
   await maybeReplaceBase(id, req.body, body.publicoAlvo);
   return getFormularioPorId(id, { includeConvidados: true });
 }
@@ -1078,12 +1093,6 @@ async function publicarFormulario(req) {
     }
     if (!existing.titulo || existing.titulo === 'Sem título') {
       throw httpError(400, 'Dê um título ao formulário antes de publicar.');
-    }
-    if (existing.publicoAlvo === 'externos') {
-      const n = await repo.countConvidados(idParam);
-      if (!n) {
-        throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
-      }
     }
     if (existing.publicoAlvo === 'personalizado') {
       const n = await repo.countDestinatarios(idParam);
@@ -1103,9 +1112,6 @@ async function publicarFormulario(req) {
     form = await salvarFormulario(req, { publicar: true });
   }
   if (form.publicoAlvo === 'externos') {
-    if (!(form.totalConvidados || (form.convidados && form.convidados.length))) {
-      throw httpError(400, 'Inclua ao menos um convidado para publicar o formulário externo.');
-    }
     await removerComunicadoFormulario(form.id);
   } else {
     await atualizarComunicadoDoFormulario(form, req.user.id);
@@ -1471,11 +1477,52 @@ async function adicionarConvidado(req) {
     throw httpError(400, 'Informe os dados do convidado.');
   }
   const guest = guests[0];
-  const duplicado = await repo.findConvidadoByCpfHash(form.id, guest.cpfHash);
-  if (duplicado) {
+  await garantirConvidadoUnico(form.id, guest, null);
+  return repo.insertConvidado(form.id, guest);
+}
+
+async function atualizarConvidado(req) {
+  const form = await findFormularioByRef(req.params.id);
+  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
+    throw httpError(403, 'Você não pode alterar este formulário.');
+  }
+  if (form.publicoAlvo !== 'externos') {
+    throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
+  }
+  const convidadoId = parseId(req.params.convidadoId);
+  const atual = await repo.findConvidadoHash(form.id, convidadoId);
+  if (!atual) throw httpError(404, 'Convidado não encontrado.');
+  const body = { ...req.body, id: req.body?.limparDocumento ? undefined : convidadoId };
+  const guests = await normalizeConvidados([body], form.id);
+  const guest = guests[0];
+  await garantirConvidadoUnico(form.id, guest, convidadoId);
+  return repo.updateConvidado(form.id, convidadoId, guest);
+}
+
+async function removerConvidado(req) {
+  const form = await findFormularioByRef(req.params.id);
+  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
+    throw httpError(403, 'Você não pode alterar este formulário.');
+  }
+  if (form.publicoAlvo !== 'externos') {
+    throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
+  }
+  const convidadoId = parseId(req.params.convidadoId);
+  const ok = await repo.deleteConvidado(form.id, convidadoId);
+  if (!ok) throw httpError(404, 'Convidado não encontrado.');
+  return { ok: true };
+}
+
+async function garantirConvidadoUnico(formularioId, guest, ignoreId) {
+  const dup = await repo.findConvidadoDuplicado(formularioId, guest, ignoreId || 0);
+  if (!dup) return;
+  if (guest.cpfHash && dup.cpfHash === guest.cpfHash) {
     throw httpError(409, 'Este CPF ou CNPJ já está na lista.');
   }
-  return repo.insertConvidado(form.id, guest);
+  if (guest.email && String(dup.email || '').toLowerCase() === guest.email) {
+    throw httpError(409, 'Este e-mail já está na lista.');
+  }
+  throw httpError(409, 'Este nome já está na lista.');
 }
 
 async function adicionarConvidadosLote(req) {
@@ -1494,11 +1541,11 @@ async function adicionarConvidadosLote(req) {
     throw httpError(400, 'A planilha pode ter no máximo 5.000 linhas.');
   }
   if (!raw.length) {
-    throw httpError(400, 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.');
+    throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.');
   }
   const guests = await normalizeConvidados(raw, form.id);
   if (!guests.length) {
-    throw httpError(400, 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.');
+    throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.');
   }
   return repo.insertConvidadosAppend(form.id, guests);
 }
@@ -2315,6 +2362,8 @@ module.exports = {
   enviarResposta,
   resultados,
   adicionarConvidado,
+  atualizarConvidado,
+  removerConvidado,
   adicionarConvidadosLote,
   minhaResposta,
   listRequisicoes,

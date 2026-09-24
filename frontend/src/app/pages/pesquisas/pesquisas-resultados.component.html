@@ -229,7 +229,7 @@
           </div>
         </div>
       </div>
-      <p class="page-sub" style="margin-top: 14px">Convidados identificados por CPF ou CNPJ e e-mail.</p>
+      <p class="page-sub" style="margin-top: 14px">Basta nome, CPF/CNPJ ou e-mail. O acesso pelo link usa CPF/CNPJ ou e-mail.</p>
       <div class="guest-list-head">
         <label>Lista de convidados</label>
         <div class="guest-list-actions">
@@ -264,11 +264,17 @@
         @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
           <p class="page-sub">Nenhum convidado na lista.</p>
         } @else {
-          @for (g of d.formulario.convidados || []; track g.id || g.email) {
+          @for (g of d.formulario.convidados || []; track g.id || g.email || g.nome) {
             <div class="guest-row">
               <span>{{ g.nome || '—' }}</span>
-              <span>{{ g.cpfMascara || '***' }}</span>
-              <span>{{ g.email }}</span>
+              <span>{{ g.cpfMascara || '—' }}</span>
+              <span>{{ g.email || '—' }}</span>
+              <span class="guest-row-actions">
+                <button type="button" class="btn-secondary" (click)="editarConvidado(g)">Editar</button>
+                <button type="button" class="q-del" (click)="removerConvidado(g)" aria-label="Remover convidado">
+                  <app-pesq-icon name="x" [size]="15" />
+                </button>
+              </span>
             </div>
           }
         }
@@ -430,6 +436,7 @@
 <app-pesquisas-convidado-modal
   [open]="convidadoModalAberto()"
   [formularioId]="data()?.formulario?.id ?? null"
+  [convidado]="convidadoEditando()"
   (saved)="onConvidadoSalvo()"
   (cancel)="fecharConvidadoModal()"
 />

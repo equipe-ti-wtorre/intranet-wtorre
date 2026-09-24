@@ -78,6 +78,32 @@ interface GuestDraft {
 let qKey = 0;
 let gKey = 0;
 
+function chaveConvidado(nome: string, cpf: string, email: string): string {
+  if (cpf && (cpf.length === 11 || cpf.length === 14)) return `d:${cpf}`;
+  const mail = email.trim().toLowerCase();
+  if (mail) return `e:${mail}`;
+  const n = nome.trim().toLowerCase();
+  return n ? `n:${n}` : '';
+}
+
+function titulosDaPlanilha(XLSX: typeof import('xlsx'), sheet: import('xlsx').WorkSheet): string[] {
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+  const headerRow = matrix.find(
+    (row) => Array.isArray(row) && row.some((cell) => String(cell ?? '').trim())
+  );
+  if (!Array.isArray(headerRow)) return [];
+  const headers: string[] = [];
+  const seen = new Set<string>();
+  for (const cell of headerRow) {
+    const label = String(cell ?? '').trim().slice(0, 200);
+    if (!label || seen.has(label.toLowerCase())) continue;
+    seen.add(label.toLowerCase());
+    headers.push(label);
+    if (headers.length >= 40) break;
+  }
+  return headers;
+}
+
 @Component({
   selector: 'app-pesquisas-builder',
   standalone: true,
@@ -425,7 +451,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
       if (!rows.length) {
-        this.alertas.erro('A planilha está vazia.');
+        const headers = titulosDaPlanilha(XLSX, sheet);
+        if (!headers.length) {
+          this.alertas.erro('A planilha está vazia.');
+          return;
+        }
+        const vazio: Record<string, unknown> = {};
+        for (const header of headers) vazio[header] = '';
+        this.importarPlanilha([vazio], { somenteCabecalho: true });
         return;
       }
       if (rows.length > 5000) {
@@ -621,16 +654,34 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     const nome = this.guestNome().trim();
     const doc = digitsDocumento(this.guestCpf());
     const email = this.guestEmail().trim().toLowerCase();
-    if (!isDocumentoValido(doc)) {
+    const docOk = isDocumentoValido(doc);
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (doc && !docOk) {
       this.alertas.erro('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).');
       return;
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (email && !emailOk) {
       this.alertas.erro('Informe um e-mail válido.');
       return;
     }
-    if (this.convidados().some((g) => digitsDocumento(g.cpf) === doc && isDocumentoValido(doc))) {
+    if (!nome && !docOk && !emailOk) {
+      this.alertas.erro('Informe ao menos o nome, o CPF/CNPJ ou o e-mail.');
+      return;
+    }
+    if (docOk && this.convidados().some((g) => digitsDocumento(g.cpf) === doc)) {
       this.alertas.erro('Este CPF ou CNPJ já está na lista.');
+      return;
+    }
+    if (emailOk && this.convidados().some((g) => g.email.trim().toLowerCase() === email)) {
+      this.alertas.erro('Este e-mail já está na lista.');
+      return;
+    }
+    if (
+      !docOk &&
+      !emailOk &&
+      this.convidados().some((g) => !digitsDocumento(g.cpf) && !g.email.trim() && g.nome.trim().toLowerCase() === nome.toLowerCase())
+    ) {
+      this.alertas.erro('Este nome já está na lista.');
       return;
     }
     gKey += 1;
@@ -687,12 +738,6 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     if (publicar && !this.perguntas().some((p) => p.blocoTipo === 'pergunta')) {
       this.alertas.erro('Inclua ao menos uma pergunta antes de publicar.');
       return;
-    }
-    if (publicar && this.publicoAlvo() === 'externos') {
-      if (!this.convidados().length) {
-        this.alertas.erro('Inclua ao menos um convidado para publicar o formulário externo.');
-        return;
-      }
     }
     if (publicar && this.publicoAlvo() === 'personalizado') {
       if (!this.destinatarios().length) {
@@ -840,9 +885,25 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     };
   }
 
-  private importarPlanilha(rows: Record<string, unknown>[]): void {
+  private importarPlanilha(
+    rows: Record<string, unknown>[],
+    opts?: { somenteCabecalho?: boolean }
+  ): void {
     const externo = this.publicoAlvo() === 'externos';
     const created = this.criarCamposDaPlanilha(rows, { pularIdentidade: externo });
+
+    if (opts?.somenteCabecalho) {
+      if (!created) {
+        this.alertas.erro(
+          externo
+            ? 'Nenhum campo novo. Colunas de nome, CPF/CNPJ e e-mail não viram pergunta, e títulos que já existem são mantidos.'
+            : 'Nenhum campo novo. Esses títulos já estão no formulário.'
+        );
+        return;
+      }
+      this.alertas.sucesso(created === 1 ? '1 campo importado.' : `${created} campos importados.`);
+      return;
+    }
 
     if (!externo) {
       this.baseLinhas = null;
@@ -860,9 +921,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     this.temBaseSalva.set(true);
 
     const { guests, ignoradas } = extractGuestsFromRows(rows);
-    const existing = new Set(this.convidados().map((g) => digitsDocumento(g.cpf)));
+    const existing = new Set(
+      this.convidados().map((g) => chaveConvidado(g.nome, digitsDocumento(g.cpf), g.email))
+    );
     const added = guests
-      .filter((g) => !existing.has(digitsDocumento(g.cpf)))
+      .filter((g) => {
+        const key = chaveConvidado(g.nome, g.cpf, g.email);
+        return key && !existing.has(key);
+      })
       .map((g) => this.fromExtractedGuest(g));
     if (added.length) this.convidados.update((list) => [...list, ...added]);
 
@@ -870,13 +936,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       this.alertas.erro(
         guests.length
           ? 'Esses convidados já estão na lista.'
-          : 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail; as demais viram campos.'
+          : 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail; as demais viram campos.'
       );
       return;
     }
 
     const extra = ignoradas
-      ? ` ${ignoradas} linha(s) sem documento ou e-mail foram ignoradas.`
+      ? ` ${ignoradas} linha(s) sem nome, documento ou e-mail foram ignoradas.`
       : '';
     const camposTxt = created === 1 ? '1 campo' : `${created} campos`;
     const convTxt = added.length === 1 ? '1 convidado' : `${added.length} convidados`;
@@ -925,7 +991,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       nome: g.nome || '',
       cpf: '',
       cpfMascara: g.cpfMascara || '',
-      email: g.email,
+      email: g.email || '',
     };
   }
 

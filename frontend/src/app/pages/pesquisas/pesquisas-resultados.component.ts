@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
 import {
+  PesquisasConvidado,
   PesquisasResultadoPergunta,
   PesquisasResultados,
   PesquisasSerieDia,
@@ -118,6 +119,7 @@ export class PesquisasResultadosComponent implements OnInit {
 
   readonly qrAberto = signal(false);
   readonly convidadoModalAberto = signal(false);
+  readonly convidadoEditando = signal<PesquisasConvidado | null>(null);
   readonly importandoConvidados = signal(false);
   readonly loading = signal(true);
   readonly agindo = signal(false);
@@ -350,16 +352,43 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   abrirConvidadoModal(): void {
+    this.convidadoEditando.set(null);
+    this.convidadoModalAberto.set(true);
+  }
+
+  editarConvidado(g: PesquisasConvidado): void {
+    this.convidadoEditando.set(g);
     this.convidadoModalAberto.set(true);
   }
 
   fecharConvidadoModal(): void {
     this.convidadoModalAberto.set(false);
+    this.convidadoEditando.set(null);
   }
 
   onConvidadoSalvo(): void {
     this.convidadoModalAberto.set(false);
+    this.convidadoEditando.set(null);
     this.carregar();
+  }
+
+  async removerConvidado(g: PesquisasConvidado): Promise<void> {
+    const id = this.data()?.formulario?.id;
+    if (!id || !g.id) return;
+    const ok = await this.alertas.confirmarExclusao({
+      titulo: 'Remover convidado',
+      texto: 'Essa pessoa deixa de conseguir entrar por este convite.',
+    });
+    if (!ok) return;
+    this.api.removerConvidado(id, g.id).subscribe({
+      next: () => {
+        this.alertas.sucesso('Convidado removido.');
+        this.carregar();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível remover o convidado.');
+      },
+    });
   }
 
   async onExcelConvidados(ev: Event): Promise<void> {
@@ -388,7 +417,7 @@ export class PesquisasResultadosComponent implements OnInit {
       const { guests, ignoradas } = extractGuestsFromRows(rows);
       if (!guests.length) {
         this.alertas.erro(
-          'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.'
+          'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.'
         );
         return;
       }
@@ -409,14 +438,14 @@ export class PesquisasResultadosComponent implements OnInit {
               this.alertas.erro(
                 res.duplicados
                   ? 'Esses convidados já estão na lista.'
-                  : 'Nenhuma linha válida. Use colunas Nome (opcional), CPF ou CNPJ e E-mail.'
+                  : 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.'
               );
               return;
             }
             const extras: string[] = [];
             if (res.duplicados) extras.push(`${res.duplicados} já estavam na lista`);
             if (ignoradas) {
-              extras.push(`${ignoradas} linha(s) sem documento ou e-mail foram ignoradas`);
+              extras.push(`${ignoradas} linha(s) sem nome, documento ou e-mail foram ignoradas`);
             }
             const extra = extras.length ? ` ${extras.join('. ')}.` : '';
             const msg =

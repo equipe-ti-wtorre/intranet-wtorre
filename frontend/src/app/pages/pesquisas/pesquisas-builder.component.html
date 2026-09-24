@@ -244,7 +244,7 @@
           <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
           <div class="guest-add-grid">
             <div class="field">
-              <label>Nome (opcional)</label>
+              <label>Nome</label>
               <input type="text" [ngModel]="guestNome()" (ngModelChange)="guestNome.set($event)" />
             </div>
             <div class="field">
@@ -278,7 +278,7 @@
             />
           </div>
           <p class="page-sub" style="margin-top: 8px">
-            Baixe o modelo com CPF/CNPJ, Nome e E-mail. As demais colunas viram campos do formulário.
+            Preencha ao menos um: nome, CPF/CNPJ ou e-mail. As demais colunas da planilha viram campos do formulário.
           </p>
           @if (convidados().length) {
             <div class="guest-table">

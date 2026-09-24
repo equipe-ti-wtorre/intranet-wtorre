@@ -842,7 +842,7 @@ async function insertConvidado(formularioId, guest) {
     `INSERT INTO pesquisas_convidados
       (formulario_id, nome, email, cpf_hash, cpf_mascara)
      VALUES (?, ?, ?, ?, ?)`,
-    [formularioId, guest.nome || null, guest.email, guest.cpfHash, guest.cpfMascara]
+    [formularioId, guest.nome || null, guest.email || null, guest.cpfHash || null, guest.cpfMascara || null]
   );
   return mapConvidado({
     id: result.insertId,
@@ -861,14 +861,27 @@ async function insertConvidadosAppend(formularioId, guests) {
   try {
     await conn.beginTransaction();
     const [existingRows] = await conn.execute(
-      'SELECT cpf_hash FROM pesquisas_convidados WHERE formulario_id = ?',
+      'SELECT cpf_hash, email, nome FROM pesquisas_convidados WHERE formulario_id = ?',
       [formularioId]
     );
-    const existing = new Set(existingRows.map((r) => r.cpf_hash));
+    const docs = new Set();
+    const emails = new Set();
+    const nomes = new Set();
+    for (const row of existingRows) {
+      if (row.cpf_hash) docs.add(row.cpf_hash);
+      if (row.email) emails.add(String(row.email).toLowerCase());
+      if (!row.cpf_hash && !row.email && row.nome) nomes.add(String(row.nome).toLowerCase());
+    }
     let inseridos = 0;
     let duplicados = 0;
     for (const g of list) {
-      if (existing.has(g.cpfHash)) {
+      const email = g.email ? String(g.email).toLowerCase() : '';
+      const nome = g.nome ? String(g.nome).toLowerCase() : '';
+      const repetido =
+        (g.cpfHash && docs.has(g.cpfHash)) ||
+        (email && emails.has(email)) ||
+        (!g.cpfHash && !email && nome && nomes.has(nome));
+      if (repetido) {
         duplicados += 1;
         continue;
       }
@@ -876,9 +889,11 @@ async function insertConvidadosAppend(formularioId, guests) {
         `INSERT INTO pesquisas_convidados
           (formulario_id, nome, email, cpf_hash, cpf_mascara)
          VALUES (?, ?, ?, ?, ?)`,
-        [formularioId, g.nome || null, g.email, g.cpfHash, g.cpfMascara]
+        [formularioId, g.nome || null, g.email || null, g.cpfHash || null, g.cpfMascara || null]
       );
-      existing.add(g.cpfHash);
+      if (g.cpfHash) docs.add(g.cpfHash);
+      if (email) emails.add(email);
+      if (!g.cpfHash && !email && nome) nomes.add(nome);
       inseridos += 1;
     }
     await conn.commit();
@@ -902,7 +917,7 @@ async function replaceConvidados(formularioId, convidados) {
         `INSERT INTO pesquisas_convidados
           (formulario_id, nome, email, cpf_hash, cpf_mascara)
          VALUES (?, ?, ?, ?, ?)`,
-        [formularioId, g.nome || null, g.email, g.cpfHash, g.cpfMascara]
+        [formularioId, g.nome || null, g.email || null, g.cpfHash || null, g.cpfMascara || null]
       );
     }
     await conn.commit();
@@ -1058,6 +1073,76 @@ async function findConvidadosByIdentidade(cpfHashes, emails) {
     where.params
   );
   return rows.map(mapConvitePortal);
+}
+
+async function findConvidadoDuplicado(formularioId, guest, ignoreId) {
+  const pool = getPool();
+  const email = guest.email ? String(guest.email).toLowerCase() : null;
+  const nome = !guest.cpfHash && !email && guest.nome ? String(guest.nome).toLowerCase() : null;
+  const [rows] = await pool.execute(
+    `SELECT id, cpf_hash, email, nome
+     FROM pesquisas_convidados
+     WHERE formulario_id = ?
+       AND id <> ?
+       AND (
+         (? IS NOT NULL AND cpf_hash = ?)
+         OR (? IS NOT NULL AND LOWER(email) = ?)
+         OR (? IS NOT NULL AND cpf_hash IS NULL AND (email IS NULL OR email = '') AND LOWER(nome) = ?)
+       )
+     LIMIT 1`,
+    [
+      formularioId,
+      ignoreId || 0,
+      guest.cpfHash || null,
+      guest.cpfHash || null,
+      email,
+      email,
+      nome,
+      nome,
+    ]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    cpfHash: row.cpf_hash,
+    email: row.email,
+    nome: row.nome || '',
+  };
+}
+
+async function updateConvidado(formularioId, id, guest) {
+  const pool = getPool();
+  const [result] = await pool.execute(
+    `UPDATE pesquisas_convidados
+     SET nome = ?, email = ?, cpf_hash = ?, cpf_mascara = ?
+     WHERE formulario_id = ? AND id = ?`,
+    [
+      guest.nome || null,
+      guest.email || null,
+      guest.cpfHash || null,
+      guest.cpfMascara || null,
+      formularioId,
+      id,
+    ]
+  );
+  if (!result.affectedRows) return null;
+  return mapConvidado({
+    id,
+    formulario_id: formularioId,
+    nome: guest.nome || '',
+    email: guest.email,
+    cpf_mascara: guest.cpfMascara,
+  });
+}
+
+async function deleteConvidado(formularioId, id) {
+  const pool = getPool();
+  const [result] = await pool.execute(
+    'DELETE FROM pesquisas_convidados WHERE formulario_id = ? AND id = ?',
+    [formularioId, id]
+  );
+  return result.affectedRows > 0;
 }
 
 async function findConvidadoHash(formularioId, id) {
@@ -1377,6 +1462,9 @@ module.exports = {
   insertConvidado,
   insertConvidadosAppend,
   replaceConvidados,
+  findConvidadoDuplicado,
+  updateConvidado,
+  deleteConvidado,
   findConvidadoByHashEmail,
   findConvidadoByIdentidade,
   findConvidadosByIdentidade,

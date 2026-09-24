@@ -57,8 +57,9 @@ export function extractGuestsFromRows(rows: Record<string, unknown>[] | null | u
         if (EMAIL_RE.test(e)) email = e.slice(0, 200);
       }
     }
-    if (!cpf || !email || seen.has(cpf)) continue;
-    seen.add(cpf);
+    const key = cpf ? `d:${cpf}` : email ? `e:${email}` : nome ? `n:${nome.toLowerCase()}` : '';
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
     guests.push({ nome, cpf, email });
   }
   return { guests, ignoradas: Math.max(0, list.length - guests.length) };

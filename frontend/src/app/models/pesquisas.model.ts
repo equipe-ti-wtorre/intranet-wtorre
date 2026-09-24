@@ -94,7 +94,7 @@ export interface PesquisasPergunta {
 export interface PesquisasConvidado {
   id?: number;
   nome: string;
-  email: string;
+  email?: string | null;
   cpfMascara?: string;
 }
 

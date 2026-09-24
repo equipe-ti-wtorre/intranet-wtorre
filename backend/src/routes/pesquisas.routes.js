@@ -85,6 +85,8 @@ router.post('/formularios/:id/publicar', requireJwt, controller.publicar);
 router.post('/formularios/:id/despublicar', requireJwt, controller.despublicar);
 router.post('/formularios/:id/evento', requireJwt, controller.atualizarEvento);
 router.post('/formularios/:id/convidados', requireJwt, controller.adicionarConvidado);
+router.put('/formularios/:id/convidados/:convidadoId', requireJwt, controller.atualizarConvidado);
+router.delete('/formularios/:id/convidados/:convidadoId', requireJwt, controller.removerConvidado);
 router.post('/formularios/:id/convidados/lote', requireJwt, controller.adicionarConvidadosLote);
 router.post(
   '/formularios/:id/capa',

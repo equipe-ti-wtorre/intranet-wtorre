@@ -162,6 +162,22 @@ async function adicionarConvidado(req, res) {
   }
 }
 
+async function atualizarConvidado(req, res) {
+  try {
+    res.json(await service.atualizarConvidado(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function removerConvidado(req, res) {
+  try {
+    res.json(await service.removerConvidado(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function adicionarConvidadosLote(req, res) {
   try {
     res.status(201).json(await service.adicionarConvidadosLote(req));
@@ -470,6 +486,8 @@ module.exports = {
   enviarResposta,
   resultados,
   adicionarConvidado,
+  atualizarConvidado,
+  removerConvidado,
   adicionarConvidadosLote,
   minhaResposta,
   despublicar,
