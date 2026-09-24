@@ -129,6 +129,27 @@ describe('nsc-certificado-texto', () => {
     assert.equal(extractNome(sujo), 'Mauricio Stade Izidoro');
   });
 
+  it('lê o nome em outra linha quando o slot Certificamos que vem vazio', () => {
+    const vazio = `
+      CERTIFICADO
+      Certificamos que, , concluiu o
+      Curso de Capacitação do Protocolo "Não se Cale"
+      Leis nº 17.621 e 17.635 UNIVESP
+      Jaine Almeida de Carvalho
+    `;
+    assert.equal(extractNome(vazio), 'Jaine Almeida de Carvalho');
+    assert.equal(extractNome(vazio, 'Jaine Almeida de Carvalho'), 'Jaine Almeida de Carvalho');
+  });
+
+  it('lê nome em CAIXA ALTA vindo do OCR', () => {
+    const ocr = `
+      CERTIFICADO Certificamos que, , concluiu o Protocolo Não se Cale
+      Leis 17.621 UNIVESP
+      JAINE ALMEIDA DE CARVALHO
+    `;
+    assert.equal(extractNome(ocr), 'JAINE ALMEIDA DE CARVALHO');
+  });
+
   it('devolve o nome quando só a data de emissão falta', () => {
     const semData = `
       CERTIFICADO

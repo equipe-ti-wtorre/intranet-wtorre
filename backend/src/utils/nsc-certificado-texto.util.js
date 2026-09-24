@@ -137,6 +137,20 @@ function extractNomeCabecalho(text) {
   return null;
 }
 
+function extractNomeLivre(text) {
+  const words = palavrasNomeValidas(text);
+  if (words.length < 2) return null;
+  const candidatos = [];
+  for (let i = 0; i < words.length; i += 1) {
+    for (let n = Math.min(5, words.length - i); n >= 2; n -= 1) {
+      const nome = nomeParecePessoa(words.slice(i, i + n).join(' '));
+      if (nome) candidatos.push(nome);
+    }
+  }
+  candidatos.sort((a, b) => b.split(/\s+/).length - a.split(/\s+/).length || b.length - a.length);
+  return candidatos[0] || null;
+}
+
 function extractNome(text, nomeColaborador) {
   const raw = String(text || '').replace(/\s+/g, ' ');
   const padroes = [
@@ -150,7 +164,11 @@ function extractNome(text, nomeColaborador) {
     const nome = nomeParecePessoa(limparNome(m[1]));
     if (nome) return nome;
   }
-  return extractNomeDoColaborador(raw, nomeColaborador) || extractNomeCabecalho(text);
+  return (
+    extractNomeDoColaborador(raw, nomeColaborador) ||
+    extractNomeCabecalho(text) ||
+    extractNomeLivre(text)
+  );
 }
 
 function toIsoDateParts(dia, mes, ano) {
