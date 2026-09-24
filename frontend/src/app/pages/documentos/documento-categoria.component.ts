@@ -43,6 +43,14 @@ const DESC_ENTIDADE_FALLBACK =
 
 const CHIP_CORES = ['#1d54e6', '#7c3aed', '#0d9488', '#f59e0b', '#22c55e', '#ef4444'];
 
+function normalizarNomeCategoria(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 @Component({
   selector: 'app-documento-categoria',
   standalone: true,
@@ -241,31 +249,11 @@ export class DocumentoCategoriaComponent implements OnInit, OnDestroy {
   }
 
   selecionarCategoriaRaiz(cat: CategoriaDocumento): void {
-    this.expandirCategoria(cat.slug);
-    const queryParams: Record<string, string | null> = {
-      cat: cat.slug,
-      sub: null,
-      setor: this.setorAtivo(),
-    };
-    if ((cat.children?.length ?? 0) > 0) {
-      queryParams['sub'] = 'geral';
-    }
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams,
-      queryParamsHandling: 'merge',
-      replaceUrl: true,
-    });
+    this.navegarParaCategoria(cat, null);
   }
 
   selecionarSubcategoriaSidebar(raiz: CategoriaDocumento, child: CategoriaDocumento): void {
-    this.expandirCategoria(raiz.slug);
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { cat: raiz.slug, sub: child.slug },
-      queryParamsHandling: 'merge',
-      replaceUrl: true,
-    });
+    this.navegarParaCategoria(raiz, child);
   }
 
   toggleExpandirCategoria(slug: string, event: Event): void {
@@ -320,6 +308,55 @@ export class DocumentoCategoriaComponent implements OnInit, OnDestroy {
     this.categoriasExpandidas.set(next);
   }
 
+  private navegarParaCategoria(raiz: CategoriaDocumento, child: CategoriaDocumento | null): void {
+    this.expandirCategoria(raiz.slug);
+    const queryParams: Record<string, string | null> = {
+      cat: raiz.slug,
+      sub: child ? child.slug : (raiz.children?.length ?? 0) > 0 ? 'geral' : null,
+      setor: null,
+    };
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams,
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  private buscarCategoriaPorNome(
+    nome: string
+  ): { raiz: CategoriaDocumento; child: CategoriaDocumento | null } | null {
+    const alvo = normalizarNomeCategoria(nome);
+    if (!alvo) return null;
+
+    for (const raiz of this.arvore()) {
+      if (normalizarNomeCategoria(raiz.nome) === alvo) {
+        return { raiz, child: null };
+      }
+    }
+
+    for (const raiz of this.arvore()) {
+      for (const child of raiz.children ?? []) {
+        if (normalizarNomeCategoria(child.nome) === alvo) {
+          return { raiz, child };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private nomeCategoriaVisivel(): string | null {
+    const raiz = this.categoriaRaiz();
+    if (!raiz) return null;
+    const sub = this.subAtiva();
+    if (sub && sub !== 'geral') {
+      const child = (raiz.children ?? []).find((item) => item.slug === sub);
+      if (child) return child.nome;
+    }
+    return raiz.nome;
+  }
+
   selecionarSub(slug: string): void {
     this.router.navigate([], {
       relativeTo: this.route,
@@ -330,12 +367,33 @@ export class DocumentoCategoriaComponent implements OnInit, OnDestroy {
   }
 
   selecionarSetor(slug: string | null): void {
+    if (slug && slug !== 'sem-setor') {
+      const setor = this.setores().find((item) => item.slug === slug);
+      const destino = setor ? this.buscarCategoriaPorNome(setor.nome) : null;
+      if (destino) {
+        this.navegarParaCategoria(destino.raiz, destino.child);
+      }
+      return;
+    }
+
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { setor: slug },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
+  }
+
+  todosChipAtivo(): boolean {
+    if (this.setorAtivo() === 'sem-setor') return false;
+    return !this.setores().some((setor) => this.setorChipAtivo(setor));
+  }
+
+  setorChipAtivo(setor: DocumentoSetor): boolean {
+    if (this.setorAtivo() === 'sem-setor') return false;
+    const nome = this.nomeCategoriaVisivel();
+    if (!nome) return false;
+    return normalizarNomeCategoria(nome) === normalizarNomeCategoria(setor.nome);
   }
 
   iconeNavItem(item: ItemNavCategoria): string | null {
@@ -419,6 +477,14 @@ export class DocumentoCategoriaComponent implements OnInit, OnDestroy {
 
     const catParam = this.route.snapshot.queryParamMap.get('cat');
     const setorParam = this.route.snapshot.queryParamMap.get('setor');
+    if (setorParam && setorParam !== 'sem-setor') {
+      const setor = this.setores().find((item) => item.slug === setorParam);
+      const destino = setor ? this.buscarCategoriaPorNome(setor.nome) : null;
+      if (destino) {
+        this.navegarParaCategoria(destino.raiz, destino.child);
+        return;
+      }
+    }
     this.setorAtivo.set(setorParam);
 
     let raiz = catParam ? tree.find((c) => c.slug === catParam) ?? null : null;

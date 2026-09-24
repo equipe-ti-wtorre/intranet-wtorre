@@ -155,7 +155,7 @@
                   <button
                     type="button"
                     class="fchip"
-                    [class.active]="!setorAtivo()"
+                    [class.active]="todosChipAtivo()"
                     (click)="selecionarSetor(null)"
                   >
                     Todos
@@ -164,7 +164,7 @@
                     <button
                       type="button"
                       class="fchip"
-                      [class.active]="setorAtivo() === setor.slug"
+                      [class.active]="setorChipAtivo(setor)"
                       [style.--chip-cor]="setor.cor || '#1d54e6'"
                       (click)="selecionarSetor(setor.slug)"
                     >
