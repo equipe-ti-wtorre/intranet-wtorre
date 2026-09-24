@@ -1,7 +1,6 @@
 const followupRepo = require('../repositories/followup.repository');
 const syncService = require('../services/followup-sync.service');
 const { reagendarSyncFollowup } = require('../services/followup-cron.service');
-const { resolveLoginFromUser } = require('../utils/resolve-login-followup');
 const { enriquecerSolicitacao } = require('../services/followup-mensagem.service');
 const { familiaStatus } = require('../utils/followup-status.util');
 const auditRepo = require('../repositories/auditLog.repository');
@@ -27,11 +26,7 @@ async function enriquecerLista(rows) {
 
 async function minhas(req, res) {
   try {
-    const login = resolveLoginFromUser(req.user);
-    if (!login) {
-      return res.status(400).json({ mensagem: 'Não foi possível identificar o login do usuário.' });
-    }
-    const rows = await followupRepo.listByUsuario(login);
+    const rows = await followupRepo.listAll();
     return res.json(await enriquecerLista(rows));
   } catch (err) {
     return handleError(res, err);
@@ -40,11 +35,7 @@ async function minhas(req, res) {
 
 async function resumo(req, res) {
   try {
-    const login = resolveLoginFromUser(req.user);
-    if (!login) {
-      return res.status(400).json({ mensagem: 'Não foi possível identificar o login do usuário.' });
-    }
-    const itens = await followupRepo.resumoByUsuario(login);
+    const itens = await followupRepo.resumoAll();
     return res.json(
       itens.map((i) => ({
         ...i,
@@ -56,7 +47,7 @@ async function resumo(req, res) {
   }
 }
 
-/** Qualquer usuário autenticado pode consultar por número (lista /minhas segue restrita ao dono).
+/** Qualquer usuário autenticado consulta a base inteira e também por número.
  *  Query: escopo=rm | documento | todos (default).
  */
 async function solicitacaoPorNumero(req, res) {
@@ -88,11 +79,7 @@ async function solicitacaoPorNumero(req, res) {
 
 async function filiais(req, res) {
   try {
-    const login = resolveLoginFromUser(req.user);
-    if (!login) {
-      return res.status(400).json({ mensagem: 'Não foi possível identificar o login do usuário.' });
-    }
-    const itens = await followupRepo.listFiliaisByUsuario(login);
+    const itens = await followupRepo.listFiliais();
     return res.json(itens);
   } catch (err) {
     return handleError(res, err);

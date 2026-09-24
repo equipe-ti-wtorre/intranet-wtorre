@@ -133,9 +133,9 @@ function parseMensagem(r: FollowupSolicitacao): MsgView {
 }
 
 const TIPO_CONTEXTO: Record<FollowupTipoFiltro, string> = {
-  solicitacao: 'Suas solicitações',
-  contrato: 'Seus contratos/aditivos',
-  pedido: 'Seus pedidos',
+  solicitacao: 'Solicitações',
+  contrato: 'Contratos/aditivos',
+  pedido: 'Pedidos',
 };
 
 @Component({

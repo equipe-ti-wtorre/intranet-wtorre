@@ -145,26 +145,22 @@ async function touchUltimaSync({ status, linhas, erro }) {
   );
 }
 
-async function listByUsuario(usuario) {
+async function listAll() {
   const pool = getPool();
   const [rows] = await pool.execute(
     `SELECT * FROM followup_solicitacoes
-     WHERE usuario = ?
-     ORDER BY n_requisicao DESC`,
-    [usuario]
+     ORDER BY n_requisicao DESC`
   );
   return rows.map(mapSolicitacao);
 }
 
-async function resumoByUsuario(usuario) {
+async function resumoAll() {
   const pool = getPool();
   const [rows] = await pool.execute(
     `SELECT status_geral AS status, COUNT(*) AS qtd
      FROM followup_solicitacoes
-     WHERE usuario = ?
      GROUP BY status_geral
-     ORDER BY qtd DESC, status_geral ASC`,
-    [usuario]
+     ORDER BY qtd DESC, status_geral ASC`
   );
   return rows.map((r) => ({
     status: r.status || '—',
@@ -225,18 +221,16 @@ async function findByNumero(nRequisicao, escopo = 'todos') {
   return rows.map(mapSolicitacao);
 }
 
-async function listFiliaisByUsuario(usuario) {
+async function listFiliais() {
   const pool = getPool();
   const [rows] = await pool.execute(
     `SELECT cod_filial AS codigo,
             MAX(NULLIF(TRIM(nome_filial), '')) AS nome
      FROM followup_solicitacoes
-     WHERE usuario = ?
-       AND cod_filial IS NOT NULL
+     WHERE cod_filial IS NOT NULL
        AND TRIM(cod_filial) <> ''
      GROUP BY cod_filial
-     ORDER BY CAST(cod_filial AS UNSIGNED), cod_filial ASC`,
-    [usuario]
+     ORDER BY CAST(cod_filial AS UNSIGNED), cod_filial ASC`
   );
   return rows.map((r) => ({
     codigo: String(r.codigo),
@@ -360,10 +354,10 @@ module.exports = {
   getConfig,
   updateConfig,
   touchUltimaSync,
-  listByUsuario,
-  resumoByUsuario,
+  listAll,
+  resumoAll,
   findByNumero,
-  listFiliaisByUsuario,
+  listFiliais,
   getMatrizMap,
   replaceSolicitacoes,
   upsertMatriz,
