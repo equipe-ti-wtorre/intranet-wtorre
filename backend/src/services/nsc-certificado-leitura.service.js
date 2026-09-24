@@ -2,7 +2,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { createCanvas } = require('@napi-rs/canvas');
 const sharp = require('sharp');
 const { createWorker } = require('tesseract.js');
 const { validarTextoCertificado } = require('../utils/nsc-certificado-texto.util');
@@ -216,41 +215,6 @@ async function ocrImagem(png, textoJaLido = '', nomeColaborador = '') {
   return textos.filter(Boolean).join('\n');
 }
 
-async function rasterizarFaixaNome(buffer) {
-  const doc = await getPdfDocument(buffer);
-  let canvas = null;
-  try {
-    const page = await doc.getPage(1);
-    const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(1.1, 1200 / Math.max(base.width || 1, 1));
-    const viewport = page.getViewport({ scale });
-    const width = Math.max(1, Math.ceil(viewport.width));
-    const height = Math.max(1, Math.ceil(viewport.height));
-    canvas = createCanvas(width, height);
-    const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport, canvas }).promise;
-    const png = canvas.toBuffer('image/png');
-    const meta = await sharp(png).metadata();
-    const w = meta.width || 0;
-    const h = meta.height || 0;
-    if (w < 40 || h < 40) return png;
-    return sharp(png)
-      .extract(clampExtract(meta, 0, h * 0.22, w * 0.82, h * 0.42))
-      .png()
-      .toBuffer();
-  } finally {
-    if (canvas) {
-      try {
-        canvas.width = 0;
-        canvas.height = 0;
-      } catch {
-        /* ignore */
-      }
-    }
-    await doc.destroy();
-  }
-}
-
 function textoSuficiente(text, nomeColaborador) {
   const r = validarTextoCertificado(text, nomeColaborador);
   return !!(r.ok && r.nome && r.data_emissao);
@@ -287,19 +251,6 @@ async function extrairTextoArquivo(filePath, mime, nomeColaborador) {
       }
     } catch (err) {
       console.warn('[nsc] falha ao OCR imagens do PDF:', err.message);
-    }
-
-    const aposImagens = [combinado, ...ocrs].filter(Boolean).join('\n');
-    if (textoSuficiente(aposImagens, nomeColaborador) || textoComNomeOficial(aposImagens, nomeColaborador)) {
-      return aposImagens;
-    }
-
-    try {
-      const faixa = await rasterizarFaixaNome(buffer);
-      const ocrFaixa = await ocrBuffer(await preprocessImage(faixa));
-      ocrs.push(ocrFaixa);
-    } catch (err) {
-      console.warn('[nsc] falha ao rasterizar faixa do nome:', err.message);
     }
 
     const final = [combinado, ...ocrs].filter(Boolean).join('\n');

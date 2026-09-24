@@ -129,6 +129,16 @@ describe('nsc-certificado-texto', () => {
     assert.equal(extractNome(sujo), 'Mauricio Stade Izidoro');
   });
 
+  it('lê nome em minúsculas do cabeçalho TCPDF', () => {
+    const tcpdf = `
+      Elizangela oliveira 24/09/26 08:05 Data de emissão: Powered by TCPDF
+      Certificamos que, , concluiu o Curso de Capacitação do Protocolo "Não se Cale"
+      Leis nº 17.621 e 17.635 UNIVESP
+    `;
+    assert.equal(extractNome(tcpdf), 'Elizangela oliveira');
+    assert.equal(extractDataEmissao(tcpdf), '2026-09-24');
+  });
+
   it('lê o nome em outra linha quando o slot Certificamos que vem vazio', () => {
     const vazio = `
       CERTIFICADO

@@ -60,7 +60,9 @@ function palavraNomeValida(word) {
   if (!/^[a-z]+$/.test(n) || !/[aeiou]/.test(n)) return false;
   return (
     new RegExp(`^[${LETRAS_NOME}]{3,20}$`).test(w) &&
-    (/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+$/.test(w) || /^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ]{3,20}$/.test(w))
+    (/^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][a-záàâãéêíóôõúç]+$/.test(w) ||
+      /^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ]{3,20}$/.test(w) ||
+      /^[a-záàâãéêíóôõúç]{3,20}$/.test(w))
   );
 }
 
@@ -95,7 +97,7 @@ function limparNome(raw) {
 function nomeParecePessoa(nome) {
   if (!nome) return null;
   if (
-    /concluiu|certificamos|protocolo|curso|capacitac|nao se cale|univesp|procon|microsoft|print|pdf|governo|secretaria|estabelecimento|custom|certificado/i.test(
+    /concluiu|certificamos|protocolo|curso|capacitac|nao se cale|univesp|procon|microsoft|print|pdf|governo|secretaria|estabelecimento|custom|certificado|adobe|identity|powered|tcpdf/i.test(
       nome
     )
   ) {
@@ -127,7 +129,8 @@ function extractNomeCabecalho(text) {
   const before = String(text || '')
     .split(/data\s*de\s*emiss/i)[0]
     .split(/Microsoft\s*:/i)[0]
-    .split(/Print\s+To\s+PDF/i)[0];
+    .split(/Print\s+To\s+PDF/i)[0]
+    .replace(/Powered by TCPDF[\s\S]*/i, ' ');
   const words = palavrasNomeValidas(before);
   if (words.length < 2) return null;
   for (let n = Math.min(5, words.length); n >= 2; n -= 1) {
