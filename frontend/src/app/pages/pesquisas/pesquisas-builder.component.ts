@@ -35,6 +35,7 @@ import {
   isDocHeader,
   isEmailHeader,
   isNomeHeader,
+  isRgHeader,
   lookupLocal,
   lookupPronto,
   matchCampos,
@@ -43,7 +44,10 @@ import {
   digitsDocumento,
   formatDocumento,
   isDocumentoValido,
+  isRgValido,
   maskDocumento,
+  maskRg,
+  normalizeRg,
 } from './shared/pesquisas-documento.util';
 import {
   PESQUISAS_TPL_WTORRE,
@@ -72,14 +76,17 @@ interface GuestDraft {
   nome: string;
   cpf: string;
   cpfMascara: string;
+  rg: string;
+  rgMascara: string;
   email: string;
 }
 
 let qKey = 0;
 let gKey = 0;
 
-function chaveConvidado(nome: string, cpf: string, email: string): string {
+function chaveConvidado(nome: string, cpf: string, email: string, rg: string): string {
   if (cpf && (cpf.length === 11 || cpf.length === 14)) return `d:${cpf}`;
+  if (rg) return `r:${rg}`;
   const mail = email.trim().toLowerCase();
   if (mail) return `e:${mail}`;
   const n = nome.trim().toLowerCase();
@@ -155,6 +162,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly temBaseSalva = signal(false);
   readonly guestNome = signal('');
   readonly guestCpf = signal('');
+  readonly guestRg = signal('');
   readonly guestEmail = signal('');
   readonly templates = signal<PesquisasTemplateVisual[]>([PESQUISAS_TPL_WTORRE]);
   readonly templateCodigo = signal('wtorre');
@@ -582,11 +590,15 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     this.guestCpf.set(formatDocumento(raw));
   }
 
+  formatRgInput(raw: string): void {
+    this.guestRg.set(raw.toUpperCase().replace(/[^0-9X.\-\s/]/g, '').slice(0, 20));
+  }
+
   async exportarModeloConvidados(): Promise<void> {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([['CPF/CNPJ', 'Nome', 'Email']]);
-    ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 32 }];
+    const ws = XLSX.utils.aoa_to_sheet([['CPF/CNPJ', 'Nome', 'Email', 'RG']]);
+    ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 32 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Convidados');
     XLSX.writeFile(wb, 'modelo-convidados.xlsx');
   }
@@ -622,13 +634,15 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     this.destinatariosModalAberto.set(true);
   }
 
-  private fromExtractedGuest(g: { nome: string; cpf: string; email: string }): GuestDraft {
+  private fromExtractedGuest(g: { nome: string; cpf: string; email: string; rg: string }): GuestDraft {
     gKey += 1;
     return {
       key: gKey,
       nome: g.nome,
       cpf: formatDocumento(g.cpf),
       cpfMascara: maskDocumento(g.cpf),
+      rg: g.rg,
+      rgMascara: maskRg(g.rg),
       email: g.email,
     };
   }
@@ -646,6 +660,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         draft.cpf = prev.cpf;
         draft.cpfMascara = prev.cpfMascara || draft.cpfMascara;
       }
+      if (prev?.rg && (isRgValido(prev.rg) || digitsDocumento(prev.rg).length === 11)) {
+        draft.rg = prev.rg;
+        draft.rgMascara = prev.rgMascara || draft.rgMascara;
+      }
       return draft;
     });
   }
@@ -654,22 +672,35 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     const nome = this.guestNome().trim();
     const doc = digitsDocumento(this.guestCpf());
     const email = this.guestEmail().trim().toLowerCase();
+    const rgNorm = normalizeRg(this.guestRg());
+    const rgDigits = this.guestRg().replace(/\D/g, '');
+    const rgComoCpf = !rgNorm && rgDigits.length === 11 && !/[A-Z]/.test(this.guestRg());
+    const rgOk = !!rgNorm || rgComoCpf;
     const docOk = isDocumentoValido(doc);
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     if (doc && !docOk) {
       this.alertas.erro('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).');
       return;
     }
+    if (this.guestRg().trim() && !rgOk) {
+      this.alertas.erro('Informe um RG válido (5 a 10 dígitos, verificador opcional).');
+      return;
+    }
     if (email && !emailOk) {
       this.alertas.erro('Informe um e-mail válido.');
       return;
     }
-    if (!nome && !docOk && !emailOk) {
-      this.alertas.erro('Informe ao menos o nome, o CPF/CNPJ ou o e-mail.');
+    if (!nome && !docOk && !emailOk && !rgOk) {
+      this.alertas.erro('Informe ao menos o nome, o CPF, o CNPJ, o RG ou o e-mail.');
       return;
     }
     if (docOk && this.convidados().some((g) => digitsDocumento(g.cpf) === doc)) {
       this.alertas.erro('Este CPF ou CNPJ já está na lista.');
+      return;
+    }
+    const rgSalvo = rgNorm || (rgComoCpf ? rgDigits : '');
+    if (rgSalvo && this.convidados().some((g) => g.rg === rgSalvo)) {
+      this.alertas.erro('Este RG já está na lista.');
       return;
     }
     if (emailOk && this.convidados().some((g) => g.email.trim().toLowerCase() === email)) {
@@ -679,7 +710,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     if (
       !docOk &&
       !emailOk &&
-      this.convidados().some((g) => !digitsDocumento(g.cpf) && !g.email.trim() && g.nome.trim().toLowerCase() === nome.toLowerCase())
+      !rgOk &&
+      this.convidados().some((g) => !digitsDocumento(g.cpf) && !g.rg && !g.email.trim() && g.nome.trim().toLowerCase() === nome.toLowerCase())
     ) {
       this.alertas.erro('Este nome já está na lista.');
       return;
@@ -692,11 +724,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         nome,
         cpf: formatDocumento(doc),
         cpfMascara: maskDocumento(doc),
+        rg: rgSalvo,
+        rgMascara: rgNorm ? maskRg(rgNorm) : rgComoCpf ? maskDocumento(rgDigits) : '',
         email,
       },
     ]);
     this.guestNome.set('');
     this.guestCpf.set('');
+    this.guestRg.set('');
     this.guestEmail.set('');
   }
 
@@ -896,7 +931,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       if (!created) {
         this.alertas.erro(
           externo
-            ? 'Nenhum campo novo. Colunas de nome, CPF/CNPJ e e-mail não viram pergunta, e títulos que já existem são mantidos.'
+            ? 'Nenhum campo novo. Colunas de nome, CPF, CNPJ, RG e e-mail não viram pergunta, e títulos que já existem são mantidos.'
             : 'Nenhum campo novo. Esses títulos já estão no formulário.'
         );
         return;
@@ -922,11 +957,11 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
     const { guests, ignoradas } = extractGuestsFromRows(rows);
     const existing = new Set(
-      this.convidados().map((g) => chaveConvidado(g.nome, digitsDocumento(g.cpf), g.email))
+      this.convidados().map((g) => chaveConvidado(g.nome, digitsDocumento(g.cpf), g.email, g.rg))
     );
     const added = guests
       .filter((g) => {
-        const key = chaveConvidado(g.nome, g.cpf, g.email);
+        const key = chaveConvidado(g.nome, g.cpf, g.email, g.rg);
         return key && !existing.has(key);
       })
       .map((g) => this.fromExtractedGuest(g));
@@ -936,13 +971,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       this.alertas.erro(
         guests.length
           ? 'Esses convidados já estão na lista.'
-          : 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail; as demais viram campos.'
+          : 'Nenhuma linha válida. Use colunas de nome, CPF, CNPJ, RG ou e-mail; as demais viram campos.'
       );
       return;
     }
 
     const extra = ignoradas
-      ? ` ${ignoradas} linha(s) sem nome, documento ou e-mail foram ignoradas.`
+      ? ` ${ignoradas} linha(s) sem nome, CPF, CNPJ, RG ou e-mail foram ignoradas.`
       : '';
     const camposTxt = created === 1 ? '1 campo' : `${created} campos`;
     const convTxt = added.length === 1 ? '1 convidado' : `${added.length} convidados`;
@@ -968,7 +1003,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         }
         continue;
       }
-      if (opts.pularIdentidade && (isDocHeader(label) || isEmailHeader(label) || isNomeHeader(label))) {
+      if (opts.pularIdentidade && (isDocHeader(label) || isEmailHeader(label) || isNomeHeader(label) || isRgHeader(label))) {
         continue;
       }
       const exists = this.perguntas().some(
@@ -991,6 +1026,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       nome: g.nome || '',
       cpf: '',
       cpfMascara: g.cpfMascara || '',
+      rg: '',
+      rgMascara: g.rgMascara || '',
       email: g.email || '',
     };
   }
@@ -1083,6 +1120,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         nome: g.nome,
         email: g.email,
         cpf: digitsDocumento(g.cpf) || undefined,
+        rg: g.rg || undefined,
       })),
       perguntas: this.perguntas().map((p, idx) => ({
         blocoTipo: p.blocoTipo,

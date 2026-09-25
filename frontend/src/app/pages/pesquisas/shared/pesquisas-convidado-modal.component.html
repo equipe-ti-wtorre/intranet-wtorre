@@ -1,7 +1,7 @@
 <app-admin-modal
   [open]="open()"
   [title]="titulo()"
-  subtitle="Basta o nome, o CPF/CNPJ ou o e-mail."
+  subtitle="Basta o nome, o CPF, o CNPJ, o RG ou o e-mail."
   [saveLabel]="saveLabel()"
   [salvando]="salvando()"
   [saveDisabled]="!valido()"
@@ -35,6 +35,30 @@
     }
     @if (docErro()) {
       <p class="help warn">{{ docErro() }}</p>
+    }
+  </div>
+  <div class="field">
+    <label>RG</label>
+    <input
+      type="text"
+      name="guestRg"
+      autocomplete="off"
+      placeholder="00.000.000-0"
+      [ngModel]="rg()"
+      (ngModelChange)="formatarRg($event)"
+      (blur)="tocado.set(true)"
+    />
+    @if (editando() && convidado()?.rgMascara) {
+      <p class="help">
+        RG atual: {{ convidado()?.rgMascara }}.
+        Deixe em branco para manter.
+        <button type="button" class="linkish" (click)="alternarLimparRg()">
+          {{ limparRg() ? 'Manter RG' : 'Remover RG' }}
+        </button>
+      </p>
+    }
+    @if (rgErro()) {
+      <p class="help warn">{{ rgErro() }}</p>
     }
   </div>
   <div class="field">

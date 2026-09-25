@@ -381,6 +381,33 @@ function isNomeHeader(raw) {
   return ['nome', 'nome completo', 'name', 'razao social', 'razão social'].includes(normHeader(raw));
 }
 
+function isRgHeader(raw) {
+  return ['rg', 'r g', 'registro geral', 'identidade'].includes(normHeader(raw));
+}
+
+function normalizeRg(raw) {
+  const compact = String(raw || '')
+    .toUpperCase()
+    .replace(/[\s.\-/]/g, '');
+  if (/^\d{5,10}X$/.test(compact) || /^\d{5,10}$/.test(compact)) return compact;
+  return '';
+}
+
+function rgInformadoDe(raw) {
+  const texto = str(raw, 32);
+  if (!texto) return '';
+  const norm = normalizeRg(texto);
+  if (norm) return norm;
+  const digits = digitsCpf(texto);
+  if (digits.length === 11 && !/[a-zA-Z]/.test(texto)) return digits;
+  return null;
+}
+
+function maskRg(normalized) {
+  if (!normalized) return null;
+  return `*****-${normalized.slice(-1)}`;
+}
+
 function extractGuestsFromRows(rows) {
   const guests = [];
   const seen = new Set();
@@ -390,6 +417,7 @@ function extractGuestsFromRows(rows) {
     let nome = '';
     let cpf = '';
     let email = '';
+    let rg = '';
     for (const [k, v] of Object.entries(row)) {
       const cell = String(v ?? '').trim();
       if (!cell) continue;
@@ -398,14 +426,18 @@ function extractGuestsFromRows(rows) {
         const digits = digitsCpf(cell);
         if (digits.length === 11 || digits.length === 14) cpf = digits;
       }
+      if (!rg && isRgHeader(k)) {
+        const parsed = rgInformadoDe(cell);
+        if (parsed) rg = parsed;
+      }
       if (!email && isEmailHeader(k) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell.toLowerCase())) {
         email = cell.toLowerCase().slice(0, 200);
       }
     }
-    const key = cpf ? `d:${cpf}` : email ? `e:${email}` : nome ? `n:${nome.toLowerCase()}` : '';
+    const key = cpf ? `d:${cpf}` : rg ? `r:${rg}` : email ? `e:${email}` : nome ? `n:${nome.toLowerCase()}` : '';
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    guests.push({ nome, cpf, email });
+    guests.push({ nome, cpf, email, rg });
   }
   return { guests, ignoradas: Math.max(0, list.length - guests.length) };
 }
@@ -413,6 +445,7 @@ function extractGuestsFromRows(rows) {
 function extractChavesFromDados(dados) {
   let chaveDoc = null;
   let chaveEmail = null;
+  let chaveRg = null;
   for (const [k, v] of Object.entries(dados || {})) {
     const cell = String(v ?? '').trim();
     if (!cell) continue;
@@ -422,11 +455,15 @@ function extractChavesFromDados(dados) {
         chaveDoc = cryptoService.hmacSha256(digits);
       }
     }
+    if (isRgHeader(k)) {
+      const parsed = rgInformadoDe(cell);
+      if (parsed) chaveRg = cryptoService.hmacSha256(parsed);
+    }
     if (isEmailHeader(k) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
       chaveEmail = cell.toLowerCase();
     }
   }
-  return { chaveDoc, chaveEmail };
+  return { chaveDoc, chaveEmail, chaveRg };
 }
 
 function normalizeBaseRows(raw) {
@@ -446,8 +483,8 @@ function normalizeBaseRows(raw) {
       dados[header] = str(row[k], 500);
     }
     if (!Object.keys(dados).length) continue;
-    const { chaveDoc, chaveEmail } = extractChavesFromDados(dados);
-    out.push({ chaveDoc, chaveEmail, dados });
+    const { chaveDoc, chaveEmail, chaveRg } = extractChavesFromDados(dados);
+    out.push({ chaveDoc, chaveEmail, chaveRg, dados });
   }
   return out;
 }
@@ -466,16 +503,21 @@ async function baseResumo(formId) {
 }
 
 function lookupKeysFromValor(raw) {
+  const vazio = { chaveDoc: null, chaveEmail: null, chaveRg: null };
   const valor = str(raw, 200);
-  if (!valor) return { chaveDoc: null, chaveEmail: null };
-  const digits = digitsCpf(valor);
-  if (digits.length === 11 || digits.length === 14) {
-    return { chaveDoc: cryptoService.hmacSha256(digits), chaveEmail: null };
-  }
+  if (!valor) return vazio;
   if (valor.includes('@')) {
-    return { chaveDoc: null, chaveEmail: valor.toLowerCase() };
+    return { chaveDoc: null, chaveEmail: valor.toLowerCase(), chaveRg: null };
   }
-  return { chaveDoc: null, chaveEmail: null };
+  if (!/[a-zA-Z]/.test(valor)) {
+    const digits = digitsCpf(valor);
+    if (digits.length === 11 || digits.length === 14) {
+      return { chaveDoc: cryptoService.hmacSha256(digits), chaveEmail: null, chaveRg: null };
+    }
+  }
+  const rg = normalizeRg(valor);
+  if (rg) return { chaveDoc: null, chaveEmail: null, chaveRg: cryptoService.hmacSha256(rg) };
+  return vazio;
 }
 
 function isDocumentoValido(digits) {
@@ -508,7 +550,7 @@ async function resolveConvidadosFromBody(body, formularioId) {
     if (rows && rows.length) {
       throw httpError(
         400,
-        'A planilha precisa de nome, CPF/CNPJ ou e-mail para cadastrar convidados.'
+        'A planilha precisa de nome, CPF/CNPJ, RG ou e-mail para cadastrar convidados.'
       );
     }
   }
@@ -521,6 +563,7 @@ async function resolveConvidadosFromBody(body, formularioId) {
 async function normalizeConvidados(raw, formularioId) {
   if (!Array.isArray(raw)) return [];
   const seenDoc = new Set();
+  const seenRg = new Set();
   const seenEmail = new Set();
   const seenNome = new Set();
   const out = [];
@@ -537,21 +580,47 @@ async function normalizeConvidados(raw, formularioId) {
     const doc = digitsCpf(g.cpf);
     let cpfHash = null;
     let cpfMascara = null;
+    let prevLoaded = false;
+    let prev = null;
+    const carregarPrev = async () => {
+      if (prevLoaded) return prev;
+      prevLoaded = true;
+      if (formularioId && g.id) {
+        prev = await repo.findConvidadoHash(formularioId, Number(g.id));
+      }
+      return prev;
+    };
     if (doc) {
       if (!isDocumentoValido(doc)) {
         throw httpError(400, 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).');
       }
       cpfHash = cryptoService.hmacSha256(doc);
       cpfMascara = maskDocumento(doc);
-    } else if (formularioId && g.id && !g.limparDocumento) {
-      const prev = await repo.findConvidadoHash(formularioId, Number(g.id));
-      if (prev?.cpfHash) {
-        cpfHash = prev.cpfHash;
-        cpfMascara = prev.cpfMascara || null;
+    } else if (!g.limparDocumento) {
+      const anterior = await carregarPrev();
+      if (anterior?.cpfHash) {
+        cpfHash = anterior.cpfHash;
+        cpfMascara = anterior.cpfMascara || null;
       }
     }
-    if (!nome && !email && !cpfHash) {
-      throw httpError(400, 'Informe ao menos o nome, o CPF/CNPJ ou o e-mail do convidado.');
+    const rgInformado = rgInformadoDe(g.rg);
+    if (rgInformado === null) {
+      throw httpError(400, 'Informe um RG válido (5 a 10 dígitos, verificador opcional).');
+    }
+    let rgHash = null;
+    let rgMascara = null;
+    if (rgInformado) {
+      rgHash = cryptoService.hmacSha256(rgInformado);
+      rgMascara = maskRg(rgInformado);
+    } else if (!g.limparRg) {
+      const anterior = await carregarPrev();
+      if (anterior?.rgHash) {
+        rgHash = anterior.rgHash;
+        rgMascara = anterior.rgMascara || null;
+      }
+    }
+    if (!nome && !email && !cpfHash && !rgHash) {
+      throw httpError(400, 'Informe ao menos o nome, o CPF/CNPJ, o RG ou o e-mail do convidado.');
     }
     if (cpfHash) {
       if (seenDoc.has(cpfHash)) {
@@ -559,20 +628,26 @@ async function normalizeConvidados(raw, formularioId) {
       }
       seenDoc.add(cpfHash);
     }
+    if (rgHash) {
+      if (seenRg.has(rgHash)) {
+        throw httpError(400, 'Há RG duplicados na lista de convidados.');
+      }
+      seenRg.add(rgHash);
+    }
     if (email) {
       if (seenEmail.has(email)) {
         throw httpError(400, 'Há e-mails duplicados na lista de convidados.');
       }
       seenEmail.add(email);
     }
-    if (!cpfHash && !email && nome) {
+    if (!cpfHash && !rgHash && !email && nome) {
       const key = nome.toLowerCase();
       if (seenNome.has(key)) {
         throw httpError(400, 'Há nomes duplicados na lista de convidados.');
       }
       seenNome.add(key);
     }
-    out.push({ nome, email, cpfHash, cpfMascara });
+    out.push({ nome, email, cpfHash, cpfMascara, rgHash, rgMascara });
   }
   return out;
 }
@@ -1492,7 +1567,7 @@ async function atualizarConvidado(req) {
   const convidadoId = parseId(req.params.convidadoId);
   const atual = await repo.findConvidadoHash(form.id, convidadoId);
   if (!atual) throw httpError(404, 'Convidado não encontrado.');
-  const body = { ...req.body, id: req.body?.limparDocumento ? undefined : convidadoId };
+  const body = { ...req.body, id: convidadoId };
   const guests = await normalizeConvidados([body], form.id);
   const guest = guests[0];
   await garantirConvidadoUnico(form.id, guest, convidadoId);
@@ -1519,6 +1594,9 @@ async function garantirConvidadoUnico(formularioId, guest, ignoreId) {
   if (guest.cpfHash && dup.cpfHash === guest.cpfHash) {
     throw httpError(409, 'Este CPF ou CNPJ já está na lista.');
   }
+  if (guest.rgHash && dup.rgHash === guest.rgHash) {
+    throw httpError(409, 'Este RG já está na lista.');
+  }
   if (guest.email && String(dup.email || '').toLowerCase() === guest.email) {
     throw httpError(409, 'Este e-mail já está na lista.');
   }
@@ -1541,11 +1619,11 @@ async function adicionarConvidadosLote(req) {
     throw httpError(400, 'A planilha pode ter no máximo 5.000 linhas.');
   }
   if (!raw.length) {
-    throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.');
+    throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ, RG ou e-mail.');
   }
   const guests = await normalizeConvidados(raw, form.id);
   if (!guests.length) {
-    throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.');
+    throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ, RG ou e-mail.');
   }
   return repo.insertConvidadosAppend(form.id, guests);
 }
@@ -1806,38 +1884,51 @@ function parseIdentidadeBody(body) {
   const valor = str(body?.valor, 200);
   const cpfRaw = str(body?.cpf, 32);
   const emailRaw = str(body?.email, 200).toLowerCase();
-  let doc = digitsCpf(valor || cpfRaw);
+  const rgCampo = str(body?.rg, 32);
   let email = '';
+  let doc = '';
   if (valor.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor.toLowerCase())) {
     email = valor.toLowerCase();
-    doc = '';
   } else if (emailRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
     email = emailRaw;
   }
-  const hasDoc = isDocumentoValido(doc);
-  if (!hasDoc && !email) {
-    throw httpError(400, 'Informe um CPF (11 dígitos), CNPJ (14 dígitos) ou o e-mail cadastrado.');
+  const fonte = valor || cpfRaw;
+  if (!email && fonte && !/[a-zA-Z]/.test(fonte)) {
+    const digits = digitsCpf(fonte);
+    if (isDocumentoValido(digits)) doc = digits;
+  }
+  let rg = '';
+  if (!email && !doc) {
+    rg = normalizeRg(rgCampo || valor);
+  }
+  if (!doc && !email && !rg) {
+    throw httpError(400, 'Informe um CPF (11 dígitos), CNPJ (14 dígitos), RG ou o e-mail cadastrado.');
   }
   return {
-    cpfHash: hasDoc ? cryptoService.hmacSha256(doc) : null,
+    cpfHash: doc ? cryptoService.hmacSha256(doc) : null,
     email: email || null,
+    rgHash: rg ? cryptoService.hmacSha256(rg) : null,
   };
 }
 
 function guestIdentidades(guest) {
   const hashes = guest?.cpfHashes || (guest?.cpfHash ? [guest.cpfHash] : []);
   const emails = guest?.emails || (guest?.email ? [guest.email] : []);
-  return { cpfHashes: hashes, emails };
+  const rgHashes = guest?.rgHashes || (guest?.rgHash ? [guest.rgHash] : []);
+  return { cpfHashes: hashes, emails, rgHashes };
 }
 
 function tokenIdentidade(identity) {
   const hashes = identity.cpfHashes || (identity.cpfHash ? [identity.cpfHash] : []);
   const emails = identity.emails || (identity.email ? [identity.email] : []);
+  const rgHashes = identity.rgHashes || (identity.rgHash ? [identity.rgHash] : []);
   const payload = {};
   if (hashes[0]) payload.cpfHash = hashes[0];
   if (emails[0]) payload.email = emails[0];
+  if (rgHashes[0]) payload.rgHash = rgHashes[0];
   if (hashes.length) payload.cpfHashes = hashes.slice(0, 20);
   if (emails.length) payload.emails = emails.slice(0, 20);
+  if (rgHashes.length) payload.rgHashes = rgHashes.slice(0, 20);
   return payload;
 }
 
@@ -1846,7 +1937,7 @@ async function resolveGuestDoForm(form, guest) {
     throw httpError(401, 'Confirme sua identidade para continuar.');
   }
   const ids = guestIdentidades(guest);
-  const row = await repo.findConvidadoByIdentidade(form.id, ids.cpfHashes, ids.emails);
+  const row = await repo.findConvidadoByIdentidade(form.id, ids.cpfHashes, ids.emails, ids.rgHashes);
   if (!row) {
     throw httpError(401, 'Confirme sua identidade para continuar.');
   }
@@ -1875,11 +1966,16 @@ async function verificarIdentidade(body) {
   const identity = parseIdentidadeBody(body);
   const expanded = await repo.expandIdentidades(
     identity.cpfHash ? [identity.cpfHash] : [],
-    identity.email ? [identity.email] : []
+    identity.email ? [identity.email] : [],
+    identity.rgHash ? [identity.rgHash] : []
   );
-  const convites = await repo.findConvidadosByIdentidade(expanded.cpfHashes, expanded.emails);
+  const convites = await repo.findConvidadosByIdentidade(
+    expanded.cpfHashes,
+    expanded.emails,
+    expanded.rgHashes
+  );
   if (!convites.length) {
-    throw httpError(401, 'CPF, CNPJ ou e-mail não conferem.');
+    throw httpError(401, 'CPF, CNPJ, RG ou e-mail não conferem.');
   }
   const comNome = convites.find((c) => c.nome) || convites[0];
   const token = jwtService.signPesquisasGuest(tokenIdentidade(expanded));
@@ -1891,9 +1987,9 @@ async function montarPortal(guest) {
     throw httpError(401, 'Confirme sua identidade para continuar.');
   }
   const ids = guestIdentidades(guest);
-  const convites = await repo.findConvidadosByIdentidade(ids.cpfHashes, ids.emails);
+  const convites = await repo.findConvidadosByIdentidade(ids.cpfHashes, ids.emails, ids.rgHashes);
   if (!convites.length) {
-    throw httpError(401, 'CPF, CNPJ ou e-mail não conferem.');
+    throw httpError(401, 'CPF, CNPJ, RG ou e-mail não conferem.');
   }
   const porSlug = new Map();
   let nome = '';

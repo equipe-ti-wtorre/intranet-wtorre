@@ -186,11 +186,20 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   }
 
   formatIdentificador(raw: string): void {
-    if (raw.includes('@') || /[a-zA-Z]/.test(raw)) {
+    if (raw.includes('@')) {
       this.identificador.set(raw);
       return;
     }
-    this.identificador.set(formatDocumento(raw));
+    if (/[a-zA-Z]/.test(raw)) {
+      this.identificador.set(raw.toUpperCase());
+      return;
+    }
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 11) {
+      this.identificador.set(formatDocumento(digits));
+      return;
+    }
+    this.identificador.set(digits);
   }
 
   verificar(): void {
@@ -198,7 +207,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     if (!m) return;
     const valor = this.identificador().trim();
     if (!valor) {
-      this.alertas.erro('Informe um CPF, CNPJ ou e-mail cadastrado.');
+      this.alertas.erro('Informe um CPF, CNPJ, RG ou e-mail cadastrado.');
       return;
     }
     this.verificando.set(true);

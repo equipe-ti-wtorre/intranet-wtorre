@@ -25,3 +25,21 @@ export function maskDocumento(digits: string): string {
   if (digits.length !== 11) return '';
   return `***.${digits.slice(3, 6)}.**${digits[8]}-${digits.slice(9)}`;
 }
+
+export function normalizeRg(raw: string | null | undefined): string {
+  const compact = String(raw || '')
+    .toUpperCase()
+    .replace(/[\s.\-/]/g, '');
+  if (/^\d{5,10}X$/.test(compact) || /^\d{5,10}$/.test(compact)) return compact;
+  return '';
+}
+
+export function isRgValido(raw: string | null | undefined): boolean {
+  return !!normalizeRg(raw);
+}
+
+export function maskRg(raw: string | null | undefined): string {
+  const n = normalizeRg(raw);
+  if (!n) return '';
+  return `*****-${n.slice(-1)}`;
+}

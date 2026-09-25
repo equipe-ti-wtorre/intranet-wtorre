@@ -213,7 +213,7 @@
           <div class="toggle-row" style="margin-top: 16px">
             <div class="toggle-text">
               <b>Exigir confirmação de identidade</b>
-              <span>O convidado precisa informar CPF ou CNPJ e e-mail cadastrados para acessar o link</span>
+              <span>O convidado precisa informar CPF, CNPJ, RG ou e-mail cadastrado para acessar o link</span>
             </div>
             <label class="switch">
               <input type="checkbox" [ngModel]="exigirIdentidade()" (ngModelChange)="exigirIdentidade.set($event)" />
@@ -252,6 +252,10 @@
               <input type="text" inputmode="numeric" [ngModel]="guestCpf()" (ngModelChange)="formatCpfInput($event)" placeholder="000.000.000-00 ou 00.000.000/0001-00" />
             </div>
             <div class="field">
+              <label>RG</label>
+              <input type="text" [ngModel]="guestRg()" (ngModelChange)="formatRgInput($event)" placeholder="00.000.000-0" autocomplete="off" />
+            </div>
+            <div class="field">
               <label>E-mail</label>
               <input type="email" [ngModel]="guestEmail()" (ngModelChange)="guestEmail.set($event)" placeholder="email@exemplo.com" />
             </div>
@@ -278,15 +282,16 @@
             />
           </div>
           <p class="page-sub" style="margin-top: 8px">
-            Preencha ao menos um: nome, CPF/CNPJ ou e-mail. As demais colunas da planilha viram campos do formulário.
+            Preencha ao menos um: nome, CPF, CNPJ, RG ou e-mail. As demais colunas da planilha viram campos do formulário.
           </p>
           @if (convidados().length) {
             <div class="guest-table">
               @for (g of convidados(); track g.key) {
                 <div class="guest-row">
                   <span>{{ g.nome || '—' }}</span>
-                  <span>{{ g.cpfMascara || g.cpf }}</span>
-                  <span>{{ g.email }}</span>
+                  <span>{{ g.cpfMascara || g.cpf || '—' }}</span>
+                  <span>{{ g.rgMascara || g.rg || '—' }}</span>
+                  <span>{{ g.email || '—' }}</span>
                   <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
                     <app-pesq-icon name="x" [size]="15" />
                   </button>
@@ -309,7 +314,7 @@
           <input #excelInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onExcel($event)" />
         </div>
         @if (publicoAlvo() === 'externos') {
-          <p class="hint">A planilha cria um campo por coluna extra e inclui os convidados (CPF/CNPJ e e-mail).</p>
+          <p class="hint">A planilha cria um campo por coluna extra e inclui os convidados (CPF, CNPJ, RG e e-mail).</p>
         } @else {
           <p class="hint">Importar cria um campo por coluna da planilha.</p>
         }

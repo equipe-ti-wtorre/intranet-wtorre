@@ -229,7 +229,7 @@
           </div>
         </div>
       </div>
-      <p class="page-sub" style="margin-top: 14px">Basta nome, CPF/CNPJ ou e-mail. O acesso pelo link usa CPF/CNPJ ou e-mail.</p>
+      <p class="page-sub" style="margin-top: 14px">Basta nome, CPF, CNPJ, RG ou e-mail. O acesso pelo link usa CPF, CNPJ, RG ou e-mail.</p>
       <div class="guest-list-head">
         <label>Lista de convidados</label>
         <div class="guest-list-actions">
@@ -268,6 +268,7 @@
             <div class="guest-row">
               <span>{{ g.nome || '—' }}</span>
               <span>{{ g.cpfMascara || '—' }}</span>
+              <span>{{ g.rgMascara || '—' }}</span>
               <span>{{ g.email || '—' }}</span>
               <span class="guest-row-actions">
                 <button type="button" class="btn-secondary" (click)="editarConvidado(g)">Editar</button>

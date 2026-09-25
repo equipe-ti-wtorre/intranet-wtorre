@@ -9,6 +9,8 @@ import {
   digitsDocumento,
   formatDocumento,
   isDocumentoValido,
+  isRgValido,
+  normalizeRg,
 } from './pesquisas-documento.util';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,8 +33,10 @@ export class PesquisasConvidadoModalComponent {
 
   readonly nome = signal('');
   readonly documento = signal('');
+  readonly rg = signal('');
   readonly email = signal('');
   readonly limparDocumento = signal(false);
+  readonly limparRg = signal(false);
   readonly salvando = signal(false);
   readonly tocado = signal(false);
   private estavaAberto = false;
@@ -50,6 +54,17 @@ export class PesquisasConvidadoModalComponent {
     return '';
   });
 
+  readonly rgErro = computed(() => {
+    if (this.limparRg() || !this.rg()) return '';
+    if (!this.tocado() && !this.rg()) return '';
+    const raw = this.rg().trim();
+    if (!raw) return '';
+    if (isRgValido(raw)) return '';
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 11 && !/[A-Za-z]/.test(raw)) return '';
+    return 'Informe um RG válido (5 a 10 dígitos, verificador opcional).';
+  });
+
   readonly emailErro = computed(() => {
     const email = this.email().trim().toLowerCase();
     if (!email) return '';
@@ -61,12 +76,16 @@ export class PesquisasConvidadoModalComponent {
   readonly valido = computed(() => {
     const digits = digitsDocumento(this.documento());
     const email = this.email().trim().toLowerCase();
+    const rawRg = this.rg().trim();
+    const rgOk = isRgValido(rawRg) || (rawRg.replace(/\D/g, '').length === 11 && !/[A-Za-z]/.test(rawRg));
     const docOk = isDocumentoValido(digits);
     const emailOk = EMAIL_RE.test(email);
     if (digits && !docOk) return false;
+    if (rawRg && !rgOk) return false;
     if (email && !emailOk) return false;
     const temDocumento = docOk || (!!this.convidado()?.cpfMascara && !this.limparDocumento() && !digits);
-    return !!this.nome().trim() || docOk || emailOk || temDocumento;
+    const temRg = rgOk || (!!this.convidado()?.rgMascara && !this.limparRg() && !rawRg);
+    return !!this.nome().trim() || docOk || emailOk || temDocumento || temRg;
   });
 
   constructor() {
@@ -76,8 +95,10 @@ export class PesquisasConvidadoModalComponent {
       if (aberto && !this.estavaAberto) {
         this.nome.set(atual?.nome || '');
         this.documento.set('');
+        this.rg.set('');
         this.email.set(atual?.email || '');
         this.limparDocumento.set(false);
+        this.limparRg.set(false);
         this.tocado.set(false);
         this.salvando.set(false);
       }
@@ -90,20 +111,35 @@ export class PesquisasConvidadoModalComponent {
     this.documento.set(formatDocumento(raw));
   }
 
+  formatarRg(raw: string): void {
+    this.limparRg.set(false);
+    this.rg.set(raw.toUpperCase().replace(/[^0-9X.\-\s/]/g, '').slice(0, 20));
+  }
+
   alternarLimparDocumento(): void {
     this.limparDocumento.update((v) => !v);
     if (this.limparDocumento()) this.documento.set('');
+  }
+
+  alternarLimparRg(): void {
+    this.limparRg.update((v) => !v);
+    if (this.limparRg()) this.rg.set('');
   }
 
   salvar(): void {
     this.tocado.set(true);
     const id = this.formularioId();
     if (!id || !this.valido() || this.salvando()) return;
+    const rawRg = this.rg().trim();
+    const rgNorm = normalizeRg(rawRg);
+    const rgDigits = rawRg.replace(/\D/g, '');
     const body = {
       nome: this.nome().trim() || undefined,
       cpf: digitsDocumento(this.documento()),
+      rg: rgNorm || (rgDigits.length === 11 ? rgDigits : ''),
       email: this.email().trim().toLowerCase(),
       limparDocumento: this.limparDocumento(),
+      limparRg: this.limparRg(),
     };
     this.salvando.set(true);
     const editId = this.convidado()?.id;

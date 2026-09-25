@@ -35,12 +35,15 @@ function collectEmails(payload) {
 function parseGuestIdentity(payload) {
   const cpfHashes = collectHashes(payload);
   const emails = collectEmails(payload);
-  if (!cpfHashes.length && !emails.length) return null;
+  const rgHashes = collectHashes({ cpfHashes: payload.rgHashes, cpfHash: payload.rgHash });
+  if (!cpfHashes.length && !emails.length && !rgHashes.length) return null;
   return {
     cpfHash: cpfHashes[0] || null,
     email: emails[0] || null,
+    rgHash: rgHashes[0] || null,
     cpfHashes,
     emails,
+    rgHashes,
   };
 }
 

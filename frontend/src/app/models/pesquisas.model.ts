@@ -96,6 +96,7 @@ export interface PesquisasConvidado {
   nome: string;
   email?: string | null;
   cpfMascara?: string;
+  rgMascara?: string | null;
 }
 
 export interface PesquisasConvidadosLoteResult {

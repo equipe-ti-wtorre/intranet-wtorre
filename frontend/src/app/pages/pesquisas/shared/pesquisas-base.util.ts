@@ -1,3 +1,5 @@
+import { normalizeRg } from './pesquisas-documento.util';
+
 export function normHeader(raw: string): string {
   return String(raw || '')
     .trim()
@@ -18,14 +20,19 @@ export function isNomeHeader(raw: string): boolean {
   return ['nome', 'nome completo', 'name', 'razao social', 'razão social'].includes(normHeader(raw));
 }
 
+export function isRgHeader(raw: string): boolean {
+  return ['rg', 'r g', 'registro geral', 'identidade'].includes(normHeader(raw));
+}
+
 export function isChaveHeader(raw: string): boolean {
-  return isDocHeader(raw) || isEmailHeader(raw);
+  return isDocHeader(raw) || isEmailHeader(raw) || isRgHeader(raw);
 }
 
 export interface ExtractedGuest {
   nome: string;
   cpf: string;
   email: string;
+  rg: string;
 }
 
 export interface ExtractGuestsResult {
@@ -44,6 +51,7 @@ export function extractGuestsFromRows(rows: Record<string, unknown>[] | null | u
     let nome = '';
     let cpf = '';
     let email = '';
+    let rg = '';
     for (const [k, v] of Object.entries(row)) {
       const cell = String(v ?? '').trim();
       if (!cell) continue;
@@ -52,15 +60,21 @@ export function extractGuestsFromRows(rows: Record<string, unknown>[] | null | u
         const digits = cell.replace(/\D/g, '');
         if (digits.length === 11 || digits.length === 14) cpf = digits;
       }
+      if (isRgHeader(k)) {
+        const parsed = normalizeRg(cell);
+        if (parsed && !rg) rg = parsed;
+        const digits = cell.replace(/\D/g, '');
+        if (digits.length === 11 && !cpf) cpf = digits;
+      }
       if (!email && isEmailHeader(k)) {
         const e = cell.toLowerCase();
         if (EMAIL_RE.test(e)) email = e.slice(0, 200);
       }
     }
-    const key = cpf ? `d:${cpf}` : email ? `e:${email}` : nome ? `n:${nome.toLowerCase()}` : '';
+    const key = cpf ? `d:${cpf}` : rg ? `r:${rg}` : email ? `e:${email}` : nome ? `n:${nome.toLowerCase()}` : '';
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    guests.push({ nome, cpf, email });
+    guests.push({ nome, cpf, email, rg });
   }
   return { guests, ignoradas: Math.max(0, list.length - guests.length) };
 }
@@ -68,6 +82,7 @@ export function extractGuestsFromRows(rows: Record<string, unknown>[] | null | u
 export function lookupPronto(valor: string): boolean {
   const digits = String(valor || '').replace(/\D/g, '');
   if (digits.length === 11 || digits.length === 14) return true;
+  if (normalizeRg(valor)) return true;
   const email = String(valor || '').trim();
   return email.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -91,6 +106,11 @@ export function lookupLocal(
       const cell = String(v ?? '').trim();
       if (isDocHeader(k) && digits && (digits.length === 11 || digits.length === 14)) {
         if (cell.replace(/\D/g, '') === digits) return rowToCampos(row);
+      }
+      if (isRgHeader(k)) {
+        const rg = normalizeRg(valor);
+        if (rg && normalizeRg(cell) === rg) return rowToCampos(row);
+        if (digits.length === 11 && cell.replace(/\D/g, '') === digits) return rowToCampos(row);
       }
       if (isEmailHeader(k) && email.includes('@') && cell.toLowerCase() === email) {
         return rowToCampos(row);

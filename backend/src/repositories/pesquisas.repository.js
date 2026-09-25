@@ -800,13 +800,14 @@ function mapConvidado(row) {
     nome: row.nome || '',
     email: row.email,
     cpfMascara: row.cpf_mascara,
+    rgMascara: row.rg_mascara || null,
   };
 }
 
 async function listConvidados(formularioId) {
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT id, formulario_id, nome, email, cpf_mascara
+    `SELECT id, formulario_id, nome, email, cpf_mascara, rg_mascara
      FROM pesquisas_convidados
      WHERE formulario_id = ?
      ORDER BY id ASC`,
@@ -827,7 +828,7 @@ async function countConvidados(formularioId) {
 async function findConvidadoByCpfHash(formularioId, cpfHash) {
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT id, formulario_id, nome, email, cpf_mascara
+    `SELECT id, formulario_id, nome, email, cpf_mascara, rg_mascara
      FROM pesquisas_convidados
      WHERE formulario_id = ? AND cpf_hash = ?
      LIMIT 1`,
@@ -840,9 +841,17 @@ async function insertConvidado(formularioId, guest) {
   const pool = getPool();
   const [result] = await pool.execute(
     `INSERT INTO pesquisas_convidados
-      (formulario_id, nome, email, cpf_hash, cpf_mascara)
-     VALUES (?, ?, ?, ?, ?)`,
-    [formularioId, guest.nome || null, guest.email || null, guest.cpfHash || null, guest.cpfMascara || null]
+      (formulario_id, nome, email, cpf_hash, cpf_mascara, rg_hash, rg_mascara)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      formularioId,
+      guest.nome || null,
+      guest.email || null,
+      guest.cpfHash || null,
+      guest.cpfMascara || null,
+      guest.rgHash || null,
+      guest.rgMascara || null,
+    ]
   );
   return mapConvidado({
     id: result.insertId,
@@ -850,6 +859,7 @@ async function insertConvidado(formularioId, guest) {
     nome: guest.nome || '',
     email: guest.email,
     cpf_mascara: guest.cpfMascara,
+    rg_mascara: guest.rgMascara,
   });
 }
 
@@ -861,16 +871,20 @@ async function insertConvidadosAppend(formularioId, guests) {
   try {
     await conn.beginTransaction();
     const [existingRows] = await conn.execute(
-      'SELECT cpf_hash, email, nome FROM pesquisas_convidados WHERE formulario_id = ?',
+      'SELECT cpf_hash, rg_hash, email, nome FROM pesquisas_convidados WHERE formulario_id = ?',
       [formularioId]
     );
     const docs = new Set();
+    const rgs = new Set();
     const emails = new Set();
     const nomes = new Set();
     for (const row of existingRows) {
       if (row.cpf_hash) docs.add(row.cpf_hash);
+      if (row.rg_hash) rgs.add(row.rg_hash);
       if (row.email) emails.add(String(row.email).toLowerCase());
-      if (!row.cpf_hash && !row.email && row.nome) nomes.add(String(row.nome).toLowerCase());
+      if (!row.cpf_hash && !row.rg_hash && !row.email && row.nome) {
+        nomes.add(String(row.nome).toLowerCase());
+      }
     }
     let inseridos = 0;
     let duplicados = 0;
@@ -879,21 +893,31 @@ async function insertConvidadosAppend(formularioId, guests) {
       const nome = g.nome ? String(g.nome).toLowerCase() : '';
       const repetido =
         (g.cpfHash && docs.has(g.cpfHash)) ||
+        (g.rgHash && rgs.has(g.rgHash)) ||
         (email && emails.has(email)) ||
-        (!g.cpfHash && !email && nome && nomes.has(nome));
+        (!g.cpfHash && !g.rgHash && !email && nome && nomes.has(nome));
       if (repetido) {
         duplicados += 1;
         continue;
       }
       await conn.execute(
         `INSERT INTO pesquisas_convidados
-          (formulario_id, nome, email, cpf_hash, cpf_mascara)
-         VALUES (?, ?, ?, ?, ?)`,
-        [formularioId, g.nome || null, g.email || null, g.cpfHash || null, g.cpfMascara || null]
+          (formulario_id, nome, email, cpf_hash, cpf_mascara, rg_hash, rg_mascara)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          formularioId,
+          g.nome || null,
+          g.email || null,
+          g.cpfHash || null,
+          g.cpfMascara || null,
+          g.rgHash || null,
+          g.rgMascara || null,
+        ]
       );
       if (g.cpfHash) docs.add(g.cpfHash);
+      if (g.rgHash) rgs.add(g.rgHash);
       if (email) emails.add(email);
-      if (!g.cpfHash && !email && nome) nomes.add(nome);
+      if (!g.cpfHash && !g.rgHash && !email && nome) nomes.add(nome);
       inseridos += 1;
     }
     await conn.commit();
@@ -915,9 +939,17 @@ async function replaceConvidados(formularioId, convidados) {
     for (const g of convidados) {
       await conn.execute(
         `INSERT INTO pesquisas_convidados
-          (formulario_id, nome, email, cpf_hash, cpf_mascara)
-         VALUES (?, ?, ?, ?, ?)`,
-        [formularioId, g.nome || null, g.email || null, g.cpfHash || null, g.cpfMascara || null]
+          (formulario_id, nome, email, cpf_hash, cpf_mascara, rg_hash, rg_mascara)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          formularioId,
+          g.nome || null,
+          g.email || null,
+          g.cpfHash || null,
+          g.cpfMascara || null,
+          g.rgHash || null,
+          g.rgMascara || null,
+        ]
       );
     }
     await conn.commit();
@@ -959,14 +991,19 @@ function normalizeEmails(emails) {
   return out;
 }
 
-function identidadeWhere(cpfHashes, emails) {
+function identidadeWhere(cpfHashes, emails, rgHashes) {
   const hashes = normalizeHashes(cpfHashes);
   const mails = normalizeEmails(emails);
+  const rgs = normalizeHashes(rgHashes);
   const parts = [];
   const params = [];
   if (hashes.length) {
     parts.push(`c.cpf_hash IN (${hashes.map(() => '?').join(',')})`);
     params.push(...hashes);
+  }
+  if (rgs.length) {
+    parts.push(`c.rg_hash IN (${rgs.map(() => '?').join(',')})`);
+    params.push(...rgs);
   }
   if (mails.length) {
     parts.push(`LOWER(c.email) IN (${mails.map(() => '?').join(',')})`);
@@ -976,27 +1013,34 @@ function identidadeWhere(cpfHashes, emails) {
   return { sql: `(${parts.join(' OR ')})`, params };
 }
 
-async function expandIdentidades(cpfHashes, emails) {
+async function expandIdentidades(cpfHashes, emails, rgHashes) {
   let hashes = normalizeHashes(cpfHashes);
   let mails = normalizeEmails(emails);
+  let rgs = normalizeHashes(rgHashes);
   const pool = getPool();
   for (let i = 0; i < 2; i += 1) {
-    const where = identidadeWhere(hashes, mails);
+    const where = identidadeWhere(hashes, mails, rgs);
     if (!where) break;
     const [rows] = await pool.execute(
-      `SELECT c.cpf_hash, LOWER(TRIM(c.email)) AS email
+      `SELECT c.cpf_hash, c.rg_hash, LOWER(TRIM(c.email)) AS email
        FROM pesquisas_convidados c
        INNER JOIN pesquisas_formularios f ON f.id = c.formulario_id
        WHERE f.publico_alvo = 'externos' AND ${where.sql}`,
       where.params
     );
     const nextH = new Set(hashes);
+    const nextR = new Set(rgs);
     const nextE = new Set(mails);
     let grew = false;
     for (const row of rows) {
       const h = String(row.cpf_hash || '').trim().toLowerCase();
       if (/^[a-f0-9]{64}$/.test(h) && !nextH.has(h) && nextH.size < IDENTIDADE_LIMITE) {
         nextH.add(h);
+        grew = true;
+      }
+      const rg = String(row.rg_hash || '').trim().toLowerCase();
+      if (/^[a-f0-9]{64}$/.test(rg) && !nextR.has(rg) && nextR.size < IDENTIDADE_LIMITE) {
+        nextR.add(rg);
         grew = true;
       }
       const e = String(row.email || '').trim().toLowerCase();
@@ -1006,16 +1050,17 @@ async function expandIdentidades(cpfHashes, emails) {
       }
     }
     hashes = [...nextH];
+    rgs = [...nextR];
     mails = [...nextE];
     if (!grew) break;
   }
-  return { cpfHashes: hashes, emails: mails };
+  return { cpfHashes: hashes, emails: mails, rgHashes: rgs };
 }
 
 async function findConvidadoByHashEmail(formularioId, cpfHash, email) {
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT id, formulario_id, nome, email, cpf_mascara
+    `SELECT id, formulario_id, nome, email, cpf_mascara, rg_mascara
      FROM pesquisas_convidados
      WHERE formulario_id = ? AND cpf_hash = ? AND LOWER(email) = ?
      LIMIT 1`,
@@ -1041,12 +1086,12 @@ function mapConvitePortal(row) {
   };
 }
 
-async function findConvidadoByIdentidade(formularioId, cpfHashes, emails) {
-  const where = identidadeWhere(cpfHashes, emails);
+async function findConvidadoByIdentidade(formularioId, cpfHashes, emails, rgHashes) {
+  const where = identidadeWhere(cpfHashes, emails, rgHashes);
   if (!where) return null;
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT c.id, c.formulario_id, c.nome, c.email, c.cpf_mascara
+    `SELECT c.id, c.formulario_id, c.nome, c.email, c.cpf_mascara, c.rg_mascara
      FROM pesquisas_convidados c
      WHERE c.formulario_id = ? AND ${where.sql}
      LIMIT 1`,
@@ -1055,8 +1100,8 @@ async function findConvidadoByIdentidade(formularioId, cpfHashes, emails) {
   return mapConvidado(rows[0]);
 }
 
-async function findConvidadosByIdentidade(cpfHashes, emails) {
-  const where = identidadeWhere(cpfHashes, emails);
+async function findConvidadosByIdentidade(cpfHashes, emails, rgHashes) {
+  const where = identidadeWhere(cpfHashes, emails, rgHashes);
   if (!where) return [];
   const pool = getPool();
   const [rows] = await pool.execute(
@@ -1078,16 +1123,20 @@ async function findConvidadosByIdentidade(cpfHashes, emails) {
 async function findConvidadoDuplicado(formularioId, guest, ignoreId) {
   const pool = getPool();
   const email = guest.email ? String(guest.email).toLowerCase() : null;
-  const nome = !guest.cpfHash && !email && guest.nome ? String(guest.nome).toLowerCase() : null;
+  const nome =
+    !guest.cpfHash && !guest.rgHash && !email && guest.nome
+      ? String(guest.nome).toLowerCase()
+      : null;
   const [rows] = await pool.execute(
-    `SELECT id, cpf_hash, email, nome
+    `SELECT id, cpf_hash, rg_hash, email, nome
      FROM pesquisas_convidados
      WHERE formulario_id = ?
        AND id <> ?
        AND (
          (? IS NOT NULL AND cpf_hash = ?)
+         OR (? IS NOT NULL AND rg_hash = ?)
          OR (? IS NOT NULL AND LOWER(email) = ?)
-         OR (? IS NOT NULL AND cpf_hash IS NULL AND (email IS NULL OR email = '') AND LOWER(nome) = ?)
+         OR (? IS NOT NULL AND cpf_hash IS NULL AND rg_hash IS NULL AND (email IS NULL OR email = '') AND LOWER(nome) = ?)
        )
      LIMIT 1`,
     [
@@ -1095,6 +1144,8 @@ async function findConvidadoDuplicado(formularioId, guest, ignoreId) {
       ignoreId || 0,
       guest.cpfHash || null,
       guest.cpfHash || null,
+      guest.rgHash || null,
+      guest.rgHash || null,
       email,
       email,
       nome,
@@ -1106,6 +1157,7 @@ async function findConvidadoDuplicado(formularioId, guest, ignoreId) {
   return {
     id: row.id,
     cpfHash: row.cpf_hash,
+    rgHash: row.rg_hash,
     email: row.email,
     nome: row.nome || '',
   };
@@ -1115,13 +1167,15 @@ async function updateConvidado(formularioId, id, guest) {
   const pool = getPool();
   const [result] = await pool.execute(
     `UPDATE pesquisas_convidados
-     SET nome = ?, email = ?, cpf_hash = ?, cpf_mascara = ?
+     SET nome = ?, email = ?, cpf_hash = ?, cpf_mascara = ?, rg_hash = ?, rg_mascara = ?
      WHERE formulario_id = ? AND id = ?`,
     [
       guest.nome || null,
       guest.email || null,
       guest.cpfHash || null,
       guest.cpfMascara || null,
+      guest.rgHash || null,
+      guest.rgMascara || null,
       formularioId,
       id,
     ]
@@ -1133,6 +1187,7 @@ async function updateConvidado(formularioId, id, guest) {
     nome: guest.nome || '',
     email: guest.email,
     cpf_mascara: guest.cpfMascara,
+    rg_mascara: guest.rgMascara,
   });
 }
 
@@ -1148,7 +1203,7 @@ async function deleteConvidado(formularioId, id) {
 async function findConvidadoHash(formularioId, id) {
   const pool = getPool();
   const [rows] = await pool.execute(
-    `SELECT id, cpf_hash, cpf_mascara, nome, email
+    `SELECT id, cpf_hash, cpf_mascara, rg_hash, rg_mascara, nome, email
      FROM pesquisas_convidados
      WHERE formulario_id = ? AND id = ?
      LIMIT 1`,
@@ -1160,6 +1215,8 @@ async function findConvidadoHash(formularioId, id) {
     id: row.id,
     cpfHash: row.cpf_hash,
     cpfMascara: row.cpf_mascara,
+    rgHash: row.rg_hash,
+    rgMascara: row.rg_mascara,
     nome: row.nome || '',
     email: row.email,
   };
@@ -1168,8 +1225,8 @@ async function findConvidadoHash(formularioId, id) {
 async function copyFormularioBase(fromId, toId) {
   const pool = getPool();
   await pool.execute(
-    `INSERT INTO pesquisas_formulario_base (formulario_id, chave_doc, chave_email, dados)
-     SELECT ?, chave_doc, chave_email, dados
+    `INSERT INTO pesquisas_formulario_base (formulario_id, chave_doc, chave_email, chave_rg, dados)
+     SELECT ?, chave_doc, chave_email, chave_rg, dados
      FROM pesquisas_formulario_base
      WHERE formulario_id = ?`,
     [toId, fromId]
@@ -1179,8 +1236,8 @@ async function copyFormularioBase(fromId, toId) {
 async function copyConvidados(fromId, toId) {
   const pool = getPool();
   await pool.execute(
-    `INSERT INTO pesquisas_convidados (formulario_id, nome, email, cpf_hash, cpf_mascara)
-     SELECT ?, nome, email, cpf_hash, cpf_mascara
+    `INSERT INTO pesquisas_convidados (formulario_id, nome, email, cpf_hash, cpf_mascara, rg_hash, rg_mascara)
+     SELECT ?, nome, email, cpf_hash, cpf_mascara, rg_hash, rg_mascara
      FROM pesquisas_convidados
      WHERE formulario_id = ?`,
     [toId, fromId]
@@ -1320,9 +1377,15 @@ async function replaceFormularioBase(formularioId, rows) {
     for (const row of rows) {
       await conn.execute(
         `INSERT INTO pesquisas_formulario_base
-          (formulario_id, chave_doc, chave_email, dados)
-         VALUES (?, ?, ?, ?)`,
-        [formularioId, row.chaveDoc || null, row.chaveEmail || null, JSON.stringify(row.dados)]
+          (formulario_id, chave_doc, chave_email, chave_rg, dados)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          formularioId,
+          row.chaveDoc || null,
+          row.chaveEmail || null,
+          row.chaveRg || null,
+          JSON.stringify(row.dados),
+        ]
       );
     }
     await conn.commit();
@@ -1372,7 +1435,7 @@ function parseDados(raw) {
   }
 }
 
-async function lookupFormularioBase(formularioId, { chaveDoc, chaveEmail }) {
+async function lookupFormularioBase(formularioId, { chaveDoc, chaveEmail, chaveRg }) {
   const pool = getPool();
   if (chaveDoc) {
     const [rows] = await pool.execute(
@@ -1389,6 +1452,15 @@ async function lookupFormularioBase(formularioId, { chaveDoc, chaveEmail }) {
        WHERE formulario_id = ? AND chave_email = ?
        LIMIT 1`,
       [formularioId, chaveEmail]
+    );
+    if (rows[0]) return parseDados(rows[0].dados);
+  }
+  if (chaveRg) {
+    const [rows] = await pool.execute(
+      `SELECT dados FROM pesquisas_formulario_base
+       WHERE formulario_id = ? AND chave_rg = ?
+       LIMIT 1`,
+      [formularioId, chaveRg]
     );
     if (rows[0]) return parseDados(rows[0].dados);
   }

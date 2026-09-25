@@ -417,7 +417,7 @@ export class PesquisasResultadosComponent implements OnInit {
       const { guests, ignoradas } = extractGuestsFromRows(rows);
       if (!guests.length) {
         this.alertas.erro(
-          'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.'
+          'Nenhuma linha válida. Use colunas de nome, CPF, CNPJ, RG ou e-mail.'
         );
         return;
       }
@@ -428,6 +428,7 @@ export class PesquisasResultadosComponent implements OnInit {
           guests.map((g) => ({
             nome: g.nome || undefined,
             cpf: g.cpf,
+            rg: g.rg,
             email: g.email,
           }))
         )
@@ -438,14 +439,14 @@ export class PesquisasResultadosComponent implements OnInit {
               this.alertas.erro(
                 res.duplicados
                   ? 'Esses convidados já estão na lista.'
-                  : 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ ou e-mail.'
+                  : 'Nenhuma linha válida. Use colunas de nome, CPF, CNPJ, RG ou e-mail.'
               );
               return;
             }
             const extras: string[] = [];
             if (res.duplicados) extras.push(`${res.duplicados} já estavam na lista`);
             if (ignoradas) {
-              extras.push(`${ignoradas} linha(s) sem nome, documento ou e-mail foram ignoradas`);
+              extras.push(`${ignoradas} linha(s) sem nome, CPF, CNPJ, RG ou e-mail foram ignoradas`);
             }
             const extra = extras.length ? ` ${extras.join('. ')}.` : '';
             const msg =
