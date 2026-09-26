@@ -16,5 +16,6 @@ backend/storage/nsc-certificados/*
 backend/storage/cipa-imagens/
 backend/storage/documentos/
 backend/storage/documentos-thumbs/
+backend/storage/pesquisas-capas/
 backend/storage/rustdesk/*.zip
 frontend/.well-known/

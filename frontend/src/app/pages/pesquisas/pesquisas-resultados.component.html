@@ -264,6 +264,15 @@
         @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
           <p class="page-sub">Nenhum convidado na lista.</p>
         } @else {
+          @if ((d.formulario.convidados || []).length) {
+            <div class="guest-row guest-row-head">
+              <span>Nome</span>
+              <span>CPF/CNPJ</span>
+              <span>RG</span>
+              <span>E-mail</span>
+              <span></span>
+            </div>
+          }
           @for (g of d.formulario.convidados || []; track g.id || g.email || g.nome) {
             <div class="guest-row">
               <span>{{ g.nome || '—' }}</span>

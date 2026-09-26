@@ -597,8 +597,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   async exportarModeloConvidados(): Promise<void> {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([['CPF/CNPJ', 'Nome', 'Email', 'RG']]);
-    ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 32 }, { wch: 16 }];
+    const ws = XLSX.utils.aoa_to_sheet([['Nome', 'CPF/CNPJ', 'RG', 'Email']]);
+    ws['!cols'] = [{ wch: 28 }, { wch: 18 }, { wch: 16 }, { wch: 32 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Convidados');
     XLSX.writeFile(wb, 'modelo-convidados.xlsx');
   }
