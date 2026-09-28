@@ -16,6 +16,7 @@ const { env } = require('../config/env');
 const MOCK_SOLICITACAO = {
   nome: 'Ana',
   sobrenome: 'Oliveira',
+  genero: 'F',
   tipo: 'novo',
   cpf: '123.456.789-00',
   rg: '12.345.678-9',
@@ -37,6 +38,7 @@ const MOCK_SOLICITACAO = {
   data_inicio: '2026-10-01',
   foto_url: 'mock://foto.jpg',
   boas_vindas_url: 'mock://boas-vindas.pdf',
+  cracha_url: 'mock://cracha.jpg',
   credencial_veiculo_url: 'mock://credencial.pdf',
 };
 

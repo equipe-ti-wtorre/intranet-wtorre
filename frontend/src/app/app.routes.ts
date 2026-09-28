@@ -308,6 +308,14 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'cracha-boas-vindas',
+    canActivate: [authGuard, moduloGuard('cracha-boas-vindas')],
+    loadComponent: () =>
+      import('./pages/cracha-boas-vindas/cracha-boas-vindas.component').then(
+        (m) => m.CrachaBoasVindasComponent
+      ),
+  },
+  {
     path: 'nao-se-cale',
     canActivate: [authGuard, nscViewerGuard],
     loadComponent: () =>

@@ -1,0 +1,169 @@
+<app-public-chrome>
+  <div class="page-wrap">
+    @if (showRestoreBanner) {
+      <div class="restore-banner">
+        <span>Encontramos um rascunho salvo neste navegador.</span>
+        <button type="button" class="btn btn-primary btn-sm" (click)="restaurarRascunho()">Restaurar</button>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="descartarRascunho()">Começar do zero</button>
+      </div>
+    }
+
+    <div class="top">
+      <h1>Crachá &amp; Boas-vindas</h1>
+      <div class="sub">Gere o crachá e o cartão de boas-vindas do novo colaborador em segundos.</div>
+    </div>
+
+    <div class="toolbar">
+      <div class="tab-switch">
+        <button type="button" [class.active]="ferramenta() === 'cracha'" (click)="selecionarFerramenta('cracha')">
+          Crachá
+        </button>
+        <button type="button" [class.active]="ferramenta() === 'boas'" (click)="selecionarFerramenta('boas')">
+          Boas-vindas
+        </button>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-ghost" [disabled]="exportandoTodos()" (click)="exportarTodos()">
+          {{ progressoLote() ?? 'Exportar todos (JPEG)' }}
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="exportando()" (click)="exportarAtivo()">
+          {{ exportando() ? 'Gerando…' : 'Exportar JPEG' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <div class="sb-section">
+          <div class="sb-label">
+            <span>Colaboradores</span>
+            <button type="button" class="add-btn" (click)="adicionarColaborador()">+ Adicionar</button>
+          </div>
+          <div class="colab-list">
+            @for (c of colaboradores(); track c.id) {
+              <div class="colab-item" [class.active]="c.id === activeId()" (click)="selecionarColaborador(c.id)">
+                <div class="colab-avatar">
+                  @if (!c.foto) {
+                    <svg class="placeholder" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" />
+                      <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                  }
+                </div>
+                <div class="colab-meta">
+                  <div class="colab-name">{{ c.nomeCompleto || 'Sem nome' }}</div>
+                  <div class="colab-sub">{{ nomeMarca(c.empresaId) }}</div>
+                </div>
+                @if (colaboradores().length > 1) {
+                  <button type="button" class="colab-remove" (click)="removerColaborador(c.id, $event)" title="Remover">
+                    &times;
+                  </button>
+                }
+              </div>
+            }
+          </div>
+          <a class="clear-all" (click)="limparTudo()">Limpar tudo e começar do zero</a>
+        </div>
+
+        @if (ativo(); as colab) {
+          @if (ferramenta() === 'cracha') {
+            <div class="sb-section">
+              <div class="sb-label">Empresa / Marca</div>
+              <div class="brand-list">
+                @for (bid of brandOrder; track bid) {
+                  <div class="brand-item" [class.active]="colab.empresaId === bid" (click)="selecionarMarca(bid)">
+                    <div class="brand-dot" [style.background]="brands[bid].color"></div>
+                    <div class="brand-name">{{ brands[bid].name }}</div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="sb-section">
+            @if (ferramenta() === 'boas') {
+              <div class="field">
+                <label>Colaborador ou colaboradora?</label>
+                <div class="gender-toggle">
+                  <button type="button" [class.active]="colab.genero === 'M'" (click)="onGenero('M')">Colaborador</button>
+                  <button type="button" [class.active]="colab.genero === 'F'" (click)="onGenero('F')">Colaboradora</button>
+                  <button type="button" [class.active]="colab.genero === 'N'" (click)="onGenero('N')">Neutro</button>
+                </div>
+              </div>
+            }
+
+            <div class="field" [class.missing]="faltando().includes('Nome completo')">
+              <label>Nome completo <span class="req">*</span></label>
+              <input type="text" placeholder="Ex: Maria Silva" [value]="colab.nomeCompleto" (input)="onNomeCompleto($any($event.target).value)" />
+            </div>
+
+            @if (ferramenta() === 'boas') {
+              <div class="field">
+                <label>Como chamar (nome curto)</label>
+                <input type="text" placeholder="Ex: Maria" [value]="colab.nomeCurto" (input)="onNomeCurto($any($event.target).value)" />
+              </div>
+              <div class="field" [class.missing]="faltando().includes('Área / Time')">
+                <label>Área / Time <span class="req">*</span></label>
+                <input type="text" placeholder="Ex: Financeiro" [value]="colab.area" (input)="onArea($any($event.target).value)" />
+              </div>
+              <div class="field" [class.missing]="faltando().includes('Cargo')">
+                <label>Cargo <span class="req">*</span></label>
+                <input type="text" placeholder="Ex: Analista Financeiro JR." [value]="colab.cargo" (input)="onCargo($any($event.target).value)" />
+              </div>
+              <div class="field" [class.missing]="faltando().includes('E-mail')">
+                <label>E-mail <span class="req">*</span></label>
+                <input type="email" placeholder="Ex: maria.silva@wtorre.com.br" [value]="colab.email" (input)="onEmail($any($event.target).value)" />
+              </div>
+              <div class="field" [class.missing]="faltando().includes('Texto de apresentação')">
+                <label>Texto de apresentação <span class="req">*</span></label>
+                <textarea placeholder="Escreva a apresentação da pessoa..." [value]="colab.bio" (input)="onBio($any($event.target).value)"></textarea>
+                <div class="hint">{{ colab.bio.length }} caracteres — o box do card se ajusta sozinho.</div>
+              </div>
+            }
+          </div>
+
+          <div class="sb-section">
+            <label class="field-label">Foto do colaborador <span class="req">*</span></label>
+            <app-photo-adjuster
+              [foto]="colab.foto"
+              [strokeColor]="ferramenta() === 'cracha' ? brands[colab.empresaId].color : '#01679E'"
+              (fotoChange)="onFotoChange($event)"
+            />
+          </div>
+
+          <div class="sb-section">
+            <div class="info-box">
+              @if (ferramenta() === 'cracha') {
+                <div class="title">CRACHÁ {{ brands[colab.empresaId].name.toUpperCase() }} · 54×86MM</div>
+                <div class="row"><span>Formato</span><b>JPEG (300dpi p/ impressão)</b></div>
+              } @else {
+                <div class="title">BOAS-VINDAS · RH CONECTA</div>
+                <div class="row"><span>Formato</span><b>Imagem JPEG</b></div>
+              }
+            </div>
+          </div>
+        }
+      </aside>
+
+      <main class="preview-panel">
+        <div class="preview-label">
+          Pré-visualização · {{ ferramenta() === 'cracha' ? 'Crachá' : 'Boas-vindas' }}
+        </div>
+        <div
+          #previewCanvas
+          class="preview-canvas"
+          [class.draggable]="!!ativo()?.foto"
+          (mousedown)="onPreviewDragStart($event)"
+          (mousemove)="onPreviewDragMove($event)"
+          (mouseup)="onPreviewDragEnd()"
+          (mouseleave)="onPreviewDragEnd()"
+          (touchstart)="onPreviewDragStart($event)"
+          (touchmove)="onPreviewDragMove($event)"
+          (touchend)="onPreviewDragEnd()"
+          [innerHTML]="previewHtml()"
+        ></div>
+      </main>
+    </div>
+  </div>
+  <app-footer />
+</app-public-chrome>

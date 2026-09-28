@@ -21,6 +21,7 @@ router.post(
   uploadSolicitacao.fields([
     { name: 'foto', maxCount: 1 },
     { name: 'boas_vindas', maxCount: 1 },
+    { name: 'cracha', maxCount: 1 },
     { name: 'credencial_veiculo', maxCount: 1 },
   ]),
   handleSolicitacaoMulterError,

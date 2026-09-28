@@ -80,6 +80,7 @@ async function campos(_req, res) {
 async function criar(req, res) {
   const fotoFile = req.files?.foto?.[0];
   const boasVindasFile = req.files?.boas_vindas?.[0];
+  const crachaFile = req.files?.cracha?.[0];
   const credencialVeiculoFile = req.files?.credencial_veiculo?.[0];
   const uploads = [];
 
@@ -87,6 +88,7 @@ async function criar(req, res) {
     const payload = validarPayload(req.body, {
       foto: fotoFile,
       boas_vindas: boasVindasFile,
+      cracha: crachaFile,
       credencial_veiculo: credencialVeiculoFile,
     });
 
@@ -95,6 +97,7 @@ async function criar(req, res) {
 
     let foto_url = null;
     let boas_vindas_url = null;
+    let cracha_url = null;
     let credencial_veiculo_url = null;
 
     if (fotoFile) {
@@ -106,6 +109,11 @@ async function criar(req, res) {
       const up = await uploadArquivo(boasVindasFile, container);
       uploads.push(up);
       boas_vindas_url = up.ref;
+    }
+    if (crachaFile) {
+      const up = await uploadArquivo(crachaFile, container);
+      uploads.push(up);
+      cracha_url = up.ref;
     }
     if (credencialVeiculoFile) {
       const up = await uploadArquivo(credencialVeiculoFile, container);
@@ -119,6 +127,7 @@ async function criar(req, res) {
       solicitante_usuario_id: req.user.id,
       foto_url,
       boas_vindas_url,
+      cracha_url,
       credencial_veiculo_url,
       status: 'recebida',
       criado_por: req.user.id,
@@ -144,6 +153,7 @@ async function criar(req, res) {
   } finally {
     await unlinkSafe(fotoFile?.path);
     await unlinkSafe(boasVindasFile?.path);
+    await unlinkSafe(crachaFile?.path);
     await unlinkSafe(credencialVeiculoFile?.path);
   }
 }

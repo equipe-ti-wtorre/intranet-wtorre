@@ -21,6 +21,7 @@ function mapSolicitacao(row) {
     tipo: row.tipo,
     nome: row.nome,
     sobrenome: row.sobrenome,
+    genero: row.genero,
     email_novo: row.email_novo,
     data_nascimento: row.data_nascimento ? String(row.data_nascimento).slice(0, 10) : null,
     cpf: row.cpf,
@@ -33,6 +34,7 @@ function mapSolicitacao(row) {
     local_trabalho: row.local_trabalho,
     foto_url: row.foto_url,
     boas_vindas_url: row.boas_vindas_url,
+    cracha_url: row.cracha_url,
     credencial_veiculo_url: row.credencial_veiculo_url,
     precisa_ramal: !!row.precisa_ramal,
     precisa_celular: !!row.precisa_celular,
@@ -105,12 +107,12 @@ async function createSolicitacao(data) {
   const [result] = await pool.execute(
     `INSERT INTO solicitacoes_colaborador (
       solicitante_usuario_id, solicitante_nome, solicitante_email, tipo,
-      nome, sobrenome, email_novo, data_nascimento, cpf, rg,
+      nome, sobrenome, genero, email_novo, data_nascimento, cpf, rg,
       departamento, cargo, supervisor, centro_custo, empresa, local_trabalho,
-      foto_url, boas_vindas_url, credencial_veiculo_url,
+      foto_url, boas_vindas_url, cracha_url, credencial_veiculo_url,
       precisa_ramal, precisa_celular, equipamento, credencial_estacionamento,
       data_inicio, status, criado_por
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.solicitante_usuario_id ?? null,
       data.solicitante_nome ?? data.solicitante ?? null,
@@ -118,6 +120,7 @@ async function createSolicitacao(data) {
       data.tipo ?? null,
       data.nome ?? null,
       data.sobrenome ?? null,
+      data.genero ?? null,
       data.email_novo ?? null,
       data.data_nascimento ?? null,
       data.cpf ?? null,
@@ -130,6 +133,7 @@ async function createSolicitacao(data) {
       data.local_trabalho ?? null,
       data.foto_url ?? null,
       data.boas_vindas_url ?? null,
+      data.cracha_url ?? null,
       data.credencial_veiculo_url ?? null,
       data.precisa_ramal ? 1 : 0,
       data.precisa_celular ? 1 : 0,
