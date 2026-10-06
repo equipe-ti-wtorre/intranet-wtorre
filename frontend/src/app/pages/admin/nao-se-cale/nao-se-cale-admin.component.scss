@@ -225,6 +225,12 @@
   vertical-align: middle;
 }
 
+.nsc-table td.nsc-email {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 240px;
+}
+
 .nsc-table tbody tr:hover {
   background: var(--bg);
 }
