@@ -10,7 +10,7 @@
 
 .home-carrossel-empty,
 .home-carrossel-placeholder {
-  height: var(--banner-height, 420px);
+  height: var(--banner-height, 500px);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(47, 107, 255, 0.06), rgba(238, 241, 246, 0.9));
   display: flex;
@@ -27,6 +27,6 @@
 @media (max-width: 760px) {
   .home-carrossel-empty,
   .home-carrossel-placeholder {
-    height: min(var(--banner-height, 420px), 320px);
+    height: min(var(--banner-height, 500px), 320px);
   }
 }

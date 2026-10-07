@@ -63,7 +63,7 @@ const HOME_SISTEMAS_KEY = 'home.sistemas';
 const HOME_CARROSSEL_DEFAULTS = {
   autoplay: true,
   intervaloMs: 5000,
-  alturaPx: 420,
+  alturaPx: 500,
   slides: [],
 };
 

@@ -24,6 +24,6 @@ export interface HomeCarrosselUploadResponse {
 export const HOME_CARROSSEL_DEFAULTS: HomeCarrosselConfig = {
   autoplay: true,
   intervaloMs: 5000,
-  alturaPx: 420,
+  alturaPx: 500,
   slides: [],
 };
