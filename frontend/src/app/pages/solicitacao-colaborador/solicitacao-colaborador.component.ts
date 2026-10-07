@@ -48,6 +48,7 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     'WTorre',
     'Base Coworking',
     'Real Arenas',
+    'Viva o Vale',
     'PNU',
   ];
 
