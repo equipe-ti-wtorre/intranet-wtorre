@@ -1,10 +1,11 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   CapaLayout,
   PesquisasPergunta,
   PesquisasTemplateVisual,
 } from '../../../models/pesquisas.model';
+import { AlertasService } from '../../../services/alertas.service';
 import { PesqIconComponent } from './pesq-icon.component';
 import { PesquisasMarcaLogosComponent } from './pesquisas-marca-logos.component';
 import { PESQUISAS_TPL_WTORRE } from './pesquisas-marca.util';
@@ -21,6 +22,9 @@ export interface GuestReorderEvent {
   templateUrl: './pesquisas-guest-form.component.html',
 })
 export class PesquisasGuestFormComponent {
+  private readonly alertas = inject(AlertasService);
+  private readonly maxArquivos = 10;
+
   readonly titulo = input('');
   readonly descricao = input('');
   readonly capaUrl = input<string | null>(null);
@@ -31,18 +35,21 @@ export class PesquisasGuestFormComponent {
   readonly perguntas = input<PesquisasPergunta[]>([]);
   readonly secoes = input(false);
   readonly respostas = input<Record<string, string>>({});
+  /** Lista já escolhida, vinda de quem envia. Quando vier preenchida, ela manda na tela. */
+  readonly escolhidos = input<Record<string, File[]>>({});
   readonly mode = input<'preview' | 'answer'>('answer');
   readonly enviando = input(false);
   readonly submitLabel = input('Enviar respostas');
 
   readonly valorChange = output<{ key: string; valor: string }>();
-  readonly arquivoChange = output<{ key: string; file: File | null }>();
+  readonly arquivoChange = output<{ key: string; files: File[] }>();
   readonly blocosReorder = output<GuestReorderEvent>();
   readonly enviar = output<void>();
   readonly ampliarCapa = output<void>();
   readonly capaFocoChange = output<{ x: number; y: number }>();
 
   readonly escala = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  readonly arquivos = signal<Record<string, File[]>>({});
   readonly rows = computed(() => this.groupRows(this.perguntas()));
 
   readonly tpl = computed(() => this.template() || PESQUISAS_TPL_WTORRE);
@@ -169,11 +176,37 @@ export class PesquisasGuestFormComponent {
     return Number.isFinite(atual) && atual >= n;
   }
 
+  arquivosDe(key: string): File[] {
+    const externos = this.escolhidos();
+    if (Object.prototype.hasOwnProperty.call(externos, key)) return externos[key] || [];
+    return this.arquivos()[key] || [];
+  }
+
   onFile(key: string, ev: Event): void {
     const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0] || null;
-    this.arquivoChange.emit({ key, file });
-    this.valorChange.emit({ key, valor: file ? file.name : '' });
+    const escolhidos = Array.from(input.files || []);
+    input.value = '';
+    if (!escolhidos.length) return;
+    const atuais = this.arquivosDe(key);
+    const espaco = this.maxArquivos - atuais.length;
+    if (espaco <= 0 || escolhidos.length > espaco) {
+      this.alertas.erro('Cada pergunta aceita no máximo 10 arquivos.');
+    }
+    const proximos = [...atuais, ...escolhidos.slice(0, Math.max(espaco, 0))];
+    this.definirArquivos(key, proximos);
+  }
+
+  removerArquivo(key: string, index: number): void {
+    this.definirArquivos(
+      key,
+      this.arquivosDe(key).filter((_, i) => i !== index)
+    );
+  }
+
+  private definirArquivos(key: string, files: File[]): void {
+    this.arquivos.update((map) => ({ ...map, [key]: files }));
+    this.arquivoChange.emit({ key, files });
+    this.valorChange.emit({ key, valor: files.map((file) => file.name).join(', ') });
   }
 
   onSubmit(): void {

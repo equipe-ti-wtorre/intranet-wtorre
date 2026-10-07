@@ -195,6 +195,31 @@
     </div>
   }
 
+  @if (d.formulario.publicoAlvo !== 'externos') {
+    <div class="form-card">
+      <h3><app-pesq-icon name="link" [size]="17" /> Link do formulário</h3>
+      <div class="field">
+        <label>Link para enviar aos colaboradores</label>
+        <div class="link-copy-row">
+          <input type="text" [value]="linkInterno()" readonly />
+          <div class="link-copy-actions">
+            <button type="button" class="btn-secondary" (click)="copiarLink()">
+              <app-pesq-icon name="link" [size]="15" />
+              Copiar
+            </button>
+            @if (linkInterno()) {
+              <app-pesquisas-qr-card
+                modo="botao"
+                [url]="linkInterno()"
+                (abertoChange)="qrAberto.set($event)"
+              />
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
   @if (d.formulario.publicoAlvo === 'externos') {
     <div class="form-card">
       <h3><app-pesq-icon name="link" [size]="17" /> Convite para convidados externos</h3>
@@ -264,6 +289,15 @@
         @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
           <p class="page-sub">Nenhum convidado na lista.</p>
         } @else {
+          @if ((d.formulario.convidados || []).length) {
+            <div class="guest-row guest-row-head">
+              <span>Nome</span>
+              <span>CPF/CNPJ</span>
+              <span>RG</span>
+              <span>E-mail</span>
+              <span></span>
+            </div>
+          }
           @for (g of d.formulario.convidados || []; track g.id || g.email || g.nome) {
             <div class="guest-row">
               <span>{{ g.nome || '—' }}</span>
@@ -310,6 +344,38 @@
 
   <div class="form-card">
     <h3><app-pesq-icon name="list-checks" [size]="17" /> Resultados por pergunta</h3>
+    @if (anexosBaixaveis().length >= 2) {
+      <div class="anexo-zip-bar">
+        <label class="anexo-zip-all">
+          <input
+            type="checkbox"
+            [checked]="todosAnexosMarcados()"
+            (change)="alternarTodosAnexos($event)"
+          />
+          Selecionar todos
+        </label>
+        <div class="anexo-zip-actions">
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="baixandoAnexos() || !anexosSelecionados().size"
+            (click)="baixarAnexos(false)"
+          >
+            <app-pesq-icon name="download" [size]="15" />
+            Baixar selecionados
+          </button>
+          <button
+            type="button"
+            class="btn-secondary"
+            [disabled]="baixandoAnexos()"
+            (click)="baixarAnexos(true)"
+          >
+            <app-pesq-icon name="download" [size]="15" />
+            Baixar todos
+          </button>
+        </div>
+      </div>
+    }
     @if (!d.perguntas.length) {
       <p class="page-sub">Nenhuma pergunta neste formulário.</p>
     }
@@ -346,8 +412,17 @@
           @if (!q.respostas.length) {
             <p class="page-sub">Ainda sem arquivos.</p>
           } @else {
-            @for (r of q.respostas; track $index) {
+            @for (r of q.respostas; track r.respostaId + '-' + (r.indice ?? 0)) {
               <div class="anexo-file-row">
+                @if (anexosBaixaveis().length >= 2 && r.anexoUrl && q.id) {
+                  <input
+                    class="anexo-file-check"
+                    type="checkbox"
+                    [checked]="anexoMarcado(q.id, r.respostaId, r.indice ?? 0)"
+                    (change)="alternarAnexo(q.id, r.respostaId, r.indice ?? 0, $event)"
+                    [attr.aria-label]="'Selecionar ' + r.valor"
+                  />
+                }
                 <div class="anexo-file-icon">
                   <app-pesq-icon name="file-text" />
                 </div>
@@ -423,10 +498,10 @@
   </div>
 }
 
-@if (qrAberto() && linkPublico() && data(); as d) {
+@if (qrAberto() && data(); as d) {
   <app-pesquisas-qr-card
     modo="dialogo"
-    [url]="linkPublico()"
+    [url]="d.formulario.publicoAlvo === 'externos' ? linkPublico() : linkInterno()"
     [titulo]="d.formulario.titulo"
     [dataLabel]="qrDataLabel(d.formulario)"
     [template]="d.formulario.template || null"

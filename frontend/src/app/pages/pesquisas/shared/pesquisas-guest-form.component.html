@@ -78,24 +78,40 @@
                     </div>
                   } @else if (blocoTipo(q) === 'anexo') {
                     <div class="guest-q-text">{{ q.texto || 'Anexar arquivo' }}</div>
-                    <label class="guest-file-upload">
-                      <input
-                        type="file"
-                        hidden
-                        (change)="onFile(keyOf(q, i), $event)"
-                      />
-                      @if (respostas()[keyOf(q, i)]) {
-                        <div class="guest-file-chosen">
-                          <app-pesq-icon name="file-text" [size]="15" />
-                          <span class="guest-file-name">{{ respostas()[keyOf(q, i)] }}</span>
-                        </div>
-                      } @else {
-                        <div class="guest-file-empty">
-                          <app-pesq-icon name="upload" [size]="15" />
-                          Clique para anexar um arquivo
-                        </div>
+                    <div class="guest-file-box">
+                      @if (arquivosDe(keyOf(q, i)).length) {
+                        <ul class="guest-file-list">
+                          @for (file of arquivosDe(keyOf(q, i)); track $index) {
+                            <li class="guest-file-item">
+                              <app-pesq-icon name="file-text" [size]="15" />
+                              <span class="guest-file-name">{{ file.name }}</span>
+                              <button
+                                type="button"
+                                class="guest-file-remove"
+                                (click)="removerArquivo(keyOf(q, i), $index)"
+                                aria-label="Remover arquivo"
+                              >
+                                <app-pesq-icon name="x" [size]="13" />
+                              </button>
+                            </li>
+                          }
+                        </ul>
                       }
-                    </label>
+                      @if (arquivosDe(keyOf(q, i)).length < 10) {
+                        <label class="guest-file-upload">
+                          <input
+                            type="file"
+                            multiple
+                            hidden
+                            (change)="onFile(keyOf(q, i), $event)"
+                          />
+                          <span class="guest-file-empty">
+                            <app-pesq-icon name="upload" [size]="15" />
+                            Adicionar arquivo
+                          </span>
+                        </label>
+                      }
+                    </div>
                     @if (q.ajuda) {
                       <div class="guest-q-help">{{ q.ajuda }}</div>
                     }

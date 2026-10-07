@@ -10,7 +10,7 @@ import {
   PesquisasSerieDia,
 } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
-import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
+import { pesquisasLinkInterno, pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
 import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
 import { PesquisasConvidadoModalComponent } from './shared/pesquisas-convidado-modal.component';
@@ -27,6 +27,23 @@ type LinhaEnvioCsv = {
   enviadoEm: string | null;
   porPergunta: Map<number, string>;
 };
+
+function nomeArquivoContentDisposition(header: string | null): string {
+  if (!header) return '';
+  const match = /filename="([^"]+)"/.exec(header);
+  return match?.[1] || '';
+}
+
+async function mensagemErroBlob(err: HttpErrorResponse): Promise<string> {
+  const fallback = 'Não foi possível baixar os anexos.';
+  if (!(err.error instanceof Blob)) return err.error?.mensagem || fallback;
+  try {
+    const json = JSON.parse(await err.error.text()) as { mensagem?: string };
+    return json.mensagem || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function titulosColunasPerguntas(perguntas: PesquisasResultadoPergunta[]): string[] {
   const seen = new Map<string, number>();
@@ -73,7 +90,9 @@ function montarCsvRespostas(d: PesquisasResultados): string[][] {
         };
         envios.set(id, row);
       }
-      row.porPergunta.set(q.id, r.valor ?? '');
+      const anterior = row.porPergunta.get(q.id);
+      const valor = r.valor ?? '';
+      row.porPergunta.set(q.id, anterior ? `${anterior}; ${valor}` : valor);
     }
   }
 
@@ -123,6 +142,8 @@ export class PesquisasResultadosComponent implements OnInit {
   readonly importandoConvidados = signal(false);
   readonly loading = signal(true);
   readonly agindo = signal(false);
+  readonly baixandoAnexos = signal(false);
+  readonly anexosSelecionados = signal<Set<string>>(new Set());
   readonly data = signal<PesquisasResultados | null>(null);
   readonly answerModal = signal<{
     title: string;
@@ -141,6 +162,7 @@ export class PesquisasResultadosComponent implements OnInit {
     this.api.resultados(ref).subscribe({
       next: (d) => {
         this.data.set(d);
+        this.anexosSelecionados.set(new Set());
         this.loading.set(false);
         const slug = d.formulario.slug;
         if (slug && ref !== slug) {
@@ -607,12 +629,113 @@ export class PesquisasResultadosComponent implements OnInit {
     return this.data()?.formulario.anonimo ? 'Anônimo' : r.respondente?.nome || 'Anônimo';
   }
 
+  anexosBaixaveis(): { perguntaId: number; respostaId: number; indice: number }[] {
+    const d = this.data();
+    if (!d) return [];
+    const itens: { perguntaId: number; respostaId: number; indice: number }[] = [];
+    for (const q of d.perguntas) {
+      if (q.blocoTipo !== 'anexo' || !q.id) continue;
+      for (const r of q.respostas) {
+        if (!r.anexoUrl) continue;
+        itens.push({ perguntaId: q.id, respostaId: r.respostaId, indice: r.indice ?? 0 });
+      }
+    }
+    return itens;
+  }
+
+  anexoChave(perguntaId: number, respostaId: number, indice = 0): string {
+    return `${perguntaId}:${respostaId}:${indice}`;
+  }
+
+  anexoMarcado(perguntaId: number | undefined, respostaId: number, indice = 0): boolean {
+    if (!perguntaId) return false;
+    return this.anexosSelecionados().has(this.anexoChave(perguntaId, respostaId, indice));
+  }
+
+  alternarAnexo(perguntaId: number | undefined, respostaId: number, indice: number, ev: Event): void {
+    if (!perguntaId) return;
+    const on = (ev.target as HTMLInputElement).checked;
+    const key = this.anexoChave(perguntaId, respostaId, indice);
+    this.anexosSelecionados.update((set) => {
+      const next = new Set(set);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }
+
+  todosAnexosMarcados(): boolean {
+    const all = this.anexosBaixaveis();
+    if (!all.length) return false;
+    const sel = this.anexosSelecionados();
+    return all.every((item) =>
+      sel.has(this.anexoChave(item.perguntaId, item.respostaId, item.indice))
+    );
+  }
+
+  alternarTodosAnexos(ev: Event): void {
+    const on = (ev.target as HTMLInputElement).checked;
+    if (!on) {
+      this.anexosSelecionados.set(new Set());
+      return;
+    }
+    this.anexosSelecionados.set(
+      new Set(
+        this.anexosBaixaveis().map((item) =>
+          this.anexoChave(item.perguntaId, item.respostaId, item.indice)
+        )
+      )
+    );
+  }
+
+  baixarAnexos(todos: boolean): void {
+    const d = this.data();
+    if (!d || this.baixandoAnexos()) return;
+    const disponiveis = this.anexosBaixaveis();
+    const itens = todos
+      ? disponiveis
+      : disponiveis.filter((item) =>
+          this.anexosSelecionados().has(
+            this.anexoChave(item.perguntaId, item.respostaId, item.indice)
+          )
+        );
+    if (!itens.length) {
+      this.alertas.erro('Selecione ao menos um anexo.');
+      return;
+    }
+    this.baixandoAnexos.set(true);
+    this.api.baixarAnexosZip(d.formulario.id, itens).subscribe({
+      next: (res) => {
+        const blob = res.body;
+        if (!blob) {
+          this.baixandoAnexos.set(false);
+          this.alertas.erro('Não foi possível baixar os anexos.');
+          return;
+        }
+        const nome =
+          nomeArquivoContentDisposition(res.headers.get('Content-Disposition')) || 'anexos.zip';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nome;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.baixandoAnexos.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.baixandoAnexos.set(false);
+        void mensagemErroBlob(err).then((mensagem) => this.alertas.erro(mensagem));
+      },
+    });
+  }
+
   verRespondente(name: string): void {
     const d = this.data();
     if (!d) return;
-    const answers = d.perguntas.map((q) => {
-      const r = q.respostas.find((x) => x.respondente?.nome === name);
-      return { q: q.texto, a: r?.valor || '—', anexoUrl: r?.anexoUrl || null };
+    const answers = d.perguntas.flatMap((q) => {
+      const rows = q.respostas.filter((x) => x.respondente?.nome === name);
+      if (!rows.length) return [{ q: q.texto, a: '—', anexoUrl: null }];
+      return rows.map((r) => ({ q: q.texto, a: r.valor || '—', anexoUrl: r.anexoUrl || null }));
     });
     this.answerModal.set({
       title: name,
@@ -633,14 +756,23 @@ export class PesquisasResultadosComponent implements OnInit {
     return pesquisasLinkPublico(this.data()?.formulario.slug);
   }
 
+  linkInterno(): string {
+    return pesquisasLinkInterno(this.data()?.formulario.slug);
+  }
+
   qrDataLabel(form: { prazoInicio?: string | null; prazo?: string | null }): string {
     return pesquisasQrDataLabel(form.prazoInicio || form.prazo);
   }
 
   async copiarLink(): Promise<void> {
-    const link = this.linkPublico();
+    const externo = this.data()?.formulario.publicoAlvo === 'externos';
+    const link = externo ? this.linkPublico() : this.linkInterno();
     if (!link) {
-      this.alertas.erro('Este formulário ainda não tem link público. Edite e salve para gerar.');
+      this.alertas.erro(
+        externo
+          ? 'Este formulário ainda não tem link público. Edite e salve para gerar.'
+          : 'Este formulário ainda não tem link. Edite e salve para gerar.'
+      );
       return;
     }
     try {

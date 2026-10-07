@@ -15,6 +15,7 @@
     "@azure/identity": "^4.13.1",
     "@azure/storage-blob": "^12.32.0",
     "@napi-rs/canvas": "^1.0.9",
+    "archiver": "^8.0.0",
     "bcrypt": "^5.1.1",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",

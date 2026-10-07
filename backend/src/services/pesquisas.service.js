@@ -1,5 +1,7 @@
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
+const { ZipArchive } = require('archiver');
 const repo = require('../repositories/pesquisas.repository');
 const usersRepo = require('../repositories/users.repository');
 const comunicadosRepo = require('../repositories/comunicados.repository');
@@ -877,7 +879,7 @@ async function syncComunicadoFormulario(form, { ativo, userId, bump = true }) {
     console.error('[pesquisas] Categoria de comunicados "pesquisas" não encontrada.');
     return false;
   }
-  const linkPath = `/pesquisas/formulario/${form.id}/responder`;
+  const linkPath = `/pesquisas/formulario/${form.slug || form.id}/responder`;
   const wantAtivo = !!ativo;
   const existing = await comunicadosRepo.buscarPorOrigem(ORIGEM_FORM, form.id);
   if (
@@ -1244,9 +1246,8 @@ async function excluirFormulario(req) {
 }
 
 async function payloadResponder(req) {
-  const id = parseId(req.params.id);
-  const form = await repo.findFormularioById(id);
-  if (!form) throw httpError(404, 'Formulário não encontrado.');
+  const form = await findFormularioByRef(req.params.id);
+  const id = form.id;
   if (form.status !== 'publicado') {
     throw httpError(409, 'Este formulário não está aberto para respostas.');
   }
@@ -1313,21 +1314,44 @@ function parseItensBody(req) {
   return Array.isArray(raw) ? raw : [];
 }
 
-function parseAnexoValor(valor) {
-  if (!valor) return null;
-  if (typeof valor === 'object' && valor.nome && valor.container && valor.blob) return valor;
-  try {
-    const o = JSON.parse(String(valor));
-    if (o && o.nome && o.container && o.blob) return o;
-  } catch {
-    /* ignore */
+function anexoMetaValido(item) {
+  return !!(item && item.nome && item.container && item.blob);
+}
+
+function parseAnexosLista(valor) {
+  if (!valor) return [];
+  let parsed = valor;
+  if (typeof valor === 'string') {
+    try {
+      parsed = JSON.parse(valor);
+    } catch {
+      return [];
+    }
   }
-  return null;
+  if (Array.isArray(parsed)) return parsed.filter(anexoMetaValido);
+  if (anexoMetaValido(parsed)) return [parsed];
+  return [];
+}
+
+function parseAnexoValor(valor) {
+  const lista = parseAnexosLista(valor);
+  return lista[0] || null;
 }
 
 function rotuloAnexoValor(valor) {
-  const meta = parseAnexoValor(valor);
-  return meta ? meta.nome : valor || '';
+  const lista = parseAnexosLista(valor);
+  if (lista.length) return lista.map((item) => item.nome).join('; ');
+  return valor == null ? '' : String(valor);
+}
+
+function unlinkArquivosTemp(lista) {
+  for (const file of lista) {
+    try {
+      fs.unlinkSync(file.path);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function processarAnexosResposta(req, perguntas) {
@@ -1336,40 +1360,50 @@ async function processarAnexosResposta(req, perguntas) {
   for (const f of files) {
     const m = String(f.fieldname || '').match(/^anexo_(\d+)$/);
     if (!m) continue;
-    byPergunta.set(Number(m[1]), f);
+    const perguntaId = Number(m[1]);
+    const lista = byPergunta.get(perguntaId) || [];
+    lista.push(f);
+    byPergunta.set(perguntaId, lista);
   }
   if (!byPergunta.size) return new Map();
 
-  const container = await blobService.garantirContainer(env.pesquisasContainer);
-  const uploaded = new Map();
-  for (const [perguntaId, file] of byPergunta) {
+  let excedeu = false;
+  for (const [perguntaId, lista] of byPergunta) {
     const pergunta = perguntas.find((p) => p.id === perguntaId && p.blocoTipo === 'anexo');
     if (!pergunta) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        /* ignore */
-      }
+      unlinkArquivosTemp(lista);
+      byPergunta.delete(perguntaId);
       continue;
     }
-    const blobName = blobService.novoBlobName(file.originalname);
-    try {
-      await blobService.enviarArquivo(container, file.path, blobName, file.mimetype);
-      uploaded.set(
-        perguntaId,
-        JSON.stringify({
+    if (lista.length > 10) excedeu = true;
+  }
+  if (excedeu) {
+    for (const lista of byPergunta.values()) unlinkArquivosTemp(lista);
+    throw httpError(400, 'Cada pergunta aceita no máximo 10 arquivos.');
+  }
+
+  const container = await blobService.garantirContainer(env.pesquisasContainer);
+  const uploaded = new Map();
+  for (const [perguntaId, lista] of byPergunta) {
+    const metas = [];
+    for (const file of lista) {
+      const blobName = blobService.novoBlobName(file.originalname);
+      try {
+        await blobService.enviarArquivo(container, file.path, blobName, file.mimetype);
+        metas.push({
           nome: file.originalname,
           container,
           blob: blobName,
-        })
-      );
-    } finally {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        /* ignore */
+        });
+      } finally {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          /* ignore */
+        }
       }
     }
+    if (metas.length) uploaded.set(perguntaId, JSON.stringify(metas));
   }
   return uploaded;
 }
@@ -1391,15 +1425,16 @@ function montarItensResposta(perguntas, rawItens, anexosPorPergunta = new Map())
   const itens = [];
   for (const p of visiveis) {
     const valor = byPergunta.get(p.id) ?? '';
-    if (p.obrigatoria && !valor) {
-      throw httpError(400, `Responda a pergunta: ${p.texto}`);
-    }
     if (p.blocoTipo === 'anexo') {
-      if (valor && !parseAnexoValor(valor)) {
+      const lista = parseAnexosLista(valor);
+      if (!lista.length && (p.obrigatoria || valor)) {
         throw httpError(400, `Anexe um arquivo em: ${p.texto}`);
       }
-      itens.push({ perguntaId: p.id, valor });
+      itens.push({ perguntaId: p.id, valor: lista.length ? JSON.stringify(lista) : '' });
       continue;
+    }
+    if (p.obrigatoria && !valor) {
+      throw httpError(400, `Responda a pergunta: ${p.texto}`);
     }
     if (p.tipo === 'escala' && valor) {
       const n = Number(valor);
@@ -1470,21 +1505,35 @@ async function resultados(req) {
     for (const r of respostas) {
       const item = r.itens.find((i) => i.perguntaId === p.id);
       if (!item || item.valor == null || item.valor === '') continue;
-      const anexo = p.blocoTipo === 'anexo' ? parseAnexoValor(item.valor) : null;
-      let anexoUrl = null;
-      if (anexo) {
-        try {
-          const sas = await blobService.gerarSasLeitura(anexo.container, anexo.blob, {
-            downloadNome: anexo.nome,
+      if (p.blocoTipo === 'anexo') {
+        const lista = parseAnexosLista(item.valor);
+        for (let indice = 0; indice < lista.length; indice += 1) {
+          const anexo = lista[indice];
+          let anexoUrl = null;
+          try {
+            const sas = await blobService.gerarSasLeitura(anexo.container, anexo.blob, {
+              downloadNome: anexo.nome,
+            });
+            anexoUrl = sas.url;
+          } catch {
+            anexoUrl = null;
+          }
+          valores.push({
+            valor: anexo.nome,
+            anexoUrl,
+            respostaId: r.id,
+            indice,
+            respondente: form.anonimo
+              ? null
+              : { nome: r.nome, email: r.email, departamento: r.departamento || '' },
+            enviadoEm: r.enviadoEm,
           });
-          anexoUrl = sas.url;
-        } catch {
-          anexoUrl = null;
         }
+        continue;
       }
       valores.push({
-        valor: anexo ? anexo.nome : item.valor,
-        anexoUrl,
+        valor: item.valor,
+        anexoUrl: null,
         respostaId: r.id,
         respondente: form.anonimo
           ? null
@@ -1536,6 +1585,111 @@ async function resultados(req) {
           dept: r.departamento || '—',
           date: formatBrDateTime(r.enviadoEm) || '',
         })),
+  };
+}
+
+function nomeEntradaZip(nome, usados) {
+  const limpo =
+    String(nome || 'arquivo')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+      .trim()
+      .slice(0, 180) || 'arquivo';
+  const chave = (candidato) => candidato.toLowerCase();
+  if (!usados.has(chave(limpo))) {
+    usados.add(chave(limpo));
+    return limpo;
+  }
+  const ext = path.extname(limpo);
+  const stem = ext ? limpo.slice(0, -ext.length) : limpo;
+  let n = 2;
+  let candidato = `${stem} (${n})${ext}`;
+  while (usados.has(chave(candidato))) {
+    n += 1;
+    candidato = `${stem} (${n})${ext}`;
+  }
+  usados.add(chave(candidato));
+  return candidato;
+}
+
+function nomeArquivoZip(titulo) {
+  const base =
+    String(titulo || 'formulario')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'formulario';
+  return `${base}-anexos.zip`;
+}
+
+function buffersParaZip(entradas) {
+  return new Promise((resolve, reject) => {
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const chunks = [];
+    archive.on('data', (chunk) => chunks.push(chunk));
+    archive.on('error', reject);
+    archive.on('end', () => resolve(Buffer.concat(chunks)));
+    for (const entrada of entradas) {
+      archive.append(entrada.buffer, { name: entrada.nome });
+    }
+    archive.finalize();
+  });
+}
+
+async function zipAnexos(req) {
+  const form = await findFormularioByRef(req.params.id);
+  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
+    throw httpError(403, 'Você não pode ver os resultados deste formulário.');
+  }
+  const raw = Array.isArray(req.body?.itens) ? req.body.itens : [];
+  const chaves = [];
+  const vistas = new Set();
+  for (const item of raw) {
+    const perguntaId = Number(item?.perguntaId);
+    const respostaId = Number(item?.respostaId);
+    const indice = Number(item?.indice);
+    if (!Number.isInteger(perguntaId) || perguntaId < 1) continue;
+    if (!Number.isInteger(respostaId) || respostaId < 1) continue;
+    if (!Number.isInteger(indice) || indice < 0) continue;
+    const key = `${perguntaId}:${respostaId}:${indice}`;
+    if (vistas.has(key)) continue;
+    vistas.add(key);
+    chaves.push({ perguntaId, respostaId, indice });
+  }
+  if (!chaves.length) throw httpError(400, 'Selecione ao menos um anexo.');
+  if (chaves.length > 200) throw httpError(400, 'Selecione no máximo 200 anexos por vez.');
+
+  const perguntas = await repo.listPerguntas(form.id);
+  const anexoIds = new Set(perguntas.filter((p) => p.blocoTipo === 'anexo').map((p) => p.id));
+  const respostas = await repo.listRespostasDetalhadas(form.id);
+  const porResposta = new Map(respostas.map((r) => [r.id, r]));
+
+  const usados = new Set();
+  const entradas = [];
+  for (const chave of chaves) {
+    if (!anexoIds.has(chave.perguntaId)) continue;
+    const resposta = porResposta.get(chave.respostaId);
+    if (!resposta) continue;
+    const item = (resposta.itens || []).find((i) => i.perguntaId === chave.perguntaId);
+    const anexo = parseAnexosLista(item?.valor)[chave.indice];
+    if (!anexo) continue;
+    let downloaded;
+    try {
+      downloaded = await blobService.baixarBuffer(anexo.container, anexo.blob);
+    } catch (err) {
+      if (err.status === 404) continue;
+      throw err;
+    }
+    entradas.push({
+      nome: nomeEntradaZip(anexo.nome || downloaded.filename, usados),
+      buffer: downloaded.buffer,
+    });
+  }
+  if (!entradas.length) throw httpError(404, 'Nenhum anexo encontrado para download.');
+
+  return {
+    buffer: await buffersParaZip(entradas),
+    filename: nomeArquivoZip(form.titulo),
   };
 }
 
@@ -1835,7 +1989,7 @@ async function listDestinatariosCandidatos() {
 
 function parseSlug(raw) {
   const slug = str(raw, 80);
-  if (!slug || !/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/.test(slug)) {
+  if (!slug || !/^[A-Za-z0-9_-]{8,80}$/.test(slug)) {
     throw httpError(400, 'Link inválido.');
   }
   return slug;
@@ -2457,6 +2611,7 @@ module.exports = {
   lookupBaseIntranet,
   enviarResposta,
   resultados,
+  zipAnexos,
   adicionarConvidado,
   atualizarConvidado,
   removerConvidado,

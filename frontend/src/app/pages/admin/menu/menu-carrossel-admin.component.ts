@@ -50,7 +50,7 @@ export class MenuCarrosselAdminComponent implements OnInit, OnDestroy {
   readonly form = this.fb.nonNullable.group({
     autoplay: [true],
     intervaloMs: [5000, [Validators.required, Validators.min(1000), Validators.max(60000)]],
-    alturaPx: [420, [Validators.required, Validators.min(200), Validators.max(800)]],
+    alturaPx: [500, [Validators.required, Validators.min(200), Validators.max(800)]],
     slides: this.fb.array<FormGroup>([]),
   });
 

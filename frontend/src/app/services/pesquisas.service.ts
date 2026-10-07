@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
@@ -88,8 +88,10 @@ export class PesquisasService {
     return this.http.delete<{ ok: boolean }>(this.api(`/formularios/${id}`));
   }
 
-  payloadResponder(id: number): Observable<PesquisasResponderPayload> {
-    return this.http.get<PesquisasResponderPayload>(this.api(`/formularios/${id}/responder`));
+  payloadResponder(ref: string | number): Observable<PesquisasResponderPayload> {
+    return this.http.get<PesquisasResponderPayload>(
+      this.api(`/formularios/${encodeURIComponent(String(ref))}/responder`)
+    );
   }
 
   lookupBase(id: number, valor: string): Observable<{ campos: Record<string, string> }> {
@@ -115,7 +117,7 @@ export class PesquisasService {
   enviarResposta(
     id: number,
     itens: { perguntaId: number; valor: string }[],
-    anexos?: Record<number, File>
+    anexos?: Record<string, File[]>
   ): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(
       this.api(`/formularios/${id}/respostas`),
@@ -127,6 +129,16 @@ export class PesquisasService {
     return this.http.get<PesquisasResultados>(
       this.api(`/formularios/${encodeURIComponent(String(ref))}/resultados`)
     );
+  }
+
+  baixarAnexosZip(
+    id: number,
+    itens: { perguntaId: number; respostaId: number; indice: number }[]
+  ): Observable<HttpResponse<Blob>> {
+    return this.http.post(this.api(`/formularios/${id}/anexos/zip`), { itens }, {
+      observe: 'response',
+      responseType: 'blob',
+    });
   }
 
   adicionarConvidado(
@@ -291,7 +303,7 @@ export class PesquisasService {
     slug: string,
     itens: { perguntaId: number; valor: string }[],
     token?: string,
-    anexos?: Record<number, File>
+    anexos?: Record<string, File[]>
   ): Observable<{ ok: boolean }> {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     return this.http.post<{ ok: boolean }>(
@@ -303,14 +315,14 @@ export class PesquisasService {
 
   private respostaBody(
     itens: { perguntaId: number; valor: string }[],
-    anexos?: Record<number, File>
+    anexos?: Record<string, File[]>
   ): FormData | { itens: { perguntaId: number; valor: string }[] } {
-    const files = Object.entries(anexos || {}).filter(([, f]) => !!f);
-    if (!files.length) return { itens };
+    const grupos = Object.entries(anexos || {}).filter(([, lista]) => lista?.length);
+    if (!grupos.length) return { itens };
     const fd = new FormData();
     fd.append('itens', JSON.stringify(itens));
-    for (const [id, file] of files) {
-      fd.append(`anexo_${id}`, file);
+    for (const [id, lista] of grupos) {
+      for (const file of lista) fd.append(`anexo_${id}`, file);
     }
     return fd;
   }

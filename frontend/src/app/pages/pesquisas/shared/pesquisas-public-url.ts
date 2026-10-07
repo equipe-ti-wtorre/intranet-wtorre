@@ -1,11 +1,17 @@
 import { UrlMatchResult, UrlSegment } from '@angular/router';
 
 /** Mesmo padrão de `parseSlug` no backend (8–80 chars). */
-export const PESQUISAS_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/;
+export const PESQUISAS_TOKEN_RE = /^[A-Za-z0-9_-]{8,80}$/;
 
 export function pesquisasLinkPublico(token: string | null | undefined): string {
   if (!token || typeof window === 'undefined') return '';
   return `${window.location.origin}/${token}`;
+}
+
+/** Mesmo destino do card no mural: `/pesquisas/formulario/{token}/responder`. */
+export function pesquisasLinkInterno(token: string | null | undefined): string {
+  if (!token || typeof window === 'undefined') return '';
+  return `${window.location.origin}/pesquisas/formulario/${token}/responder`;
 }
 
 export function pesquisasLinkFeedback(): string {
