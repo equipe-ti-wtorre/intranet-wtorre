@@ -22,7 +22,7 @@ import {
 } from '../../models/pesquisas.model';
 import { PesquisasDestinatariosModalComponent } from './shared/pesquisas-destinatarios-modal.component';
 import { PesqIconComponent } from './shared/pesq-icon.component';
-import { pesquisasLinkPublico } from './shared/pesquisas-public-url';
+import { pesquisasLinkInterno, pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
 import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
 import {
@@ -365,8 +365,11 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     this.alertas.sucesso('Isto é só uma prévia — nada foi enviado.');
   }
 
-  onPreviewArquivo(ev: { key: string; file: File | null }): void {
-    this.previewRespostas.update((r) => ({ ...r, [ev.key]: ev.file?.name || '' }));
+  onPreviewArquivo(ev: { key: string; files: File[] }): void {
+    this.previewRespostas.update((r) => ({
+      ...r,
+      [ev.key]: ev.files.map((file) => file.name).join(', '),
+    }));
   }
 
   onPreviewReorder(ev: GuestReorderEvent): void {
@@ -574,6 +577,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     return pesquisasLinkPublico(this.slug());
   }
 
+  linkInterno(): string {
+    return pesquisasLinkInterno(this.slug());
+  }
+
   addPergunta(): void {
     this.perguntas.update((list) => [...list, this.novaPergunta()]);
   }
@@ -740,9 +747,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   }
 
   async copiarLink(): Promise<void> {
-    const link = this.linkPublico();
+    const externo = this.publicoAlvo() === 'externos';
+    const link = externo ? this.linkPublico() : this.linkInterno();
     if (!link) {
-      this.alertas.erro('Salve o formulário para gerar o link público.');
+      this.alertas.erro(
+        externo
+          ? 'Salve o formulário para gerar o link público.'
+          : 'Salve o formulário para gerar o link.'
+      );
       return;
     }
     try {

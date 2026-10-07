@@ -25,12 +25,13 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   readonly enviando = signal(false);
   readonly payload = signal<PesquisasResponderPayload | null>(null);
   readonly respostas = signal<Record<number, string>>({});
-  readonly anexos = signal<Record<number, File>>({});
+  readonly anexos = signal<Record<string, File[]>>({});
   readonly respostasGuest = computed(() => {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(this.respostas())) out[k] = v;
     return out;
   });
+  readonly anexosGuest = computed(() => this.anexos());
 
   private lookupTimer: ReturnType<typeof setTimeout> | null = null;
   private lookupSeq = 0;
@@ -43,8 +44,8 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    const id = Number(this.route.snapshot.paramMap.get('id'));
-    this.api.payloadResponder(id).subscribe({
+    const ref = this.route.snapshot.paramMap.get('id') || '';
+    this.api.payloadResponder(ref).subscribe({
       next: (p) => {
         this.payload.set(p);
         this.loading.set(false);
@@ -72,16 +73,16 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
     this.agendarLookup(id, ev.valor);
   }
 
-  onGuestArquivo(ev: { key: string; file: File | null }): void {
+  onGuestArquivo(ev: { key: string; files: File[] }): void {
     const id = Number(ev.key);
     if (!Number.isFinite(id)) return;
     this.anexos.update((m) => {
       const next = { ...m };
-      if (ev.file) next[id] = ev.file;
-      else delete next[id];
+      if (ev.files.length) next[ev.key] = ev.files;
+      else delete next[ev.key];
       return next;
     });
-    this.setValor(id, ev.file?.name || '');
+    this.setValor(id, ev.files.map((file) => file.name).join(', '));
   }
 
   enviar(): void {

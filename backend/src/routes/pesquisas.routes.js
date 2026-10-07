@@ -79,6 +79,7 @@ router.post(
   controller.enviarResposta
 );
 router.get('/formularios/:id/resultados', requireJwt, controller.resultados);
+router.post('/formularios/:id/anexos/zip', requireJwt, controller.zipAnexos);
 router.get('/formularios/:id/minha-resposta', requireJwt, controller.minhaResposta);
 router.post('/formularios/:id/clonar', requireJwt, controller.clonar);
 router.post('/formularios/:id/publicar', requireJwt, controller.publicar);

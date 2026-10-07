@@ -195,6 +195,29 @@
             </select>
           </div>
         }
+        @if (publicoAlvo() !== 'externos') {
+          <div class="field" style="margin-top: 16px">
+            <label>Link do formulário</label>
+            @if (linkInterno()) {
+              <div class="link-copy-row">
+                <input type="text" [value]="linkInterno()" readonly />
+                <div class="link-copy-actions">
+                  <button type="button" class="btn-secondary" (click)="copiarLink()">
+                    <app-pesq-icon name="link" [size]="15" />
+                    Copiar
+                  </button>
+                  <app-pesquisas-qr-card
+                    modo="botao"
+                    [url]="linkInterno()"
+                    (abertoChange)="qrAberto.set($event)"
+                  />
+                </div>
+              </div>
+            } @else {
+              <p class="page-sub" style="margin: 0">Salve para gerar o link.</p>
+            }
+          </div>
+        }
         @if (publicoAlvo() === 'externos') {
           <div class="field" style="margin-top: 16px">
             <label>Tipo de evento</label>
@@ -477,10 +500,10 @@
   </div>
 }
 
-@if (qrAberto() && linkPublico()) {
+@if (qrAberto() && (publicoAlvo() === 'externos' ? linkPublico() : linkInterno()); as urlQr) {
   <app-pesquisas-qr-card
     modo="dialogo"
-    [url]="linkPublico()"
+    [url]="urlQr"
     [titulo]="titulo()"
     [dataLabel]="qrDataLabel()"
     [template]="templateAtual()"

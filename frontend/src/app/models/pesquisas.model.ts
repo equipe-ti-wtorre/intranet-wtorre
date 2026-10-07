@@ -191,6 +191,7 @@ export interface PesquisasResultadoItem {
   valor: string;
   anexoUrl?: string | null;
   respostaId: number;
+  indice?: number;
   respondente: { nome: string; email: string; departamento?: string } | null;
   enviadoEm: string | null;
 }

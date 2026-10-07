@@ -154,6 +154,17 @@ async function resultados(req, res) {
   }
 }
 
+async function zipAnexos(req, res) {
+  try {
+    const { buffer, filename } = await service.zipAnexos(req);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function adicionarConvidado(req, res) {
   try {
     res.status(201).json(await service.adicionarConvidado(req));
@@ -485,6 +496,7 @@ module.exports = {
   lookupBase,
   enviarResposta,
   resultados,
+  zipAnexos,
   adicionarConvidado,
   atualizarConvidado,
   removerConvidado,
