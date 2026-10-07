@@ -20,6 +20,7 @@ const CREDENCIAL_VEICULO_MIMES = new Set([
   'image/webp',
   'application/pdf',
 ]);
+const CRACHA_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function ensureTmpDir() {
   if (!fs.existsSync(env.solicitacaoColaboradorTmpDir)) {
@@ -64,6 +65,12 @@ function fileFilter(_req, file, cb) {
     }
     return cb(null, true);
   }
+  if (field === 'cracha') {
+    if (!CRACHA_MIMES.has(file.mimetype)) {
+      return cb(new Error('Crachá deve ser JPEG, PNG ou WebP.'));
+    }
+    return cb(null, true);
+  }
   return cb(new Error('Campo de upload inválido.'));
 }
 
@@ -99,4 +106,5 @@ module.exports = {
   FOTO_MIMES,
   BOAS_VINDAS_MIMES,
   CREDENCIAL_VEICULO_MIMES,
+  CRACHA_MIMES,
 };

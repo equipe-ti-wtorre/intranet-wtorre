@@ -15,6 +15,16 @@ const CAMPOS = [
   },
   { chave: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
   { chave: 'sobrenome', label: 'Sobrenome', tipo: 'text', obrigatorio: true },
+  {
+    chave: 'genero',
+    label: 'Gênero',
+    tipo: 'enum',
+    obrigatorio: false,
+    opcoes: [
+      { valor: 'M', label: 'Masculino' },
+      { valor: 'F', label: 'Feminino' },
+    ],
+  },
   { chave: 'email_novo', label: 'E-mail – Novo Colaborador', tipo: 'email', obrigatorio: false },
   { chave: 'data_nascimento', label: 'Data de nascimento', tipo: 'date', obrigatorio: false, sensivel: true },
   { chave: 'cpf', label: 'CPF', tipo: 'cpf', obrigatorio: false, sensivel: true },
@@ -27,6 +37,7 @@ const CAMPOS = [
   { chave: 'local_trabalho', label: 'Local de trabalho', tipo: 'text', obrigatorio: false },
   { chave: 'foto', label: 'Foto', tipo: 'file', obrigatorio: false, sensivel: true, anexo: true },
   { chave: 'boas_vindas', label: 'Mensagem de Boas-vindas', tipo: 'file', obrigatorio: false, anexo: true },
+  { chave: 'cracha', label: 'Crachá', tipo: 'file', obrigatorio: false, anexo: true },
   { chave: 'precisa_ramal', label: 'Precisa de ramal?', tipo: 'bool', obrigatorio: false },
   { chave: 'precisa_celular', label: 'Precisa de celular?', tipo: 'bool', obrigatorio: false },
   {

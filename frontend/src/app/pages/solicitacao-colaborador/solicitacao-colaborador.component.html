@@ -10,6 +10,7 @@
     @if (carregando()) {
       <p class="loading">Carregando formulário…</p>
     } @else {
+      <div class="layout">
       <form (ngSubmit)="enviar()">
         <div class="card">
           <h2>Solicitante</h2>
@@ -96,6 +97,41 @@
             </div>
           </div>
           <div class="field mb16">
+            <label>Gênero</label>
+            <div class="radios">
+              <label class="opt" [class.sel]="genero() === 'M'">
+                <input
+                  type="radio"
+                  name="genero"
+                  value="M"
+                  [ngModel]="genero()"
+                  (ngModelChange)="onGeneroChange($event)"
+                />
+                Masculino
+              </label>
+              <label class="opt" [class.sel]="genero() === 'F'">
+                <input
+                  type="radio"
+                  name="genero"
+                  value="F"
+                  [ngModel]="genero()"
+                  (ngModelChange)="onGeneroChange($event)"
+                />
+                Feminino
+              </label>
+              <label class="opt" [class.sel]="genero() === ''">
+                <input
+                  type="radio"
+                  name="genero"
+                  value=""
+                  [ngModel]="genero()"
+                  (ngModelChange)="onGeneroChange($event)"
+                />
+                Neutro
+              </label>
+            </div>
+          </div>
+          <div class="field mb16">
             <label>E-mail – novo colaborador</label>
             <input type="email" [ngModel]="emailNovo()" (ngModelChange)="emailNovo.set($event)" name="email_novo" />
           </div>
@@ -122,8 +158,8 @@
               />
             </div>
             <div class="field">
-              <label>RG <span class="req">*</span></label>
-              <input type="text" [ngModel]="rg()" (ngModelChange)="rg.set($event)" name="rg" required />
+              <label>RG</label>
+              <input type="text" [ngModel]="rg()" (ngModelChange)="rg.set($event)" name="rg" />
             </div>
           </div>
           <div class="grid g3 mb16">
@@ -190,62 +226,59 @@
           <p class="hint">
             Imagens armazenadas com segurança (acesso restrito) e anexadas aos e-mails das áreas que precisam delas.
           </p>
-          <div class="grid g2">
-            <div class="field">
-              <label>Foto @if (tipo() !== 'efetivacao' && tipo() !== 'mudanca') {<span class="req">*</span>}</label>
-              <div
-                class="dz"
-                [class.has-file]="!!fotoFile()"
-                [class.is-dragover]="fotoDragover()"
-                (click)="fotoInput.click()"
-                (dragover)="onDragOver($event, 'foto')"
-                (dragleave)="onDragLeave('foto')"
-                (drop)="onDrop($event, 'foto')"
-              >
-                <input
-                  #fotoInput
-                  type="file"
-                  hidden
-                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg"
-                  (change)="onFileInput($event, 'foto')"
-                />
-                <div class="ic">⬆</div>
-                @if (fotoFile(); as f) {
-                  <b>{{ f.name }}</b>
-                  <small>Clique para trocar · JPG/JPEG/PNG · até 5 MB</small>
-                } @else {
-                  <b>Arraste a imagem ou clique para enviar</b>
-                  <small>JPG/JPEG/PNG · até 5 MB</small>
-                }
-              </div>
+          <div class="field mb16">
+            <label>Foto @if (tipo() !== 'efetivacao' && tipo() !== 'mudanca') {<span class="req">*</span>}</label>
+            <div
+              class="dz"
+              [class.has-file]="!!fotoFile()"
+              [class.is-dragover]="fotoDragover()"
+              (click)="fotoInput.click()"
+              (dragover)="onDragOver($event, 'foto')"
+              (dragleave)="onDragLeave('foto')"
+              (drop)="onDrop($event, 'foto')"
+            >
+              <input
+                #fotoInput
+                type="file"
+                hidden
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg"
+                (change)="onFileInput($event, 'foto')"
+              />
+              <div class="ic">⬆</div>
+              @if (fotoFile(); as f) {
+                <b>{{ f.name }}</b>
+                <small>Clique para trocar · JPG/JPEG/PNG · até 5 MB</small>
+              } @else {
+                <b>Arraste a imagem ou clique para enviar</b>
+                <small>JPG/JPEG/PNG · até 5 MB</small>
+              }
             </div>
-            <div class="field">
-              <label>Mensagem de boas-vindas</label>
-              <div
-                class="dz"
-                [class.has-file]="!!boasVindasFile()"
-                [class.is-dragover]="boasDragover()"
-                (click)="boasInput.click()"
-                (dragover)="onDragOver($event, 'boas_vindas')"
-                (dragleave)="onDragLeave('boas_vindas')"
-                (drop)="onDrop($event, 'boas_vindas')"
-              >
-                <input
-                  #boasInput
-                  type="file"
-                  hidden
-                  accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,text/plain,.txt"
-                  (change)="onFileInput($event, 'boas_vindas')"
+            @if (fotoFile() && !fotoAjuste()) {
+              <div class="hint" style="margin-top:8px;">Preparando ajuste da foto…</div>
+            }
+            @if (fotoAjuste(); as foto) {
+              <div class="foto-ajuste-wrap">
+                <app-photo-adjuster
+                  [foto]="foto"
+                  [mostrarUpload]="false"
+                  [strokeColor]="corDaMarcaAtual()"
+                  (fotoChange)="onFotoAjusteChange($event)"
                 />
-                <div class="ic">⬆</div>
-                @if (boasVindasFile(); as f) {
-                  <b>{{ f.name }}</b>
-                  <small>Clique para trocar · Imagem, PDF ou TXT</small>
-                } @else {
-                  <b>Arraste o arquivo ou clique para enviar</b>
-                  <small>Imagem, PDF ou TXT</small>
-                }
               </div>
+            }
+          </div>
+
+          <div class="field">
+            <label>Mensagem de boas-vindas</label>
+            <textarea
+              placeholder="Escreva uma breve apresentação da pessoa para o cartão de boas-vindas..."
+              [ngModel]="bio()"
+              (ngModelChange)="bio.set($event)"
+              name="bio"
+            ></textarea>
+            <div class="note">
+              Aparece no balão de fala do cartão de boas-vindas gerado automaticamente. Se deixar em branco, o
+              balão fica vazio.
             </div>
           </div>
         </div>
@@ -426,6 +459,54 @@
           </button>
         </div>
       </form>
+
+      <aside class="preview-col">
+        <div class="card preview-sticky">
+          <div class="preview-head">
+            <h2>Pré-visualização</h2>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="!podeGerarAuto() || gerandoAuto()"
+              (click)="gerarAgora()"
+            >
+              {{ gerandoAuto() ? 'Gerando…' : 'Gerar agora' }}
+            </button>
+          </div>
+          <p class="hint">
+            Atualiza sozinho conforme você preenche nome, gênero, departamento, cargo, empresa, foto e o texto de
+            apresentação (esse último só afeta o boas-vindas).
+          </p>
+          @if (!podeGerarAuto()) {
+            <div class="note">Preencha nome, sobrenome, empresa e a foto para gerar automaticamente.</div>
+          }
+          @if (crachaPreview() || boasVindasPreview()) {
+            <div
+              #previewStack
+              class="preview-stack"
+              [class.draggable]="!!fotoAjuste()"
+              (mousedown)="onPreviewDragStart($event)"
+              (mousemove)="onPreviewDragMove($event)"
+              (mouseup)="onPreviewDragEnd()"
+              (mouseleave)="onPreviewDragEnd()"
+              (touchstart)="onPreviewDragStart($event)"
+              (touchmove)="onPreviewDragMove($event)"
+              (touchend)="onPreviewDragEnd()"
+            >
+              @if (crachaPreview(); as svg) {
+                <div class="preview-item" [innerHTML]="svg"></div>
+              }
+              @if (boasVindasPreview(); as html) {
+                <div class="preview-item preview-boas" [innerHTML]="html"></div>
+              }
+            </div>
+            <div class="hint" style="text-align:center;margin-top:6px;">Arraste a foto no crachá ou no boas-vindas para reposicionar.</div>
+          } @else if (podeGerarAuto()) {
+            <div class="preview-empty">Gerando pré-visualização…</div>
+          }
+        </div>
+      </aside>
+      </div>
     }
   </div>
   <app-footer />

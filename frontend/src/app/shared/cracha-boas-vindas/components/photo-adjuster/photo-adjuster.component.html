@@ -1,0 +1,58 @@
+@if (mostrarUpload) {
+  <div class="upload-box" [class.has-file]="!!foto" (click)="fileInput.click()">
+    <input #fileInput type="file" hidden accept="image/*" (change)="onFileSelected($event)" />
+    <div class="icon">📷</div>
+    <div class="txt">{{ foto ? 'Clique para trocar a foto' : 'Clique para adicionar foto' }}</div>
+  </div>
+}
+
+@if (foto) {
+  <div class="photo-adjust">
+    <div
+      class="photo-adjust-circle"
+      [style.width.px]="diameter"
+      [style.height.px]="diameter"
+      (mousedown)="onDragStart($event)"
+      (mousemove)="onDragMove($event)"
+      (mouseup)="onDragEnd()"
+      (mouseleave)="onDragEnd()"
+      (touchstart)="onDragStart($event)"
+      (touchmove)="onDragMove($event)"
+      (touchend)="onDragEnd()"
+      [innerHTML]="previewSvg"
+    ></div>
+    <div class="photo-adjust-controls">
+      <div class="row">
+        <span>Zoom</span>
+        <input
+          type="range"
+          min="60"
+          max="300"
+          step="1"
+          [value]="foto.zoom * 100"
+          (input)="onZoom($any($event.target).valueAsNumber)"
+        />
+      </div>
+      <div class="row">
+        <span>Girar</span>
+        <input
+          type="range"
+          min="-180"
+          max="180"
+          step="0.5"
+          [value]="foto.rotation || 0"
+          (input)="onRotate($any($event.target).valueAsNumber)"
+        />
+        <span class="rotate-label">{{ (foto.rotation || 0) | number: '1.0-0' }}°</span>
+      </div>
+      <div class="row rotate-buttons">
+        <button type="button" class="rotate-btn" title="Girar 90° à esquerda" (click)="girar(-90)">↺</button>
+        <button type="button" class="rotate-btn" title="Girar 90° à direita" (click)="girar(90)">↻</button>
+      </div>
+      <div class="hint">Arraste o círculo ao lado para reposicionar o rosto.</div>
+      @if (mostrarUpload) {
+        <a class="remove" (click)="removerFoto()">Remover foto</a>
+      }
+    </div>
+  </div>
+}

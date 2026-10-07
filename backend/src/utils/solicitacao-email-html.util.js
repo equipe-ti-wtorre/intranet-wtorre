@@ -48,25 +48,28 @@ const EQUIPAMENTO_EMOJI = {
 const ANEXO_EMOJI = {
   foto: '📷',
   boas_vindas: '🎉',
+  cracha: '🪪',
   credencial_veiculo: '🚗',
 };
 
 const ANEXO_LABELS = {
   foto: 'Foto',
   boas_vindas: 'Mensagem de boas-vindas',
+  cracha: 'Crachá',
   credencial_veiculo: 'Credencial do veículo',
 };
 
 const CAMPO_COL_MAP = {
   foto: 'foto_url',
   boas_vindas: 'boas_vindas_url',
+  cracha: 'cracha_url',
   credencial_veiculo: 'credencial_veiculo_url',
 };
 
 const SECOES = [
   {
     titulo: 'Identificação',
-    campos: ['nome', 'sobrenome', 'cpf', 'rg', 'data_nascimento', 'tipo'],
+    campos: ['nome', 'sobrenome', 'genero', 'cpf', 'rg', 'data_nascimento', 'tipo'],
   },
   {
     titulo: 'Vínculo profissional',
@@ -94,7 +97,7 @@ const SECOES = [
   },
   {
     titulo: 'Anexos',
-    campos: ['foto', 'boas_vindas', 'credencial_veiculo'],
+    campos: ['foto', 'boas_vindas', 'cracha', 'credencial_veiculo'],
     tipo: 'anexos',
   },
 ];
@@ -140,6 +143,9 @@ function formatValor(chave, solicitacao) {
   }
   if (chave === 'equipamento') {
     return EQUIPAMENTO_LABELS[raw] || raw || '—';
+  }
+  if (campo.tipo === 'enum' && raw) {
+    return campo.opcoes?.find((o) => o.valor === raw)?.label || String(raw);
   }
   if (raw == null || raw === '') return '—';
   return String(raw);

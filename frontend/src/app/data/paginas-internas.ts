@@ -21,6 +21,7 @@ export const PAGINAS_INTERNAS: PaginaInterna[] = [
   { path: '/plaquinhas-camarote', label: 'Plaquinhas Camarote' },
   { path: '/ferramentas/pdf', label: 'Ferramentas de PDF' },
   { path: '/solicitacao-colaborador', label: 'Solicitação de Colaborador' },
+  { path: '/cracha-boas-vindas', label: 'Crachá & Boas-vindas' },
   { path: '/bi/camarotes', label: 'BI / Camarotes' },
   { path: '/dashboards', label: 'Dashboards' },
   { path: '/agendas', label: 'Agendas / Eventos' },

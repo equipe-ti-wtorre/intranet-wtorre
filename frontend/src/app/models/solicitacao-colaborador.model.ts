@@ -35,6 +35,7 @@ export interface SolicitacaoColaborador {
   tipo: SolicitacaoTipo;
   nome: string;
   sobrenome: string;
+  genero?: 'M' | 'F' | null;
   email_novo?: string | null;
   data_nascimento?: string | null;
   cpf?: string | null;
@@ -47,6 +48,7 @@ export interface SolicitacaoColaborador {
   local_trabalho?: string | null;
   foto_url?: string | null;
   boas_vindas_url?: string | null;
+  cracha_url?: string | null;
   credencial_veiculo_url?: string | null;
   precisa_ramal: boolean;
   precisa_celular: boolean;
