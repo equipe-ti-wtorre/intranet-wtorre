@@ -24,6 +24,20 @@ export const moduloGuard = (codigo: string): CanActivateFn => () => {
   );
 };
 
+/** Página da intranet (não admin): sem o módulo volta para /inicio. */
+export const moduloPaginaGuard = (codigo: string): CanActivateFn => () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  return auth.ensureSession().pipe(
+    map((ok) => {
+      if (!ok) return router.createUrlTree(['/login']);
+      if (auth.hasModulo(codigo)) return true;
+      return router.createUrlTree(['/inicio']);
+    })
+  );
+};
+
 export const moduloGuardFromRoute: CanActivateFn = (route) => {
   const path = route.routeConfig?.path;
   const codigo = path ? rotaParaModulo(path) : null;

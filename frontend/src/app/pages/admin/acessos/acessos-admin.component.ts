@@ -3,7 +3,6 @@ import { ActivatedRoute } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, debounceTime, distinctUntilChanged, switchMap, of, Observable } from 'rxjs';
-import { AdminDrawerComponent } from '../../../shared/admin/admin-drawer/admin-drawer.component';
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
 import { AlertasService } from '../../../services/alertas.service';
 import { ColaboradoresService } from '../../../services/colaboradores.service';
@@ -20,7 +19,7 @@ type AbaAcessos = 'colaboradores' | 'perfis';
 @Component({
   selector: 'app-acessos-admin',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, AdminDrawerComponent, AdminModalComponent],
+  imports: [FormsModule, ReactiveFormsModule, AdminModalComponent],
   templateUrl: './acessos-admin.component.html',
   styleUrl: './acessos-admin.component.scss',
 })

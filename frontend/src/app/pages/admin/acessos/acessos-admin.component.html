@@ -263,9 +263,11 @@
   </section>
 </div>
 
-<app-admin-drawer
+<app-admin-modal
   [open]="drawerAberto()"
   [title]="drawerTitulo()"
+  icon="tenant"
+  size="wide"
   [salvando]="salvando()"
   saveLabel="Salvar acessos"
   (save)="salvar()"
@@ -334,7 +336,7 @@
       <span class="slider"></span>
     </label>
   </div>
-</app-admin-drawer>
+</app-admin-modal>
 
 <app-admin-modal
   [open]="modalAberto()"

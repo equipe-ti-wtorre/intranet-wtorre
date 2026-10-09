@@ -3,7 +3,7 @@ import { Routes, Router } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 import { adminGuard } from './guards/admin.guard';
 import { guestGuard } from './guards/guest.guard';
-import { moduloGuard, moduloGuardFromRoute } from './guards/modulo.guard';
+import { moduloGuardFromRoute, moduloPaginaGuard } from './guards/modulo.guard';
 import { menuHubGuard } from './guards/menu-hub.guard';
 import { documentosHubGuard } from './guards/documentos-hub.guard';
 import { superAdminGuard } from './guards/super-admin.guard';
@@ -309,7 +309,7 @@ export const routes: Routes = [
   },
   {
     path: 'cracha-boas-vindas',
-    canActivate: [authGuard, moduloGuard('cracha-boas-vindas')],
+    canActivate: [authGuard, moduloPaginaGuard('cracha-boas-vindas')],
     loadComponent: () =>
       import('./pages/cracha-boas-vindas/cracha-boas-vindas.component').then(
         (m) => m.CrachaBoasVindasComponent
