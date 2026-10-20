@@ -1,0 +1,113 @@
+/* Tokens do padrão interno. Hex só aqui. */
+
+.taskhub-root {
+  --swatch-wtorre: #1d54e6;
+  --swatch-nubank: #8d0de3;
+  --danger: #e11d48;
+  --danger-hover: #be123c;
+  --danger-soft-bg: #fff1f2;
+  --danger-border: #fecdd3;
+  --warning: #b45309;
+  --warning-soft-bg: #fef3e2;
+  --font-display: 'Sora', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --form-field-height: 42px;
+  --form-radius: 0.75rem;
+  --radius-card: 1rem;
+  --surface: #ffffff;
+  --app-surface: #ffffff;
+  --app-surface-2: #f8fafc;
+  --text-subtle: #94a3b8;
+  --shadow-pop: 0 20px 48px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.08);
+  color-scheme: light;
+}
+
+.taskhub-root,
+.taskhub-root[data-theme='wtorre'] {
+  --brand: #1d54e6;
+  --wtorre: #1d54e6;
+  --brand-hover: #1442ba;
+  --wtorre-hover: #1442ba;
+  --brand-tonal-bg: #e8eefd;
+  --wtorre-tonal-bg: #e8eefd;
+  --brand-focus-ring: color-mix(in srgb, var(--brand) 25%, transparent);
+  --app-bg: #f1f5f9;
+  --app-border: #e2e8f0;
+  --app-border-strong: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --success: #13a36b;
+  --success-soft-bg: #e7f6ef;
+  --menu-bg-top: #0e1626;
+  --menu-bg: #121d33;
+  --menu-active: var(--brand);
+  --menu-label-inactive: #aab2c8;
+  --menu-icon-inactive: #aab2c8;
+  --menu-section: #5d6883;
+  --menu-label-active: #ffffff;
+  --menu-status: #13a36b;
+  --menu-line: color-mix(in srgb, #ffffff 7%, transparent);
+  --menu-muted: #7f8aa6;
+  --purple-900: #420465;
+  --brand-ink: #420465;
+  --purple-1000: #1e002f;
+  --premium: #1e002f;
+}
+
+.taskhub-root[data-theme='nubank-parque'] {
+  --brand: #8d0de3;
+  --wtorre: #8d0de3;
+  --brand-hover: #7209bd;
+  --wtorre-hover: #7209bd;
+  --brand-tonal-bg: #ecdfff;
+  --wtorre-tonal-bg: #ecdfff;
+  --brand-focus-ring: color-mix(in srgb, var(--brand) 25%, transparent);
+  --app-bg: #f4f1f8;
+  --app-border: #e6e0ee;
+  --app-border-strong: #d3c4e6;
+  --text-primary: #1e002f;
+  --text-muted: #6d6278;
+  --success: #3f8f62;
+  --success-soft-bg: #eef6e8;
+  --menu-bg-top: #2e0348;
+  --menu-bg: #420465;
+  --menu-active: #8d0de3;
+  --menu-label-inactive: #e9def7;
+  --menu-icon-inactive: #b9a3e4;
+  --menu-section: #a98fd6;
+  --menu-label-active: #ffffff;
+  --menu-status: #a7d296;
+  --menu-line: color-mix(in srgb, #e9def7 12%, transparent);
+  --menu-muted: #b9a3e4;
+  --purple-900: #420465;
+  --brand-ink: #420465;
+  --purple-1000: #1e002f;
+  --premium: #1e002f;
+}
+
+.taskhub-root,
+.taskhub-root[data-theme='wtorre'],
+.taskhub-root[data-theme='nubank-parque'] {
+  --bg: var(--app-bg);
+  --panel: var(--surface);
+  --raised: color-mix(in srgb, var(--text-primary) 5%, var(--app-bg));
+  --hover: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --line: var(--app-border);
+  --line2: color-mix(in srgb, var(--text-primary) 16%, var(--app-border));
+  --tx: var(--text-primary);
+  --mu: var(--text-muted);
+  --mu2: color-mix(in srgb, var(--text-muted) 70%, var(--text-primary));
+  --gold: var(--brand);
+  --gold-soft: var(--brand-tonal-bg);
+  --act: var(--brand);
+  --act-soft: var(--brand-tonal-bg);
+  --ok: var(--success);
+  --warn: var(--warning);
+  --bad: var(--danger);
+  --bad-soft: var(--danger-soft-bg);
+  --shadow: 0 18px 48px color-mix(in srgb, var(--text-primary) 12%, transparent), 0 2px 8px color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --font: var(--font-body);
+  --font-num: var(--font-body);
+  --r: 8px;
+  --r-lg: 12px;
+}

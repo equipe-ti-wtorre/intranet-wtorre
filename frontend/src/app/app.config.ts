@@ -1,6 +1,6 @@
 import { APP_INITIALIZER, ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideRouter, withEnabledBlockingInitialNavigation } from '@angular/router';
+import { provideRouter, withComponentInputBinding, withEnabledBlockingInitialNavigation } from '@angular/router';
 import { InteractionType } from '@azure/msal-browser';
 import { MSAL_INSTANCE, MSAL_GUARD_CONFIG, MsalGuardConfiguration } from '@azure/msal-angular';
 
@@ -40,7 +40,7 @@ export function msalGuardConfigFactory(): MsalGuardConfiguration {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes, withEnabledBlockingInitialNavigation()),
+    provideRouter(routes, withEnabledBlockingInitialNavigation(), withComponentInputBinding()),
     provideHttpClient(withInterceptors([authInterceptor])),
     {
       provide: APP_INITIALIZER,

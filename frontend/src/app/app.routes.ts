@@ -17,6 +17,7 @@ import {
 } from './guards/tablet.guard';
 import { ramalAuthGuard, ramalGuestGuard, ramalAdminGuard } from './guards/ramal.guard';
 import { rustdeskGuard, rustdeskRouteMatch } from './guards/rustdesk.guard';
+import { TASKHUB_ROUTES } from './taskhub/taskhub.routes';
 import { pesquisasPublicoTokenMatch } from './pages/pesquisas/shared/pesquisas-public-url';
 import { nscViewerGuard } from './guards/nsc-viewer.guard';
 import { cipaCodigoRouteMatch } from './guards/cipa-codigo.matcher';
@@ -276,6 +277,11 @@ export const routes: Routes = [
       },
       { path: 'config', pathMatch: 'full', redirectTo: 'config/usuarios' },
     ],
+  },
+  {
+    path: 'ti/taskhub',
+    canActivate: [authGuard, moduloPaginaGuard('taskhub')],
+    children: TASKHUB_ROUTES,
   },
   {
     matcher: rustdeskRouteMatch,

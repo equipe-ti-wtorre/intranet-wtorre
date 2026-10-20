@@ -30,6 +30,7 @@ export const PAGINAS_INTERNAS: PaginaInterna[] = [
   { path: '/massagem', label: 'Massagem' },
   { path: '/pesquisas', label: 'Formulários' },
   { path: '/ti/rustdesk', label: 'TI / Rust Desk' },
+  { path: '/ti/taskhub', label: 'TI / TaskHub' },
   { path: '/nao-se-cale', label: 'Não se Cale' },
   { path: '/agenda_rh', label: 'Agenda RH' },
 ];

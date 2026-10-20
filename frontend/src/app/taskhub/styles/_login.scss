@@ -1,0 +1,156 @@
+// Tela de login (rule ui-login) em duas metades: animação + cartão.
+// Depende dos tokens de styles/_tokens.scss (--brand, --menu-*, --app-*, --font-*, --purple-900...).
+
+.form-field {
+  width: 100%; height: var(--form-field-height); padding: 0 12px; border-radius: var(--form-radius);
+  border: 1px solid var(--app-border-strong); background: var(--app-surface); color: var(--text-primary);
+  font: 14px var(--font-body); outline: none; transition: border-color .12s, box-shadow .12s;
+}
+.form-field:focus { border-color: var(--brand); box-shadow: 0 0 0 4px var(--brand-focus-ring); }
+
+// ---------- Login ----------
+.login-card { width: min(400px, 100%); border-radius: 1.25rem; padding: 32px 28px 24px; display: flex; flex-direction: column; gap: 14px;
+  background: linear-gradient(180deg, var(--menu-bg-top), var(--menu-bg)); color: var(--menu-label-active); box-shadow: var(--shadow-pop); }
+.login-card__brand img { height: 32px; }
+.login-card__underline, .login-nubank__underline { width: 40px; height: 3px; border-radius: 2px; background: var(--brand); margin: 10px 0 4px; }
+.login-card__title { font: 600 22px/1.25 var(--font-display); }
+.login-card__sub { color: var(--menu-label-inactive); font-size: 13.5px; }
+.login-card .form-label { color: var(--menu-label-inactive); }
+.login-card .form-field { background: rgba(255,255,255,.06); border-color: var(--menu-line); color: #fff; }
+.login-card .form-field:focus { border-color: var(--brand); }
+.login-ms { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 44px; border-radius: 0.75rem; background: var(--brand); color: #fff; font-weight: 600; }
+.login-ms:hover { background: var(--brand-hover); }
+.login-ms:disabled { background: rgba(255,255,255,.08); color: var(--menu-muted); cursor: not-allowed; }
+.login-chip, .login-nubank__chip { width: 18px; height: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; flex: none; }
+.login-chip i, .login-nubank__chip i { display: block; }
+.login-chip i:nth-child(1), .login-nubank__chip i:nth-child(1) { background: #f25022; }
+.login-chip i:nth-child(2), .login-nubank__chip i:nth-child(2) { background: #7fba00; }
+.login-chip i:nth-child(3), .login-nubank__chip i:nth-child(3) { background: #00a4ef; }
+.login-chip i:nth-child(4), .login-nubank__chip i:nth-child(4) { background: #ffb900; }
+.login-divider { display: flex; align-items: center; gap: 10px; color: var(--menu-muted); font-size: 12px; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; border-top: 1px solid var(--menu-line); }
+.login-toggle { color: var(--menu-label-inactive); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; align-self: center; }
+.login-toggle:hover { color: #fff; }
+.login-msg { border-radius: 0.625rem; padding: 9px 12px; font-size: 13px; }
+.login-msg--warn { background: color-mix(in srgb, var(--warning) 22%, transparent); color: #fde7c3; }
+.login-msg--info { background: color-mix(in srgb, var(--brand) 22%, transparent); color: #fff; }
+.login-msg--error { background: color-mix(in srgb, var(--danger) 25%, transparent); color: #ffe0e6; }
+.login-foot { text-align: center; color: var(--menu-muted); font-size: 12px; margin-top: 4px; }
+// Paleta Nubank: bloco BEM login-nubank (~392px), cartão claro com wordmark roxo.
+.login-nubank { width: min(392px, 100%); font-family: var(--font-body); background: var(--app-surface); color: var(--text-primary); border-radius: 1.25rem; padding: 32px 28px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-pop); }
+.login-nubank__brand img { height: 30px; }
+.login-nubank__title { font: 600 22px/1.25 var(--font-display); color: var(--purple-900); }
+.login-nubank__sub { color: var(--text-muted); font-size: 13.5px; }
+.login-nubank__input { height: var(--form-field-height); }
+.login-nubank__submit { display: flex; align-items: center; justify-content: center; width: 100%; height: 44px; border-radius: 0.75rem; background: var(--brand); color: #fff; font-weight: 600; }
+.login-nubank__submit:hover { background: var(--brand-hover); }
+.login-nubank__submit:disabled, .login-nubank__ms:disabled { background: var(--app-surface-2); color: var(--text-subtle); cursor: not-allowed; }
+.login-nubank__ms { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 44px; border-radius: 0.75rem; background: var(--brand); color: #fff; font-weight: 600; }
+.login-nubank__divider { display: flex; align-items: center; gap: 10px; color: var(--text-subtle); font-size: 12px; }
+.login-nubank__divider::before, .login-nubank__divider::after { content: ''; flex: 1; border-top: 1px solid var(--app-border); }
+.login-nubank__msg--warn { background: var(--warning-soft-bg); color: var(--warning); border-radius: 0.625rem; padding: 9px 12px; font-size: 13px; }
+.login-nubank__msg--info { background: var(--brand-tonal-bg); color: var(--purple-900); border-radius: 0.625rem; padding: 9px 12px; font-size: 13px; }
+.login-nubank .login-toggle { color: var(--brand); }
+.login-nubank .login-toggle:hover { color: var(--brand-hover); }
+.login-nubank .login-foot { color: var(--text-subtle); }
+
+.login-demo { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 0.75rem; background: color-mix(in srgb, var(--menu-label-active) 6%, transparent); border: 1px solid var(--menu-line); }
+.login-demo__title { font-size: 13px; }
+.login-demo__hint { color: var(--menu-muted); font-size: 12.5px; line-height: 1.4; }
+.login-demo__user { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 4px 0; text-align: left; color: inherit; }
+.login-demo__user b { min-width: 72px; font-size: 13px; }
+.login-demo__user span { flex: 1; color: var(--menu-muted); font-size: 12px; line-height: 1.35; }
+.login-nubank .login-demo { background: var(--brand-tonal-bg); border-color: transparent; }
+.login-nubank .login-demo__hint,
+.login-nubank .login-demo__user span { color: var(--text-muted); }
+
+// ---------- Login em duas metades: animação + cartão (o cartão segue a rule ui-login) ----------
+.login-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(420px, 1fr); min-height: 100vh; background: var(--menu-bg-top); }
+.login-side { display: flex; align-items: center; justify-content: center; padding: 32px 24px; overflow: auto; background: linear-gradient(180deg, var(--menu-bg-top), var(--menu-bg)); }
+.login-side > * { margin: auto; }
+.login-split--nubank .login-side { background: var(--app-bg); }
+.login-side .login-card { background: color-mix(in srgb, var(--menu-active) 7%, var(--menu-bg)); border: 1px solid var(--menu-line); box-shadow: 0 30px 80px rgba(0, 0, 0, .35); }
+
+.login-hero {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 40px; justify-content: center;
+  padding: 56px clamp(32px, 5vw, 72px); color: var(--menu-label-active);
+  background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--menu-active) 30%, transparent), transparent 60%),
+              linear-gradient(160deg, var(--menu-bg-top), var(--menu-bg));
+  border-right: 1px solid var(--menu-line);
+}
+.login-hero__grid {
+  position: absolute; inset: 0; pointer-events: none; opacity: .55;
+  background-image: linear-gradient(var(--menu-line) 1px, transparent 1px), linear-gradient(90deg, var(--menu-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(80% 70% at 60% 55%, #000 30%, transparent 75%);
+}
+.login-hero__orb { position: absolute; border-radius: 50%; filter: blur(70px); pointer-events: none; }
+.login-hero__orb--a { width: 420px; height: 420px; left: -120px; bottom: -140px; background: color-mix(in srgb, var(--menu-active) 55%, transparent); animation: hero-drift 18s ease-in-out infinite alternate; }
+.login-hero__orb--b { width: 300px; height: 300px; right: -80px; top: 8%; background: color-mix(in srgb, var(--menu-status) 16%, transparent); animation: hero-drift 22s ease-in-out infinite alternate-reverse; }
+@keyframes hero-drift { to { transform: translate(60px, -40px) scale(1.12); } }
+
+.login-hero__copy { position: relative; max-width: 460px; }
+.login-hero__logo { height: 38px; margin-bottom: 28px; }
+.login-hero__title { font: 700 clamp(28px, 3vw, 40px)/1.12 var(--font-display); letter-spacing: -.02em; color: var(--menu-label-active); }
+.login-hero__sub { margin-top: 14px; font-size: 15px; line-height: 1.55; color: var(--menu-label-inactive); max-width: 400px; }
+
+.login-hero__stage { position: relative; height: 380px; max-width: 580px; width: 100%; }
+.hero-card {
+  position: absolute; border-radius: 14px; border: 1px solid var(--menu-line);
+  background: color-mix(in srgb, var(--menu-label-active) 6%, transparent); backdrop-filter: blur(10px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+}
+.hero-day { left: 0; top: 40px; width: min(360px, 64%); padding: 16px 16px 10px; z-index: 2; }
+.hero-day__head { display: flex; align-items: center; gap: 8px; font: 600 13px var(--font-display); }
+.hero-day__hours { margin-left: auto; font: 500 12px var(--font-body); color: var(--menu-muted); }
+.hero-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--menu-status); box-shadow: 0 0 0 4px color-mix(in srgb, var(--menu-status) 25%, transparent); }
+.hero-ruler { height: 8px; border-radius: 4px; background: var(--menu-line); margin: 12px 0 8px; overflow: hidden; }
+.hero-ruler__fill { display: block; height: 100%; width: 20%; border-radius: 4px; background: var(--menu-active); animation: hero-ruler 12s ease-in-out infinite; }
+@keyframes hero-ruler { 0%, 8% { width: 18%; } 30% { width: 38%; } 55% { width: 52%; } 80%, 92% { width: 64%; } 100% { width: 18%; } }
+
+.hero-task { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-top: 1px solid var(--menu-line); font-size: 13px; color: var(--menu-label-active); }
+.hero-task__tick { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--menu-muted); flex-shrink: 0; position: relative;
+  animation: hero-tick 12s infinite; animation-delay: calc(var(--i) * 1.6s + .8s); }
+.hero-task__tick::after { content: ''; position: absolute; left: 4px; top: 2px; width: 4px; height: 8px; border: solid var(--menu-label-active); border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0); transform-origin: center;
+  animation: hero-tick-mark 12s infinite; animation-delay: inherit; }
+.hero-task__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative;
+  animation: hero-done 12s infinite; animation-delay: calc(var(--i) * 1.6s + .8s); }
+.hero-task__tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--menu-line); color: var(--menu-label-inactive); }
+@keyframes hero-tick { 0%, 6% { background: transparent; border-color: var(--menu-muted); } 9%, 88% { background: var(--menu-status); border-color: var(--menu-status); } 94%, 100% { background: transparent; border-color: var(--menu-muted); } }
+@keyframes hero-tick-mark { 0%, 6% { transform: rotate(45deg) scale(0); } 10%, 88% { transform: rotate(45deg) scale(1); } 94%, 100% { transform: rotate(45deg) scale(0); } }
+@keyframes hero-done { 0%, 7% { opacity: 1; } 11%, 88% { opacity: .5; } 94%, 100% { opacity: 1; } }
+
+.hero-toast { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-size: 12.5px; color: var(--menu-label-inactive); white-space: nowrap; }
+.hero-toast b { color: var(--menu-label-active); font-weight: 600; }
+.hero-toast--a { z-index: 3; right: 0; top: 0; animation: hero-toast 12s ease-in-out infinite; animation-delay: 2s; opacity: 0; }
+.hero-toast--b { z-index: 3; right: 4%; top: 58px; animation: hero-toast 12s ease-in-out infinite; animation-delay: 6.5s; opacity: 0; }
+@keyframes hero-toast { 0% { opacity: 0; transform: translateX(24px); } 6%, 34% { opacity: 1; transform: none; } 42%, 100% { opacity: 0; transform: translateY(-8px); } }
+.hero-avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 10px var(--font-body); background: var(--menu-active); color: var(--menu-label-active); flex-shrink: 0; }
+.hero-avatar--b { background: var(--menu-status); }
+
+.hero-kanban { z-index: 1; right: 0; bottom: 0; width: min(290px, 50%); height: 150px; padding: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.hero-kanban__col { display: flex; flex-direction: column; gap: 8px; }
+.hero-kanban__head { height: 6px; width: 60%; border-radius: 3px; background: var(--menu-section); }
+.hero-kanban__item { height: 30px; border-radius: 7px; background: var(--menu-line); }
+.hero-kanban__item--short { height: 22px; opacity: .7; }
+.hero-kanban__moving { position: absolute; left: 14px; top: 48px; width: calc((100% - 48px) / 3); height: 30px; border-radius: 7px;
+  background: var(--menu-active); box-shadow: 0 8px 20px color-mix(in srgb, var(--menu-active) 45%, transparent); animation: hero-move 12s ease-in-out infinite; }
+@keyframes hero-move {
+  0%, 12% { transform: translate(0, 0); }
+  28%, 46% { transform: translate(calc(100% + 10px), 0); }
+  62%, 86% { transform: translate(calc(200% + 20px), 0); }
+  100% { transform: translate(0, 0); }
+}
+
+.login-split--nubank .login-hero__logo { height: 38px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-hero *, .login-hero *::after { animation: none !important; }
+  .hero-toast--a { opacity: 1; }
+  .hero-ruler__fill { width: 64%; }
+}
+@media (max-width: 960px) {
+  .login-split { grid-template-columns: 1fr; }
+  .login-hero { display: none; }
+  .login-side { min-height: 100vh; }
+}

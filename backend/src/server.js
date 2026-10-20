@@ -39,6 +39,7 @@ const ramalRoutes = require('./routes/ramal.routes');
 const rustdeskRoutes = require('./routes/rustdesk.routes');
 const nscRoutes = require('./routes/nsc.routes');
 const cipaRoutes = require('./routes/cipa.routes');
+const taskhubRoutes = require('./taskhub/router');
 const assinaturasController = require('./controllers/assinaturas.controller');
 const { agendarSincronizacaoColaboradores } = require('./services/colaboradores.sync');
 const { agendarJobsCamarotes } = require('./services/camarotes-cron.service');
@@ -119,6 +120,7 @@ app.use('/api/v1/rustdesk', rustdeskRoutes);
 app.use('/api/v1/nsc', nscRoutes);
 app.use('/api/v1/agenda_rh', cipaRoutes);
 app.use('/api/v1/cipa', cipaRoutes);
+app.use('/api/v1/taskhub', taskhubRoutes);
 
 // Rotas públicas de assinaturas (sem JWT — usadas pelo instalador antes de qualquer login)
 app.get('/api/v1/assinaturas/script/instalar', assinaturasController.obterScriptBase);
@@ -191,4 +193,8 @@ app.listen(env.port, () => {
     .catch((err) =>
       console.error('[permissoes] Falha ao sincronizar catálogo de módulos:', err.message)
     );
+  require('./taskhub/bootstrap')
+    .bootstrapTaskhub()
+    .then(() => console.log('[taskhub] Banco e acessos prontos.'))
+    .catch((err) => console.error('[taskhub] Não foi possível iniciar:', err.message));
 });

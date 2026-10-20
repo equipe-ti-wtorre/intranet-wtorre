@@ -21,6 +21,7 @@ const MODULOS = [
   { codigo: 'nao-se-cale', nome: 'Não se Cale', ordem: 20 },
   { codigo: 'agenda_rh', nome: 'Agenda RH', ordem: 21 },
   { codigo: 'cracha-boas-vindas', nome: 'Crachá & Boas-vindas', ordem: 22 },
+  { codigo: 'taskhub', nome: 'TaskHub', ordem: 23 },
 ];
 
 const CODIGOS = new Set(MODULOS.map((m) => m.codigo));
