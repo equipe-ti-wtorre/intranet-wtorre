@@ -47,6 +47,51 @@ function isAdminPesquisas(req) {
   return req.user?.perfil === 'ADMIN' || (req.userModulos || []).includes('pesquisas');
 }
 
+const ACOES_ERRO = ['clonar', 'publicar', 'capa', 'salvar', 'responder'];
+
+function sanitizeErroMensagem(err) {
+  let s = String(err?.sqlMessage || err?.message || 'Erro desconhecido').trim();
+  if (!s) s = 'Erro desconhecido';
+  s = s.replace(/[?&](sig|se|sv)=[^&\s]+/gi, '');
+  s = s.replace(/AccountKey=[^;\s]+/gi, '');
+  s = s.replace(/password=[^;\s]+/gi, 'password=***');
+  s = s.replace(/mysql:\/\/[^\s]+/gi, 'mysql://***');
+  return s.slice(0, 500);
+}
+
+async function registrarErro(req, err, { acao, passo, formularioId } = {}) {
+  try {
+    const acaoOk = ACOES_ERRO.includes(acao) ? acao : null;
+    if (!acaoOk) return;
+    let formId = Number(formularioId);
+    if (!Number.isInteger(formId) || formId < 1) {
+      formId = Number(req?.params?.id);
+    }
+    if (!Number.isInteger(formId) || formId < 1) formId = null;
+    await repo.insertPesquisasErro({
+      acao: acaoOk,
+      formularioId: formId,
+      userId: req?.user?.id || null,
+      email: str(req?.user?.email, 200) || null,
+      httpStatus: Number(err?.status) || 500,
+      codigo: str(err?.code || err?.name, 80) || null,
+      passo: str(passo, 80) || null,
+      mensagem: sanitizeErroMensagem(err),
+    });
+  } catch (logErr) {
+    console.error('[pesquisas] falha ao gravar log de erro', logErr.code || logErr.name, logErr.message);
+  }
+}
+
+async function copyCloneOpcional(req, novoId, passo, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[pesquisas] clone: falha ao copiar ${passo}`, err.code || err.name, err.message);
+    await registrarErro(req, err, { acao: 'clonar', passo, formularioId: novoId });
+  }
+}
+
 function normalizeUsuarioIds(raw) {
   const ids = [];
   const seen = new Set();
@@ -792,8 +837,13 @@ function matchQuery(item, q) {
   return item.title.toLowerCase().includes(n) || item.category.toLowerCase().includes(n);
 }
 
+function temChaveLookup(keys) {
+  return !!(keys && (keys.chaveDoc || keys.chaveEmail || keys.chaveRg));
+}
+
 async function getFormularioPorId(id, { includeConvidados } = {}) {
   const form = await repo.findFormularioById(id);
+  if (!form) throw httpError(404, 'Formulário não encontrado.');
   const perguntas = await repo.listPerguntas(id);
   const convidados = includeConvidados ? await repo.listConvidados(id) : undefined;
   const destinatarios = includeConvidados ? await repo.listDestinatarios(id) : undefined;
@@ -1097,14 +1147,24 @@ async function clonarFormulario(req) {
     capaFocoY: origem.capaFocoY,
   });
   await repo.replacePerguntas(novoId, perguntas);
-  await repo.copyFormularioBase(id, novoId);
-  await repo.copyDestinatarios(id, novoId);
+  await copyCloneOpcional(req, novoId, 'copyFormularioBase', () => repo.copyFormularioBase(id, novoId));
+  await copyCloneOpcional(req, novoId, 'copyDestinatarios', () => repo.copyDestinatarios(id, novoId));
+  await copyCloneOpcional(req, novoId, 'copiarCapa', () => copiarCapaFormulario(id, novoId));
   try {
-    await copiarCapaFormulario(id, novoId);
-  } catch {
-    /* rascunho válido mesmo se a capa não puder ser copiada */
+    return await getFormularioPorId(novoId, { includeConvidados: true });
+  } catch (err) {
+    await registrarErro(req, err, {
+      acao: 'clonar',
+      passo: 'getFormularioPorId',
+      formularioId: novoId,
+    });
+    const wrapped = httpError(
+      err.status || 500,
+      err.status && err.message ? err.message : 'Não foi possível carregar a cópia do formulário.'
+    );
+    wrapped.pesquisasErroRegistrado = true;
+    throw wrapped;
   }
-  return getFormularioPorId(novoId, { includeConvidados: true });
 }
 
 async function salvarFormulario(req, { publicar }) {
@@ -1188,10 +1248,23 @@ async function publicarFormulario(req) {
   } else {
     form = await salvarFormulario(req, { publicar: true });
   }
-  if (form.publicoAlvo === 'externos') {
-    await removerComunicadoFormulario(form.id);
-  } else {
-    await atualizarComunicadoDoFormulario(form, req.user.id);
+  try {
+    if (form.publicoAlvo === 'externos') {
+      await removerComunicadoFormulario(form.id);
+    } else {
+      await atualizarComunicadoDoFormulario(form, req.user.id);
+    }
+  } catch (err) {
+    console.error(
+      '[pesquisas] falha ao sincronizar comunicado após publicar',
+      err.code || err.name,
+      err.message
+    );
+    await registrarErro(req, err, {
+      acao: 'publicar',
+      passo: 'comunicado',
+      formularioId: form.id,
+    });
   }
   return form;
 }
@@ -1299,7 +1372,10 @@ async function lookupBaseIntranet(req) {
   }
   assertJanelaAberta(form);
   await assertElegivelIntranet(form, req.user);
-  return { campos: {} };
+  const keys = lookupKeysFromValor(req.body?.valor);
+  if (!temChaveLookup(keys)) return { campos: {} };
+  const dados = await repo.lookupFormularioBase(id, keys);
+  return { campos: dados || {} };
 }
 
 function parseItensBody(req) {
@@ -1940,6 +2016,11 @@ async function excluirRequisicao(req) {
   return { ok: true };
 }
 
+async function listAdminErros(req) {
+  if (!isAdminPesquisas(req)) throw httpError(403, 'Acesso negado.');
+  return repo.listPesquisasErros({ q: str(req.query.q, 120) });
+}
+
 async function listAdminFormularios(req) {
   if (!isAdminPesquisas(req)) throw httpError(403, 'Acesso negado.');
   const q = str(req.query.q, 120).toLowerCase();
@@ -2258,7 +2339,7 @@ async function lookupBasePublico(req) {
     await resolveGuestDoForm(form, req.guest);
   }
   const keys = lookupKeysFromValor(req.body?.valor);
-  if (!keys.chaveDoc && !keys.chaveEmail) return { campos: {} };
+  if (!temChaveLookup(keys)) return { campos: {} };
   const dados = await repo.lookupFormularioBase(form.id, keys);
   return { campos: dados || {} };
 }
@@ -2623,6 +2704,11 @@ module.exports = {
   decidirRequisicao,
   anexoRequisicao,
   excluirRequisicao,
+  registrarErro,
+  sanitizeErroMensagem,
+  lookupKeysFromValor,
+  temChaveLookup,
+  listAdminErros,
   listAdminFormularios,
   listAdminRequisicoes,
   buscarAprovadores,

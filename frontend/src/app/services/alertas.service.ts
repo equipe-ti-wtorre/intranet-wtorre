@@ -16,6 +16,10 @@ export class AlertasService {
     this.toast.fire({ icon: 'success', title: mensagem });
   }
 
+  aviso(mensagem: string): void {
+    this.toast.fire({ icon: 'warning', title: mensagem, timer: 5000 });
+  }
+
   erro(mensagem: string): void {
     this.toast.fire({ icon: 'error', title: mensagem, timer: 5000 });
   }

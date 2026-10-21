@@ -1359,11 +1359,73 @@ async function copyDestinatarios(fromId, toId) {
   const pool = getPool();
   await pool.execute(
     `INSERT INTO pesquisas_formulario_destinatarios (formulario_id, usuario_id)
-     SELECT ?, usuario_id
-       FROM pesquisas_formulario_destinatarios
-      WHERE formulario_id = ?`,
+     SELECT ?, d.usuario_id
+       FROM pesquisas_formulario_destinatarios d
+       INNER JOIN usuarios u ON u.id = d.usuario_id
+      WHERE d.formulario_id = ?`,
     [toId, fromId]
   );
+}
+
+function mapPesquisasErro(row) {
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    acao: row.acao,
+    formularioId: row.formulario_id != null ? Number(row.formulario_id) : null,
+    formularioTitulo: row.formulario_titulo || null,
+    userId: row.user_id != null ? Number(row.user_id) : null,
+    email: row.email || null,
+    httpStatus: Number(row.http_status) || 500,
+    codigo: row.codigo || null,
+    passo: row.passo || null,
+    mensagem: row.mensagem || '',
+    criadoEm: toIso(row.criado_em),
+  };
+}
+
+async function insertPesquisasErro(data) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO pesquisas_erros
+      (acao, formulario_id, user_id, email, http_status, codigo, passo, mensagem)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      data.acao,
+      data.formularioId || null,
+      data.userId || null,
+      data.email || null,
+      data.httpStatus || 500,
+      data.codigo || null,
+      data.passo || null,
+      data.mensagem,
+    ]
+  );
+}
+
+async function listPesquisasErros({ q } = {}) {
+  const pool = getPool();
+  const termo = String(q || '').trim();
+  const params = [];
+  let where = '';
+  if (termo) {
+    where = ` WHERE e.acao LIKE ? OR e.email LIKE ? OR e.mensagem LIKE ? OR e.codigo LIKE ?
+      OR e.passo LIKE ? OR f.titulo LIKE ?`;
+    const like = `%${termo.slice(0, 120)}%`;
+    params.push(like, like, like, like, like, like);
+  }
+  const [rows] = await pool.execute(
+    `SELECT e.id, e.acao, e.formulario_id, e.user_id, e.email, e.http_status,
+            e.codigo, e.passo, e.mensagem, e.criado_em,
+            f.titulo AS formulario_titulo
+       FROM pesquisas_erros e
+       LEFT JOIN pesquisas_formularios f ON f.id = e.formulario_id
+      ${where}
+      ORDER BY e.id DESC
+      LIMIT 200`,
+    params
+  );
+  return rows.map(mapPesquisasErro);
 }
 
 async function replaceFormularioBase(formularioId, rows) {
@@ -1552,6 +1614,8 @@ module.exports = {
   isDestinatario,
   replaceDestinatarios,
   copyDestinatarios,
+  insertPesquisasErro,
+  listPesquisasErros,
   replaceFormularioBase,
   listFormularioBaseDados,
   summarizeFormularioBase,

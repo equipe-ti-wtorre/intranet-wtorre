@@ -116,6 +116,7 @@ router.get('/requisicoes/:id/anexo', requireJwt, controller.anexoRequisicao);
 router.get('/requisicoes/:id', requireJwt, controller.getRequisicao);
 router.delete('/requisicoes/:id', requireJwt, controller.excluirRequisicao);
 
+router.get('/admin/erros', ...adminGuard, controller.listAdminErros);
 router.get('/admin/formularios', ...adminGuard, controller.listAdminFormularios);
 router.get('/admin/requisicoes', ...adminGuard, controller.listAdminRequisicoes);
 router.post('/admin/formularios/:id/encerrar', ...adminGuard, controller.encerrar);

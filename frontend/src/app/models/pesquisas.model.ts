@@ -362,3 +362,27 @@ export const STATUS_LABEL: Record<BadgeStatus, string> = {
   draft: 'Rascunho',
   review: 'Em andamento',
 };
+
+export type PesquisasErroAcao = 'clonar' | 'publicar' | 'capa' | 'salvar' | 'responder';
+
+export interface PesquisasErroLog {
+  id: number;
+  acao: PesquisasErroAcao | string;
+  formularioId: number | null;
+  formularioTitulo: string | null;
+  userId: number | null;
+  email: string | null;
+  httpStatus: number;
+  codigo: string | null;
+  passo: string | null;
+  mensagem: string;
+  criadoEm: string | null;
+}
+
+export const PESQUISAS_ERRO_ACAO_LABEL: Record<string, string> = {
+  clonar: 'Clonar',
+  publicar: 'Publicar',
+  capa: 'Capa',
+  salvar: 'Salvar',
+  responder: 'Responder',
+};
