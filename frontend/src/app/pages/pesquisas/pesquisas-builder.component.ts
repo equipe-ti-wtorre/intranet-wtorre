@@ -792,6 +792,15 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    if (
+      publicar &&
+      this.publicoAlvo() === 'externos' &&
+      this.exigirIdentidade() &&
+      !this.convidados().length
+    ) {
+      this.alertas.erro('Inclua ao menos um convidado para exigir a confirmação de identidade.');
+      return;
+    }
     const body = this.toBody();
     this.salvando.set(true);
     const id = this.formId();

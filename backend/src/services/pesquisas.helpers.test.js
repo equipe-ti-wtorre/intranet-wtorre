@@ -10,6 +10,7 @@ const {
   temChaveLookup,
   refFormularioFromRaw,
   buffersParaZip,
+  assertConvidadosIdentidade,
 } = require('./pesquisas.service');
 
 describe('sanitizeErroMensagem', () => {
@@ -106,5 +107,44 @@ describe('buffersParaZip', () => {
 
   it('rejeita lista vazia', async () => {
     await assert.rejects(() => buffersParaZip([]), (err) => err.status === 404);
+  });
+});
+
+describe('assertConvidadosIdentidade', () => {
+  it('permite 0 convidados quando a identidade está desligada', () => {
+    assert.doesNotThrow(() =>
+      assertConvidadosIdentidade({
+        publicoAlvo: 'externos',
+        exigirIdentidade: false,
+        count: 0,
+        publicar: true,
+      })
+    );
+  });
+
+  it('exige convidado ao publicar com identidade ligada', () => {
+    assert.throws(
+      () =>
+        assertConvidadosIdentidade({
+          publicoAlvo: 'externos',
+          exigirIdentidade: true,
+          count: 0,
+          publicar: true,
+        }),
+      (err) =>
+        err.status === 400 &&
+        err.message === 'Inclua ao menos um convidado para exigir a confirmação de identidade.'
+    );
+  });
+
+  it('não exige convidado em rascunho', () => {
+    assert.doesNotThrow(() =>
+      assertConvidadosIdentidade({
+        publicoAlvo: 'externos',
+        exigirIdentidade: true,
+        count: 0,
+        publicar: false,
+      })
+    );
   });
 });
