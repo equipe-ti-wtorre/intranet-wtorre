@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { switchMap, of } from 'rxjs';
+import { catchError, map, of, switchMap } from 'rxjs';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { MenuService } from '../../services/menu.service';
 import { AlertasService } from '../../services/alertas.service';
@@ -814,12 +814,20 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           }
           if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
           const file = this.capaPendente;
-          if (!file) return of(form);
-          return this.api.uploadCapa(form.id, file);
+          if (!file) return of({ form, capaErro: null as string | null });
+          return this.api.uploadCapa(form.id, file).pipe(
+            map((updated) => ({ form: updated, capaErro: null as string | null })),
+            catchError((err: HttpErrorResponse) =>
+              of({
+                form,
+                capaErro: err.error?.mensagem || 'Não foi possível enviar a capa.',
+              })
+            )
+          );
         })
       )
       .subscribe({
-      next: (form) => {
+      next: ({ form, capaErro }) => {
         this.formId.set(form.id);
         this.slug.set(form.slug || null);
         this.aplicarJanela(form);
@@ -831,9 +839,15 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         }
         if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
         if (form.capaUrl) this.capaUrl.set(form.capaUrl);
-        if (this.capaPendente) this.clearCapaPendente();
+        if (this.capaPendente && !capaErro) this.clearCapaPendente();
         this.salvando.set(false);
-        if (publicar) {
+        if (capaErro) {
+          this.alertas.aviso(
+            publicar
+              ? `"${form.titulo}" publicado, mas a capa não foi enviada. ${capaErro}`
+              : `Formulário salvo, mas a capa não foi enviada. ${capaErro}`
+          );
+        } else if (publicar) {
           this.alertas.sucesso(
             form.publicoAlvo === 'externos'
               ? `"${form.titulo}" publicado. O link público não aparece em Comunicados.`
@@ -841,10 +855,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
                 ? `"${form.titulo}" publicado. Entra no mural quando a janela abrir.`
                 : `"${form.titulo}" publicado! Já está em Comunicados na intranet.`
           );
+        } else {
+          this.alertas.sucesso('Formulário salvo como rascunho.');
+        }
+        if (publicar) {
           void this.router.navigate(['/pesquisas']);
           return;
         }
-        this.alertas.sucesso('Formulário salvo como rascunho.');
         if (!this.route.snapshot.paramMap.get('id')) {
           void this.router.navigate(['/pesquisas/formulario', form.id, 'editar']);
         }

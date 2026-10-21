@@ -198,6 +198,33 @@
   cursor: default;
 }
 
+.row-click {
+  cursor: pointer;
+}
+
+.msg-cell {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-soft, #48536a);
+}
+
+.log-value {
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid var(--line, #e2e6ee);
+  border-radius: 12px;
+  background: #f7f8fc;
+  font-size: 13.5px;
+  color: var(--ink, #10151f);
+  word-break: break-word;
+}
+
+.log-value--wrap {
+  white-space: pre-wrap;
+}
+
 @media (max-width: 640px) {
   .field-row {
     grid-template-columns: 1fr;

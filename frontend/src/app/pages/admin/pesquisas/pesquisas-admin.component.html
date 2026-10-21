@@ -2,7 +2,7 @@
   <header class="page-head">
     <div>
       <h1>Gestão de formulários</h1>
-      <p class="page-subtitle">Acompanhe formulários, templates visuais e as imagens da porta pública.</p>
+      <p class="page-subtitle">Acompanhe formulários, templates visuais, imagens da porta pública e os erros da área.</p>
     </div>
   </header>
 
@@ -17,6 +17,9 @@
       <button type="button" class="admin-tab" [class.active]="aba() === 'carrossel'" (click)="selecionarAba('carrossel')">
         <span class="tab-label">Carrossel</span>
       </button>
+      <button type="button" class="admin-tab" [class.active]="aba() === 'logs'" (click)="selecionarAba('logs')">
+        <span class="tab-label">Logs</span>
+      </button>
     </nav>
 
     <div class="pane-head">
@@ -28,7 +31,9 @@
               ? 'Buscar por nome, código ou wordmark…'
               : aba() === 'carrossel'
                 ? 'Buscar por título…'
-                : 'Buscar por título, categoria ou autor…'
+                : aba() === 'logs'
+                  ? 'Buscar por ação, e-mail, mensagem ou formulário…'
+                  : 'Buscar por título, categoria ou autor…'
           "
           [value]="q()"
           (input)="onBusca($any($event.target).value)"
@@ -137,6 +142,43 @@
                     <button type="button" class="iact" title="Editar" (click)="editarSlide(s)">Editar</button>
                     <button type="button" class="iact danger" title="Excluir" (click)="excluirSlide(s)">Excluir</button>
                   </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    } @else if (aba() === 'logs') {
+      @if (loading()) {
+        <p class="empty">Carregando…</p>
+      } @else if (erroCarregamento()) {
+        <p class="empty">{{ erroCarregamento() }}</p>
+      } @else if (!erros().length) {
+        <p class="empty">Nenhum erro registrado.</p>
+      } @else {
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Ação</th>
+                <th>Formulário</th>
+                <th>Usuário</th>
+                <th>Status</th>
+                <th>Mensagem</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of erros(); track row.id) {
+                <tr class="row-click" (click)="abrirLog(row)">
+                  <td>{{ formatarDataLog(row.criadoEm) }}</td>
+                  <td>{{ rotuloAcao(row.acao) }}</td>
+                  <td>{{ row.formularioTitulo || (row.formularioId ? '#' + row.formularioId : '—') }}</td>
+                  <td>{{ row.email || '—' }}</td>
+                  <td>
+                    <span class="badge-status" [class.off]="row.httpStatus >= 400">{{ row.httpStatus }}</span>
+                  </td>
+                  <td class="msg-cell">{{ row.mensagem }}</td>
                 </tr>
               }
             </tbody>
@@ -332,4 +374,49 @@
       </label>
     </div>
   </form>
+</app-admin-modal>
+
+<app-admin-modal
+  [open]="!!logAberto()"
+  title="Detalhe do erro"
+  [subtitle]="logAberto() ? rotuloAcao(logAberto()?.acao || '') : ''"
+  icon="folder"
+  [showSave]="false"
+  cancelLabel="Fechar"
+  (cancel)="fecharLog()"
+>
+  @if (logAberto(); as log) {
+    <div class="field">
+      <label>Data</label>
+      <div class="log-value">{{ formatarDataLog(log.criadoEm) }}</div>
+    </div>
+    <div class="field">
+      <label>Ação</label>
+      <div class="log-value">{{ rotuloAcao(log.acao) }}</div>
+    </div>
+    <div class="field">
+      <label>Formulário</label>
+      <div class="log-value">{{ log.formularioTitulo || (log.formularioId ? '#' + log.formularioId : '—') }}</div>
+    </div>
+    <div class="field">
+      <label>Usuário</label>
+      <div class="log-value">{{ log.email || '—' }}</div>
+    </div>
+    <div class="field">
+      <label>Status HTTP</label>
+      <div class="log-value">{{ log.httpStatus }}</div>
+    </div>
+    <div class="field">
+      <label>Código</label>
+      <div class="log-value">{{ log.codigo || '—' }}</div>
+    </div>
+    <div class="field">
+      <label>Passo</label>
+      <div class="log-value">{{ log.passo || '—' }}</div>
+    </div>
+    <div class="field">
+      <label>Mensagem</label>
+      <div class="log-value log-value--wrap">{{ log.mensagem }}</div>
+    </div>
+  }
 </app-admin-modal>

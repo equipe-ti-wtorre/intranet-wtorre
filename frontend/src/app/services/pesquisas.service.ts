@@ -8,6 +8,7 @@ import {
   PesquisasConvidado,
   PesquisasConvidadosLoteResult,
   PesquisasDestinatario,
+  PesquisasErroLog,
   PesquisasFormulario,
   PesquisasListItem,
   PesquisasRequisicao,
@@ -345,6 +346,11 @@ export class PesquisasService {
 
   excluirRequisicao(id: number): Observable<{ ok: boolean }> {
     return this.http.delete<{ ok: boolean }>(this.api(`/requisicoes/${id}`));
+  }
+
+  adminErros(q = ''): Observable<PesquisasErroLog[]> {
+    const params = q ? new HttpParams().set('q', q) : undefined;
+    return this.http.get<PesquisasErroLog[]>(this.api('/admin/erros'), { params });
   }
 
   adminFormularios(q = ''): Observable<PesquisasListItem[]> {

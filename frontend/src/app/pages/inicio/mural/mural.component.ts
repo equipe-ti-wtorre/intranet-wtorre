@@ -1,5 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import { ComunicadosService } from '../../../services/comunicados.service';
@@ -18,6 +18,7 @@ import { mesclarNoticiasMural } from '../../../utils/mural-noticias.util';
   styleUrl: './mural.component.scss',
 })
 export class MuralComponent implements OnInit {
+  private readonly router = inject(Router);
   private readonly comunicadosService = inject(ComunicadosService);
   private readonly colaboradoresService = inject(ColaboradoresService);
   private readonly eventosService = inject(EventosService);
@@ -89,6 +90,12 @@ export class MuralComponent implements OnInit {
 
   mostrarImagem(ev: Evento): boolean {
     return Boolean(ev.imagemUrl) && !this.imagemFalhou().has(ev.titulo);
+  }
+
+  abrirLink(ev: MouseEvent, link: string): void {
+    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    ev.preventDefault();
+    void this.router.navigateByUrl(link);
   }
 
   onImagemErro(ev: Evento): void {
