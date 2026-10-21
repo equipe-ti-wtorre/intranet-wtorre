@@ -3059,6 +3059,9 @@
 .pesq-app .zone-top.is-on,
 .pesq-app .zone-bottom.is-on {
   height: 200px;
+  max-height: 200px;
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .pesq-app .zone-top img,
@@ -4062,7 +4065,7 @@
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .guest-frame,
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-bottom.is-on) .guest-frame {
   height: auto;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .guest-frame {
@@ -4130,9 +4133,7 @@
 }
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .zone-left.is-on img,
-.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .zone-right.is-on img,
-.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .zone-top.is-on img,
-.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-bottom.is-on) .zone-bottom.is-on img {
+.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .zone-right.is-on img {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -4213,7 +4214,11 @@
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .zone-top.is-on,
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-bottom.is-on) .zone-bottom.is-on {
   position: relative;
+  align-self: start;
   height: 200px;
+  max-height: 200px;
+  min-height: 200px;
+  flex: 0 0 200px;
   overflow: hidden;
 }
 
@@ -4223,7 +4228,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  max-height: none;
+  max-height: 200px;
   object-fit: cover;
   object-position: center;
 }
@@ -4490,6 +4495,14 @@
   .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .zone-top.is-on,
   .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-bottom.is-on) .zone-bottom.is-on {
     height: 140px;
+    max-height: 140px;
+    min-height: 140px;
+    flex-basis: 140px;
+  }
+
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .zone-top.is-on img,
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-bottom.is-on) .zone-bottom.is-on img {
+    max-height: 140px;
   }
 
   .pesq-app.pesq-public-bid .portal-bid-panel:not(.portal-bid-panel-gate) {

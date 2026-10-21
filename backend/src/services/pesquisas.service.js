@@ -582,10 +582,20 @@ function guestsHaveFreshDocumento(raw) {
   return Array.isArray(raw) && raw.some((g) => isDocumentoValido(digitsCpf(g?.cpf)));
 }
 
-async function resolveConvidadosFromBody(body, formularioId) {
+function assertConvidadosIdentidade({ publicoAlvo, exigirIdentidade, count, publicar }) {
+  if (!publicar || publicoAlvo !== 'externos' || !exigirIdentidade) return;
+  if ((Number(count) || 0) < 1) {
+    throw httpError(
+      400,
+      'Inclua ao menos um convidado para exigir a confirmação de identidade.'
+    );
+  }
+}
+
+async function resolveConvidadosFromBody(body, formularioId, { exigirIdentidade } = {}) {
   const fontePlanilha = body?.convidadosFonte === 'planilha';
   const rawGuests = Array.isArray(body?.convidados) ? body.convidados : null;
-  if (fontePlanilha && !guestsHaveFreshDocumento(rawGuests)) {
+  if (fontePlanilha && exigirIdentidade !== false && !guestsHaveFreshDocumento(rawGuests)) {
     let rows = Array.isArray(body.base) ? body.base : null;
     if (!rows && formularioId) {
       rows = await repo.listFormularioBaseDados(formularioId);
@@ -617,6 +627,11 @@ async function normalizeConvidados(raw, formularioId) {
   for (const g of raw) {
     const nome = str(g.nome, 200) || null;
     const emailRaw = str(g.email, 200).toLowerCase();
+    const docPreview = digitsCpf(g.cpf);
+    const rgBruto = String(g.rg ?? '').trim();
+    if (!nome && !emailRaw && !docPreview && !rgBruto && !g.id) {
+      continue;
+    }
     let email = null;
     if (emailRaw) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
@@ -624,7 +639,7 @@ async function normalizeConvidados(raw, formularioId) {
       }
       email = emailRaw;
     }
-    const doc = digitsCpf(g.cpf);
+    const doc = docPreview;
     let cpfHash = null;
     let cpfMascara = null;
     let prevLoaded = false;
@@ -1178,7 +1193,19 @@ async function salvarFormulario(req, { publicar }) {
   }
   const status = publicar ? 'publicado' : 'rascunho';
   const idParam = req.params.id ? parseId(req.params.id) : null;
-  const guests = await resolveConvidadosFromBody(req.body, idParam);
+  const guests = await resolveConvidadosFromBody(req.body, idParam, {
+    exigirIdentidade: body.exigirIdentidade,
+  });
+  let guestCount = Array.isArray(guests) ? guests.length : null;
+  if (guestCount == null && publicar && body.publicoAlvo === 'externos' && body.exigirIdentidade) {
+    guestCount = idParam ? await repo.countConvidados(idParam) : 0;
+  }
+  assertConvidadosIdentidade({
+    publicoAlvo: body.publicoAlvo,
+    exigirIdentidade: body.exigirIdentidade,
+    count: guestCount == null ? 0 : guestCount,
+    publicar,
+  });
   const usuarioIds = await resolveDestinatarioIds(req.body, body.publicoAlvo);
 
   if (idParam) {
@@ -1239,6 +1266,14 @@ async function publicarFormulario(req) {
           'Inclua ao menos um colaborador para publicar o formulário personalizado.'
         );
       }
+    }
+    if (existing.publicoAlvo === 'externos') {
+      assertConvidadosIdentidade({
+        publicoAlvo: existing.publicoAlvo,
+        exigirIdentidade: existing.exigirIdentidade,
+        count: await repo.countConvidados(idParam),
+        publicar: true,
+      });
     }
     if (!existing.slug) {
       await repo.setFormularioSlug(idParam, await uniquePublicToken());
@@ -2763,6 +2798,7 @@ module.exports = {
   temChaveLookup,
   refFormularioFromRaw,
   buffersParaZip,
+  assertConvidadosIdentidade,
   listAdminErros,
   listAdminFormularios,
   listAdminRequisicoes,
