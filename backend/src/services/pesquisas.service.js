@@ -929,7 +929,7 @@ async function syncComunicadoFormulario(form, { ativo, userId, bump = true }) {
     console.error('[pesquisas] Categoria de comunicados "pesquisas" não encontrada.');
     return false;
   }
-  const linkPath = `/pesquisas/formulario/${form.slug || form.id}/responder`;
+  const linkPath = `/pesquisas/formulario/${form.id}/responder`;
   const wantAtivo = !!ativo;
   const existing = await comunicadosRepo.buscarPorOrigem(ORIGEM_FORM, form.id);
   if (
@@ -1544,8 +1544,26 @@ async function enviarResposta(req) {
   return { ok: true };
 }
 
+function refFormularioFromRaw(raw) {
+  let s = String(raw ?? '').trim();
+  try {
+    s = decodeURIComponent(s);
+  } catch {
+    /* mantém o valor original */
+  }
+  const m = s.match(/\/pesquisas\/formulario\/([^/?#]+)/i);
+  if (m) return m[1];
+  if (s.includes('/')) {
+    const parts = s.split('/').filter(Boolean);
+    const i = parts.findIndex((p) => p.toLowerCase() === 'formulario');
+    if (i >= 0 && parts[i + 1]) return parts[i + 1];
+    return parts[parts.length - 1] || s;
+  }
+  return s;
+}
+
 async function findFormularioByRef(raw) {
-  const s = String(raw ?? '').trim();
+  const s = refFormularioFromRaw(raw);
   if (/^\d+$/.test(s)) {
     const id = Number(s);
     if (Number.isInteger(id) && id >= 1) {
@@ -1700,15 +1718,39 @@ function nomeArquivoZip(titulo) {
 
 function buffersParaZip(entradas) {
   return new Promise((resolve, reject) => {
+    if (!Array.isArray(entradas) || !entradas.length) {
+      reject(httpError(404, 'Nenhum anexo encontrado para download.'));
+      return;
+    }
     const archive = new ZipArchive({ zlib: { level: 6 } });
     const chunks = [];
-    archive.on('data', (chunk) => chunks.push(chunk));
-    archive.on('error', reject);
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    const done = () => {
+      if (settled) return;
+      const out = Buffer.concat(chunks);
+      if (out.length < 30 || out[0] !== 0x50 || out[1] !== 0x4b) {
+        fail(httpError(500, 'Não foi possível gerar o arquivo ZIP dos anexos.'));
+        return;
+      }
+      settled = true;
+      resolve(out);
+    };
+    archive.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    archive.on('error', fail);
+    archive.on('finish', done);
+    archive.on('end', done);
     for (const entrada of entradas) {
-      archive.append(entrada.buffer, { name: entrada.nome });
+      const nome = entrada?.nome || 'arquivo';
+      const raw = entrada?.buffer;
+      if (raw == null) continue;
+      archive.append(Buffer.from(raw), { name: nome });
     }
-    archive.finalize();
+    void archive.finalize();
   });
 }
 
@@ -1736,9 +1778,18 @@ async function zipAnexos(req) {
   if (chaves.length > 200) throw httpError(400, 'Selecione no máximo 200 anexos por vez.');
 
   const perguntas = await repo.listPerguntas(form.id);
-  const anexoIds = new Set(perguntas.filter((p) => p.blocoTipo === 'anexo').map((p) => p.id));
+  const anexoIds = new Set(
+    perguntas
+      .filter((p) => p.blocoTipo === 'anexo')
+      .map((p) => Number(p.id))
+      .filter((n) => Number.isInteger(n) && n > 0)
+  );
   const respostas = await repo.listRespostasDetalhadas(form.id);
-  const porResposta = new Map(respostas.map((r) => [r.id, r]));
+  const porResposta = new Map(
+    respostas
+      .map((r) => [Number(r.id), r])
+      .filter(([id]) => Number.isInteger(id) && id > 0)
+  );
 
   const usados = new Set();
   const entradas = [];
@@ -1746,7 +1797,7 @@ async function zipAnexos(req) {
     if (!anexoIds.has(chave.perguntaId)) continue;
     const resposta = porResposta.get(chave.respostaId);
     if (!resposta) continue;
-    const item = (resposta.itens || []).find((i) => i.perguntaId === chave.perguntaId);
+    const item = (resposta.itens || []).find((i) => Number(i.perguntaId) === chave.perguntaId);
     const anexo = parseAnexosLista(item?.valor)[chave.indice];
     if (!anexo) continue;
     let downloaded;
@@ -1756,9 +1807,11 @@ async function zipAnexos(req) {
       if (err.status === 404) continue;
       throw err;
     }
+    const raw = downloaded?.buffer;
+    if (raw == null || !Buffer.byteLength(raw)) continue;
     entradas.push({
       nome: nomeEntradaZip(anexo.nome || downloaded.filename, usados),
-      buffer: downloaded.buffer,
+      buffer: Buffer.from(raw),
     });
   }
   if (!entradas.length) throw httpError(404, 'Nenhum anexo encontrado para download.');
@@ -2708,6 +2761,8 @@ module.exports = {
   sanitizeErroMensagem,
   lookupKeysFromValor,
   temChaveLookup,
+  refFormularioFromRaw,
+  buffersParaZip,
   listAdminErros,
   listAdminFormularios,
   listAdminRequisicoes,

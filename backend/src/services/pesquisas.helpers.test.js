@@ -8,6 +8,8 @@ const {
   sanitizeErroMensagem,
   lookupKeysFromValor,
   temChaveLookup,
+  refFormularioFromRaw,
+  buffersParaZip,
 } = require('./pesquisas.service');
 
 describe('sanitizeErroMensagem', () => {
@@ -63,5 +65,46 @@ describe('lookupKeysFromValor', () => {
   it('vazio não tem chave', () => {
     const k = lookupKeysFromValor('');
     assert.equal(temChaveLookup(k), false);
+  });
+});
+
+describe('refFormularioFromRaw', () => {
+  it('extrai id do path interno', () => {
+    assert.equal(refFormularioFromRaw('/pesquisas/formulario/46/responder'), '46');
+  });
+
+  it('extrai slug do path interno', () => {
+    assert.equal(
+      refFormularioFromRaw('/pesquisas/formulario/MNFGufAyFeZlRFz2OIvgqQ/responder'),
+      'MNFGufAyFeZlRFz2OIvgqQ'
+    );
+  });
+
+  it('decodifica path com barras escaped', () => {
+    assert.equal(
+      refFormularioFromRaw('pesquisas%2Fformulario%2F46%2Fresponder'),
+      '46'
+    );
+  });
+
+  it('mantém id ou slug simples', () => {
+    assert.equal(refFormularioFromRaw('46'), '46');
+    assert.equal(refFormularioFromRaw('MNFGufAyFeZlRFz2OIvgqQ'), 'MNFGufAyFeZlRFz2OIvgqQ');
+  });
+});
+
+describe('buffersParaZip', () => {
+  it('gera ZIP com dois arquivos', async () => {
+    const zip = await buffersParaZip([
+      { nome: 'a.txt', buffer: Buffer.from('um') },
+      { nome: 'b.txt', buffer: Buffer.from('dois') },
+    ]);
+    assert.equal(zip[0], 0x50);
+    assert.equal(zip[1], 0x4b);
+    assert.ok(zip.length > 80);
+  });
+
+  it('rejeita lista vazia', async () => {
+    await assert.rejects(() => buffersParaZip([]), (err) => err.status === 404);
   });
 });
