@@ -26,6 +26,27 @@ export function pesquisasResultadosPath(item: {
   return ['/pesquisas/formulario', item.slug || item.id, 'resultados'];
 }
 
+const VOLTAR_PADRAO = '/inicio';
+const RESPONDER_PATH_RE = /\/pesquisas\/formulario\/[^/]+\/responder\/?$/i;
+
+/** Path interno relativo; rejeita open-redirect e a própria tela de responder. */
+export function voltarPathSeguro(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s.startsWith('/') || s.startsWith('//') || s.includes('://')) return null;
+  if (s.length > 500 || /[\n\r\\]/.test(s)) return null;
+  const pathOnly = s.split('?')[0].split('#')[0];
+  if (RESPONDER_PATH_RE.test(pathOnly)) return null;
+  return s;
+}
+
+export function destinoAposResponder(opts: {
+  queryVoltar?: string | null;
+  previousUrl?: string | null;
+}): string {
+  return voltarPathSeguro(opts.queryVoltar) || voltarPathSeguro(opts.previousUrl) || VOLTAR_PADRAO;
+}
+
 /** `/feedback` (portal genérico) ou `/MNFGufAyFeZlRFz2OIvgqQ` (token do form). */
 export function pesquisasPublicoTokenMatch(segments: UrlSegment[]): UrlMatchResult | null {
   if (segments.length !== 1) return null;

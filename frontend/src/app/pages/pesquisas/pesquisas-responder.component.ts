@@ -8,6 +8,7 @@ import { PesquisasPergunta, PesquisasResponderPayload } from '../../models/pesqu
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
 import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
+import { destinoAposResponder } from './shared/pesquisas-public-url';
 
 @Component({
   selector: 'app-pesquisas-responder',
@@ -35,6 +36,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
 
   private lookupTimer: ReturnType<typeof setTimeout> | null = null;
   private lookupSeq = 0;
+  private destinoVoltar = '/inicio';
 
   readonly visiveis = computed(() => {
     const p = this.payload();
@@ -44,6 +46,11 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    const prev = this.router.lastSuccessfulNavigation?.previousNavigation?.finalUrl;
+    this.destinoVoltar = destinoAposResponder({
+      queryVoltar: this.route.snapshot.queryParamMap.get('voltar'),
+      previousUrl: prev ? this.router.serializeUrl(prev) : null,
+    });
     const ref = this.route.snapshot.paramMap.get('id') || '';
     this.api.payloadResponder(ref).subscribe({
       next: (p) => {
@@ -53,7 +60,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível abrir o formulário.');
         this.loading.set(false);
-        void this.router.navigate(['/pesquisas']);
+        this.irOrigem();
       },
     });
   }
@@ -99,7 +106,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
       next: () => {
         this.alertas.sucesso('Resposta enviada com sucesso.');
         this.enviando.set(false);
-        void this.router.navigate(['/pesquisas']);
+        this.irOrigem();
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível enviar a resposta.');
@@ -109,7 +116,11 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   }
 
   voltar(): void {
-    void this.router.navigate(['/pesquisas']);
+    this.irOrigem();
+  }
+
+  private irOrigem(): void {
+    void this.router.navigateByUrl(this.destinoVoltar);
   }
 
   private agendarLookup(id: number, valor: string): void {
