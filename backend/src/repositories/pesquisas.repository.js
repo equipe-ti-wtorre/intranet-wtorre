@@ -457,7 +457,7 @@ async function replacePerguntas(formularioId, perguntas) {
         `INSERT INTO pesquisas_perguntas
           (formulario_id, ordem, texto, tipo, obrigatoria, opcoes, secao_titulo, logica,
            bloco_tipo, ajuda, nova_linha)
-         VALUES (?, ?, ?, ?, ?, CAST(CONVERT(? USING utf8mb4) AS JSON), ?, CAST(CONVERT(? USING utf8mb4) AS JSON), ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, CONVERT(? USING utf8mb4), ?, CONVERT(? USING utf8mb4), ?, ?, ?)`,
         [
           formularioId,
           p.ordem,
@@ -1446,7 +1446,7 @@ async function replaceFormularioBase(formularioId, rows) {
       await conn.execute(
         `INSERT INTO pesquisas_formulario_base
           (formulario_id, chave_doc, chave_email, chave_rg, dados)
-         VALUES (?, ?, ?, ?, CAST(CONVERT(? USING utf8mb4) AS JSON))`,
+         VALUES (?, ?, ?, ?, CONVERT(? USING utf8mb4))`,
         [
           formularioId,
           row.chaveDoc || null,
