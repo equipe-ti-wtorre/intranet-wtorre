@@ -10,6 +10,7 @@ const path = require('path');
 const { env } = require('../config/env');
 const { validarNomeContainer } = require('../utils/container-nome.validation');
 const { mapAzureBlobError } = require('../utils/azure-blob.errors');
+const pesquisasBlobLocal = require('./pesquisas-blob-local');
 
 const account = env.azureStorageAccount;
 const credential = new DefaultAzureCredential();
@@ -39,6 +40,10 @@ async function garantirContainer(nome) {
     const err = new Error(v.mensagem);
     err.status = 400;
     throw err;
+  }
+  if (pesquisasBlobLocal.isLocalContainer(v.nome)) {
+    await pesquisasBlobLocal.garantirDir();
+    return v.nome;
   }
   return withBlobError(async () => {
     await svc.getContainerClient(v.nome).createIfNotExists();
@@ -86,6 +91,9 @@ async function listarContainersDaConta() {
 }
 
 async function enviarArquivo(container, caminhoTmp, blobName, contentType) {
+  if (pesquisasBlobLocal.isLocalContainer(container)) {
+    return pesquisasBlobLocal.salvarArquivo(blobName, caminhoTmp, contentType);
+  }
   return withBlobError(async () => {
     const client = svc.getContainerClient(container).getBlockBlobClient(blobName);
     await client.uploadFile(caminhoTmp, {
@@ -96,6 +104,9 @@ async function enviarArquivo(container, caminhoTmp, blobName, contentType) {
 }
 
 async function enviarBuffer(container, buffer, blobName, contentType) {
+  if (pesquisasBlobLocal.isLocalContainer(container)) {
+    return pesquisasBlobLocal.salvarBuffer(blobName, buffer, contentType);
+  }
   return withBlobError(async () => {
     const client = svc.getContainerClient(container).getBlockBlobClient(blobName);
     await client.uploadData(buffer, {
@@ -107,6 +118,9 @@ async function enviarBuffer(container, buffer, blobName, contentType) {
 
 async function removerBlob(container, blobName) {
   if (!blobName) return;
+  if (pesquisasBlobLocal.isLocalContainer(container)) {
+    return pesquisasBlobLocal.remover(blobName);
+  }
   return withBlobError(() =>
     svc.getContainerClient(container).getBlockBlobClient(blobName).deleteIfExists()
   );
@@ -145,6 +159,9 @@ function contentDispositionAttachment(originalName) {
 }
 
 async function gerarSasLeitura(container, blobName, opts = {}) {
+  if (pesquisasBlobLocal.isLocalContainer(container)) {
+    return pesquisasBlobLocal.sasLocal(blobName);
+  }
   return withBlobError(async () => {
     const now = new Date();
     const startsOn = new Date(now.getTime() - 5 * 60 * 1000);
@@ -170,6 +187,10 @@ async function gerarSasLeitura(container, blobName, opts = {}) {
 }
 
 async function baixarBuffer(container, blobName) {
+  if (pesquisasBlobLocal.isLocalContainer(container)) {
+    const file = await pesquisasBlobLocal.ler(blobName);
+    return { buffer: file.buffer, contentType: file.contentType, filename: file.filename };
+  }
   return withBlobError(async () => {
     const client = svc.getContainerClient(container).getBlockBlobClient(blobName);
     const exists = await client.exists();
@@ -187,6 +208,9 @@ async function baixarBuffer(container, blobName) {
 }
 
 function urlBlobPublico(container, blobName) {
+  if (pesquisasBlobLocal.isLocalContainer(container)) {
+    return pesquisasBlobLocal.publicUrl(blobName);
+  }
   const baseUrl = svc.getContainerClient(container).getBlockBlobClient(blobName).url;
   return baseUrl;
 }

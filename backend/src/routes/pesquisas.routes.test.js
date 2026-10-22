@@ -31,4 +31,10 @@ describe('pesquisas.routes', () => {
     assert.ok(routes.some((r) => r.path === '/admin/carrossel' && r.methods.includes('get')));
     assert.ok(routes.some((r) => r.path === '/formularios/:id/clonar' && r.methods.includes('post')));
   });
+
+  it('registra GET /local-blob/:blob', () => {
+    const routes = listRoutes(router.stack);
+    const found = routes.find((r) => r.path === '/local-blob/:blob' && r.methods.includes('get'));
+    assert.ok(found, 'GET /local-blob/:blob deve existir no router');
+  });
 });
