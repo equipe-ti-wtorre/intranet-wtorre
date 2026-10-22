@@ -1,5 +1,6 @@
 const service = require('../services/pesquisas.service');
 const auditRepo = require('../repositories/auditLog.repository');
+const pesquisasBlobLocal = require('../services/pesquisas-blob-local');
 
 function auditMeta(req) {
   return {
@@ -432,6 +433,20 @@ async function excluirTemplate(req, res) {
   }
 }
 
+async function localBlob(req, res) {
+  if (!pesquisasBlobLocal.ativo()) {
+    return res.status(404).json({ mensagem: 'Rota não encontrada.' });
+  }
+  try {
+    const file = await pesquisasBlobLocal.ler(req.params.blob);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.send(file.buffer);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function uploadCapa(req, res) {
   try {
     res.json(await service.uploadCapa(req));
@@ -550,6 +565,7 @@ module.exports = {
   criarTemplate,
   atualizarTemplate,
   excluirTemplate,
+  localBlob,
   uploadCapa,
   removerCapa,
   publicoCarrossel,

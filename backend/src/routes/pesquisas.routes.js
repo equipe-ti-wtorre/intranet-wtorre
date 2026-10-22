@@ -25,6 +25,7 @@ function maybeUploadAnexosResposta(req, res, next) {
   });
 }
 
+router.get('/local-blob/:blob', rateLimitPesquisasPublico, controller.localBlob);
 router.get('/publico/carrossel', rateLimitPesquisasPublico, controller.publicoCarrossel);
 router.get('/publico/hub', rateLimitPesquisasPublico, controller.publicoHubMeta);
 router.post('/publico/hub/verificar', rateLimitPesquisasPublico, controller.publicoHubVerificar);

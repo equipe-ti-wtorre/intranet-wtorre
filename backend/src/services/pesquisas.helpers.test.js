@@ -148,3 +148,25 @@ describe('assertConvidadosIdentidade', () => {
     );
   });
 });
+
+const { toJsonBind } = require('../repositories/pesquisas.repository');
+
+describe('toJsonBind', () => {
+  it('stringify de array e objeto vira string utf8, não Buffer', () => {
+    const arr = toJsonBind([]);
+    const obj = toJsonBind({ a: 1 });
+    assert.equal(typeof arr, 'string');
+    assert.equal(arr, '[]');
+    assert.equal(typeof obj, 'string');
+    assert.equal(obj, '{"a":1}');
+    assert.equal(Buffer.isBuffer(arr), false);
+    assert.equal(Buffer.isBuffer(obj), false);
+    assert.equal(Buffer.byteLength(arr, 'utf8'), arr.length);
+  });
+
+  it('null e undefined não viram Buffer', () => {
+    assert.equal(toJsonBind(null), null);
+    assert.equal(toJsonBind(undefined), null);
+    assert.equal(Buffer.isBuffer(toJsonBind(null)), false);
+  });
+});
