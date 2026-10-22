@@ -8,7 +8,6 @@ import { PesquisasPergunta, PesquisasResponderPayload } from '../../models/pesqu
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
 import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
-import { destinoAposResponder } from './shared/pesquisas-public-url';
 
 @Component({
   selector: 'app-pesquisas-responder',
@@ -36,7 +35,6 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
 
   private lookupTimer: ReturnType<typeof setTimeout> | null = null;
   private lookupSeq = 0;
-  private destinoVoltar = '/inicio';
 
   readonly visiveis = computed(() => {
     const p = this.payload();
@@ -46,14 +44,6 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    const last = this.router.lastSuccessfulNavigation;
-    this.destinoVoltar = destinoAposResponder({
-      queryVoltar: this.route.snapshot.queryParamMap.get('voltar'),
-      lastUrl: last?.finalUrl ? this.router.serializeUrl(last.finalUrl) : null,
-      previousUrl: last?.previousNavigation?.finalUrl
-        ? this.router.serializeUrl(last.previousNavigation.finalUrl)
-        : null,
-    });
     const ref = this.route.snapshot.paramMap.get('id') || '';
     this.api.payloadResponder(ref).subscribe({
       next: (p) => {
@@ -123,7 +113,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   }
 
   private irOrigem(): void {
-    void this.router.navigateByUrl(this.destinoVoltar);
+    void this.router.navigateByUrl('/inicio');
   }
 
   private agendarLookup(id: number, valor: string): void {
