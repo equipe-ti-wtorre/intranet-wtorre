@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS pesquisas_respostas (
   formulario_id INT NOT NULL,
   usuario_id INT NOT NULL,
   enviado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_pesquisas_resposta_user (formulario_id, usuario_id),
+  KEY idx_pesquisas_resposta_user (formulario_id, usuario_id),
   KEY idx_pesquisas_respostas_user (usuario_id),
   CONSTRAINT fk_pesquisas_respostas_form
     FOREIGN KEY (formulario_id) REFERENCES pesquisas_formularios(id) ON DELETE CASCADE,

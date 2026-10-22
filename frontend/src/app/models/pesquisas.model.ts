@@ -68,6 +68,7 @@ export interface PesquisasListItem {
   janela?: 'antes' | 'depois' | null;
   prazoInicio?: string | null;
   prazoFim?: string | null;
+  multiplaResposta?: boolean;
 }
 
 export interface PesquisasLogica {
@@ -131,6 +132,7 @@ export interface PesquisasFormulario {
   secoes: boolean;
   logicaCondicional: boolean;
   anonimo: boolean;
+  multiplaResposta?: boolean;
   slug?: string | null;
   eventoTipo?: EventoTipo | null;
   eventoTipoOutro?: string | null;

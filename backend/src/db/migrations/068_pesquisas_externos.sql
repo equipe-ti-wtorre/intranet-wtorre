@@ -173,20 +173,9 @@ PREPARE stmt_add_fk FROM @sql_add_fk;
 EXECUTE stmt_add_fk;
 DEALLOCATE PREPARE stmt_add_fk;
 
-SET @uk_user2 := (
-  SELECT COUNT(*) FROM information_schema.STATISTICS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'pesquisas_respostas'
-    AND INDEX_NAME = 'uk_pesquisas_resposta_user'
-);
-SET @sql_uk2 := IF(
-    @uk_user2 = 0,
-    'ALTER TABLE pesquisas_respostas ADD UNIQUE KEY uk_pesquisas_resposta_user (formulario_id, usuario_id)',
-    'SELECT 1'
-);
-PREPARE stmt_uk2 FROM @sql_uk2;
-EXECUTE stmt_uk2;
-DEALLOCATE PREPARE stmt_uk2;
+-- Unicidade de resposta por usuário/convidado é aplicada no serviço
+-- (pesquisas.service permiteNovaResposta) quando multipla_resposta = 0.
+-- Não recriar UNIQUE: o migrate reexecuta este arquivo e 089 remove as UKs.
 
 SET @col_conv := (
   SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -219,17 +208,4 @@ PREPARE stmt_fk_conv FROM @sql_fk_conv;
 EXECUTE stmt_fk_conv;
 DEALLOCATE PREPARE stmt_fk_conv;
 
-SET @uk_conv := (
-  SELECT COUNT(*) FROM information_schema.STATISTICS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'pesquisas_respostas'
-    AND INDEX_NAME = 'uk_pesquisas_resposta_conv'
-);
-SET @sql_uk_conv := IF(
-    @uk_conv = 0,
-    'ALTER TABLE pesquisas_respostas ADD UNIQUE KEY uk_pesquisas_resposta_conv (formulario_id, convidado_id)',
-    'SELECT 1'
-);
-PREPARE stmt_uk_conv FROM @sql_uk_conv;
-EXECUTE stmt_uk_conv;
-DEALLOCATE PREPARE stmt_uk_conv;
+-- Sem UNIQUE em (formulario_id, convidado_id): ver 089_pesquisas_multipla_resposta.sql.

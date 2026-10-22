@@ -82,6 +82,7 @@ function mapFormulario(row) {
     secoes: !!row.secoes,
     logicaCondicional: !!row.logica_condicional,
     anonimo: !!row.anonimo,
+    multiplaResposta: !!row.multipla_resposta,
     slug: row.slug || null,
     eventoTipo: row.evento_tipo || null,
     eventoTipoOutro: row.evento_tipo_outro || null,
@@ -200,9 +201,12 @@ async function listFormulariosPendentes(user) {
            )
          )
        )
-       AND NOT EXISTS (
-         SELECT 1 FROM pesquisas_respostas r
-         WHERE r.formulario_id = f.id AND r.usuario_id = ?
+       AND (
+         f.multipla_resposta = 1
+         OR NOT EXISTS (
+           SELECT 1 FROM pesquisas_respostas r
+           WHERE r.formulario_id = f.id AND r.usuario_id = ?
+         )
        )
      ORDER BY f.prazo_fim IS NULL, f.prazo_fim ASC, f.criado_em DESC`,
     [nowSaoPauloSql(), nowSaoPauloSql(), user.departamento || '', user.id, user.id]
@@ -219,10 +223,14 @@ async function listFormulariosRespondidos(userId) {
        u.nome_completo AS criador_nome,
        (SELECT COUNT(*) FROM pesquisas_respostas r2 WHERE r2.formulario_id = f.id) AS total_respostas,
        r.enviado_em AS respondido_em
-     FROM pesquisas_respostas r
-     JOIN pesquisas_formularios f ON f.id = r.formulario_id
+     FROM pesquisas_formularios f
      JOIN usuarios u ON u.id = f.criador_id
-     WHERE r.usuario_id = ?
+     JOIN (
+       SELECT formulario_id, MAX(enviado_em) AS enviado_em
+       FROM pesquisas_respostas
+       WHERE usuario_id = ?
+       GROUP BY formulario_id
+     ) r ON r.formulario_id = f.id
      ORDER BY r.enviado_em DESC`,
     [userId]
   );
@@ -274,9 +282,12 @@ async function countFormulariosPendentes(user) {
            )
          )
        )
-       AND NOT EXISTS (
-         SELECT 1 FROM pesquisas_respostas r
-         WHERE r.formulario_id = f.id AND r.usuario_id = ?
+       AND (
+         f.multipla_resposta = 1
+         OR NOT EXISTS (
+           SELECT 1 FROM pesquisas_respostas r
+           WHERE r.formulario_id = f.id AND r.usuario_id = ?
+         )
        )`,
     [nowSaoPauloSql(), nowSaoPauloSql(), user.departamento || '', user.id, user.id]
   );
@@ -286,7 +297,7 @@ async function countFormulariosPendentes(user) {
 async function countFormulariosRespondidos(userId) {
   const pool = getPool();
   const [rows] = await pool.execute(
-    'SELECT COUNT(*) AS n FROM pesquisas_respostas WHERE usuario_id = ?',
+    'SELECT COUNT(DISTINCT formulario_id) AS n FROM pesquisas_respostas WHERE usuario_id = ?',
     [userId]
   );
   return Number(rows[0]?.n || 0);
@@ -376,10 +387,10 @@ async function insertFormulario(data) {
     `INSERT INTO pesquisas_formularios
       (criador_id, titulo, descricao, categoria, prazo, prazo_inicio, prazo_fim,
        publico_alvo, publico_departamento,
-       tipo, status, secoes, logica_condicional, anonimo,
+       tipo, status, secoes, logica_condicional, anonimo, multipla_resposta,
        slug, evento_tipo, evento_tipo_outro, evento_ativo, exigir_identidade, template_codigo, capa_layout,
        capa_foco_x, capa_foco_y)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.criadorId,
       data.titulo,
@@ -395,6 +406,7 @@ async function insertFormulario(data) {
       data.secoes ? 1 : 0,
       data.logicaCondicional ? 1 : 0,
       data.anonimo ? 1 : 0,
+      data.multiplaResposta ? 1 : 0,
       data.slug || null,
       data.eventoTipo || null,
       data.eventoTipoOutro || null,
@@ -415,7 +427,7 @@ async function updateFormularioMeta(id, data) {
     `UPDATE pesquisas_formularios SET
        titulo = ?, descricao = ?, categoria = ?, prazo = ?, prazo_inicio = ?, prazo_fim = ?,
        publico_alvo = ?, publico_departamento = ?, tipo = ?, status = ?,
-       secoes = ?, logica_condicional = ?, anonimo = ?,
+       secoes = ?, logica_condicional = ?, anonimo = ?, multipla_resposta = ?,
        evento_tipo = ?, evento_tipo_outro = ?, evento_ativo = ?, exigir_identidade = ?,
        template_codigo = ?, capa_layout = ?, capa_foco_x = ?, capa_foco_y = ?
      WHERE id = ?`,
@@ -433,6 +445,7 @@ async function updateFormularioMeta(id, data) {
       data.secoes ? 1 : 0,
       data.logicaCondicional ? 1 : 0,
       data.anonimo ? 1 : 0,
+      data.multiplaResposta ? 1 : 0,
       data.eventoTipo || null,
       data.eventoTipoOutro || null,
       data.eventoAtivo === false ? 0 : 1,

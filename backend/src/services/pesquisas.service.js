@@ -355,6 +355,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
   const secoes = !!body.secoes;
   const logicaCondicional = !!body.logicaCondicional;
   const anonimo = !!body.anonimo;
+  const multiplaResposta = !!body.multiplaResposta;
   const perguntas = normalizePerguntas(body.perguntas, {
     logicaOn: logicaCondicional,
     secoesOn: secoes,
@@ -385,6 +386,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
     secoes,
     logicaCondicional,
     anonimo,
+    multiplaResposta,
     perguntas,
     eventoTipo,
     eventoTipoOutro,
@@ -580,6 +582,10 @@ function maskDocumento(digits) {
 
 function guestsHaveFreshDocumento(raw) {
   return Array.isArray(raw) && raw.some((g) => isDocumentoValido(digitsCpf(g?.cpf)));
+}
+
+function permiteNovaResposta(form, ja) {
+  return !ja || !!form.multiplaResposta;
 }
 
 function assertConvidadosIdentidade({ publicoAlvo, exigirIdentidade, count, publicar }) {
@@ -785,6 +791,7 @@ function toFormListItem(form, lista) {
     janela: janelaFora(form),
     prazoInicio: form.prazoInicio || null,
     prazoFim: form.prazoFim || null,
+    multiplaResposta: !!form.multiplaResposta,
   };
 }
 
@@ -1151,6 +1158,7 @@ async function clonarFormulario(req) {
     secoes: origem.secoes,
     logicaCondicional: origem.logicaCondicional,
     anonimo: origem.anonimo,
+    multiplaResposta: origem.multiplaResposta,
     slug,
     eventoTipo: origem.eventoTipo,
     eventoTipoOutro: origem.eventoTipoOutro,
@@ -1368,7 +1376,9 @@ async function payloadResponder(req) {
   assertJanelaAberta(form);
   await assertElegivelIntranet(form, req.user);
   const ja = await repo.findRespostaDoUsuario(id, req.user.id);
-  if (ja) throw httpError(409, 'Você já respondeu este formulário.');
+  if (!permiteNovaResposta(form, ja)) {
+    throw httpError(409, 'Você já respondeu este formulário.');
+  }
   const perguntas = await repo.listPerguntas(id);
   const visual = await decorateForm(form);
   return {
@@ -2393,7 +2403,9 @@ async function publicoFormulario(req) {
   if (form.exigirIdentidade) {
     const guest = await resolveGuestDoForm(form, req.guest);
     const ja = await repo.findRespostaDoConvidado(form.id, guest.id);
-    if (ja) throw httpError(409, 'Você já respondeu este formulário.');
+    if (!permiteNovaResposta(form, ja)) {
+      throw httpError(409, 'Você já respondeu este formulário.');
+    }
   }
   const perguntas = await repo.listPerguntas(form.id);
   const visual = await decorateForm(form);
@@ -2441,7 +2453,9 @@ async function publicoResponder(req) {
     const guest = await resolveGuestDoForm(form, req.guest);
     convidadoId = guest.id;
     const ja = await repo.findRespostaDoConvidado(form.id, convidadoId);
-    if (ja) throw httpError(409, 'Você já respondeu este formulário.');
+    if (!permiteNovaResposta(form, ja)) {
+      throw httpError(409, 'Você já respondeu este formulário.');
+    }
   }
   const perguntas = await repo.listPerguntas(form.id);
   const anexos = await processarAnexosResposta(req, perguntas);
@@ -2799,6 +2813,7 @@ module.exports = {
   refFormularioFromRaw,
   buffersParaZip,
   assertConvidadosIdentidade,
+  permiteNovaResposta,
   listAdminErros,
   listAdminFormularios,
   listAdminRequisicoes,

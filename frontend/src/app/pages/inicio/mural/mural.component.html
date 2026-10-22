@@ -19,7 +19,7 @@
         } @else {
           @for (n of noticias(); track n.trackId) {
             @if (n.link) {
-              <a class="news-item news-link" [href]="n.link" (click)="abrirLink($event, n.link)">
+              <a class="news-item news-link" [href]="hrefNoticia(n.link)" (click)="abrirLink($event, n.link)">
                 <div class="date">
                   <div class="d">{{ n.dia }}</div>
                   <div class="m">{{ n.mes }}</div>

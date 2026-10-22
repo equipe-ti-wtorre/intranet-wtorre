@@ -84,6 +84,10 @@ export class PesquisasListaComponent implements OnInit, OnDestroy {
       return;
     }
     if (t === 'form-answered') {
+      if (item.multiplaResposta) {
+        void this.router.navigate(['/pesquisas/formulario', item.id, 'responder']);
+        return;
+      }
       this.alertas.sucesso('Você já respondeu este formulário.');
       return;
     }
