@@ -152,6 +152,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly secoes = signal(false);
   readonly logica = signal(false);
   readonly anonimo = signal(false);
+  readonly multiplaResposta = signal(false);
   readonly perguntas = signal<QDraft[]>([]);
   readonly departamentos = signal<string[]>([]);
   readonly eventoTipo = signal<EventoTipo>('show');
@@ -265,6 +266,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.secoes.set(!!form.secoes);
           this.logica.set(!!form.logicaCondicional);
           this.anonimo.set(!!form.anonimo);
+          this.multiplaResposta.set(!!form.multiplaResposta);
           this.slug.set(form.slug || null);
           this.eventoTipo.set(form.eventoTipo || 'show');
           this.eventoTipoOutro.set(form.eventoTipoOutro || '');
@@ -1143,6 +1145,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       secoes: this.secoes(),
       logicaCondicional: this.logica(),
       anonimo: this.anonimo(),
+      multiplaResposta: this.multiplaResposta(),
       eventoTipo: this.eventoTipo(),
       eventoTipoOutro: this.eventoTipoOutro().trim(),
       eventoAtivo: this.eventoAtivo(),

@@ -11,6 +11,7 @@ const {
   refFormularioFromRaw,
   buffersParaZip,
   assertConvidadosIdentidade,
+  permiteNovaResposta,
 } = require('./pesquisas.service');
 
 describe('sanitizeErroMensagem', () => {
@@ -168,5 +169,21 @@ describe('toJsonBind', () => {
     assert.equal(toJsonBind(null), null);
     assert.equal(toJsonBind(undefined), null);
     assert.equal(Buffer.isBuffer(toJsonBind(null)), false);
+  });
+});
+
+describe('permiteNovaResposta', () => {
+  it('bloqueia segunda resposta quando a flag está desligada', () => {
+    assert.equal(permiteNovaResposta({ multiplaResposta: false }, { id: 1 }), false);
+    assert.equal(permiteNovaResposta({}, { id: 1 }), false);
+  });
+
+  it('libera segunda resposta quando a flag está ligada', () => {
+    assert.equal(permiteNovaResposta({ multiplaResposta: true }, { id: 1 }), true);
+  });
+
+  it('sempre libera a primeira resposta', () => {
+    assert.equal(permiteNovaResposta({ multiplaResposta: false }, null), true);
+    assert.equal(permiteNovaResposta({ multiplaResposta: true }, null), true);
   });
 });
