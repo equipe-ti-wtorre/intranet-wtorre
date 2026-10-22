@@ -29,22 +29,37 @@ export function pesquisasResultadosPath(item: {
 const VOLTAR_PADRAO = '/inicio';
 const RESPONDER_PATH_RE = /\/pesquisas\/formulario\/[^/]+\/responder\/?$/i;
 
-/** Path interno relativo; rejeita open-redirect e a própria tela de responder. */
+/** Path interno relativo; rejeita open-redirect, o hub de Formulários e a tela de responder. */
 export function voltarPathSeguro(raw: string | null | undefined): string | null {
   if (raw == null) return null;
   const s = String(raw).trim();
   if (!s.startsWith('/') || s.startsWith('//') || s.includes('://')) return null;
   if (s.length > 500 || /[\n\r\\]/.test(s)) return null;
-  const pathOnly = s.split('?')[0].split('#')[0];
+  const pathOnly = (s.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/');
   if (RESPONDER_PATH_RE.test(pathOnly)) return null;
+  if (pathOnly === '/pesquisas') return null;
   return s;
 }
 
 export function destinoAposResponder(opts: {
   queryVoltar?: string | null;
+  lastUrl?: string | null;
   previousUrl?: string | null;
 }): string {
-  return voltarPathSeguro(opts.queryVoltar) || voltarPathSeguro(opts.previousUrl) || VOLTAR_PADRAO;
+  return (
+    voltarPathSeguro(opts.queryVoltar) ||
+    voltarPathSeguro(opts.lastUrl) ||
+    voltarPathSeguro(opts.previousUrl) ||
+    VOLTAR_PADRAO
+  );
+}
+
+/** Card do mural: volta ao início da intranet depois de enviar. */
+export function pesquisasLinkResponderComVoltar(link: string): string {
+  const path = link.split('?')[0].split('#')[0];
+  if (!RESPONDER_PATH_RE.test(path)) return link;
+  if (/[?&]voltar=/.test(link)) return link;
+  return link.includes('?') ? `${link}&voltar=/inicio` : `${link}?voltar=/inicio`;
 }
 
 /** `/feedback` (portal genérico) ou `/MNFGufAyFeZlRFz2OIvgqQ` (token do form). */

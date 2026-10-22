@@ -46,10 +46,13 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    const prev = this.router.lastSuccessfulNavigation?.previousNavigation?.finalUrl;
+    const last = this.router.lastSuccessfulNavigation;
     this.destinoVoltar = destinoAposResponder({
       queryVoltar: this.route.snapshot.queryParamMap.get('voltar'),
-      previousUrl: prev ? this.router.serializeUrl(prev) : null,
+      lastUrl: last?.finalUrl ? this.router.serializeUrl(last.finalUrl) : null,
+      previousUrl: last?.previousNavigation?.finalUrl
+        ? this.router.serializeUrl(last.previousNavigation.finalUrl)
+        : null,
     });
     const ref = this.route.snapshot.paramMap.get('id') || '';
     this.api.payloadResponder(ref).subscribe({

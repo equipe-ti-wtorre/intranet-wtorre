@@ -9,6 +9,7 @@ import { EventosService } from '../../../services/eventos.service';
 import { MuralNoticiaItem } from '../../../models/mural.model';
 import { Evento } from '../../../models/evento.model';
 import { mesclarNoticiasMural } from '../../../utils/mural-noticias.util';
+import { pesquisasLinkResponderComVoltar } from '../../pesquisas/shared/pesquisas-public-url';
 
 @Component({
   selector: 'app-mural',
@@ -92,10 +93,14 @@ export class MuralComponent implements OnInit {
     return Boolean(ev.imagemUrl) && !this.imagemFalhou().has(ev.titulo);
   }
 
+  hrefNoticia(link: string): string {
+    return pesquisasLinkResponderComVoltar(link);
+  }
+
   abrirLink(ev: MouseEvent, link: string): void {
     if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     ev.preventDefault();
-    void this.router.navigateByUrl(link);
+    void this.router.navigateByUrl(pesquisasLinkResponderComVoltar(link));
   }
 
   onImagemErro(ev: Evento): void {
