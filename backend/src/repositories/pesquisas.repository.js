@@ -10,6 +10,12 @@ function parseJson(value, fallback) {
   }
 }
 
+function toJsonBind(value) {
+  if (value == null) return null;
+  const s = typeof value === 'string' ? value : JSON.stringify(value);
+  return String(s);
+}
+
 function focoCapa(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 50;
@@ -451,16 +457,16 @@ async function replacePerguntas(formularioId, perguntas) {
         `INSERT INTO pesquisas_perguntas
           (formulario_id, ordem, texto, tipo, obrigatoria, opcoes, secao_titulo, logica,
            bloco_tipo, ajuda, nova_linha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, CAST(CONVERT(? USING utf8mb4) AS JSON), ?, CAST(CONVERT(? USING utf8mb4) AS JSON), ?, ?, ?)`,
         [
           formularioId,
           p.ordem,
           p.texto,
           p.tipo,
           p.obrigatoria ? 1 : 0,
-          p.opcoes ? JSON.stringify(p.opcoes) : null,
+          toJsonBind(p.opcoes),
           p.secaoTitulo || null,
-          p.logica ? JSON.stringify(p.logica) : null,
+          toJsonBind(p.logica),
           p.blocoTipo || 'pergunta',
           p.ajuda || null,
           p.novaLinha === false ? 0 : 1,
@@ -1440,13 +1446,13 @@ async function replaceFormularioBase(formularioId, rows) {
       await conn.execute(
         `INSERT INTO pesquisas_formulario_base
           (formulario_id, chave_doc, chave_email, chave_rg, dados)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, CAST(CONVERT(? USING utf8mb4) AS JSON))`,
         [
           formularioId,
           row.chaveDoc || null,
           row.chaveEmail || null,
           row.chaveRg || null,
-          JSON.stringify(row.dados),
+          toJsonBind(row.dados ?? {}),
         ]
       );
     }
@@ -1549,6 +1555,7 @@ async function findRespostaDoConvidado(formularioId, convidadoId) {
 }
 
 module.exports = {
+  toJsonBind,
   findFormularioById,
   listPerguntas,
   listFormulariosPendentes,
