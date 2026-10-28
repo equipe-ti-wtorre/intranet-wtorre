@@ -30,7 +30,13 @@ const MSAL_TID = 'taskhub_msal_tid';
 const MSAL_AUTHORITY = 'https://login.microsoftonline.com/common';
 
 function read<T>(key: string): T | null {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
+  try { const v = sessionStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function dropAuthKeys() {
+  [TOKEN, REFRESH, USER].forEach(k => {
+    try { sessionStorage.removeItem(k); } catch { /* sessão privada */ }
+    try { localStorage.removeItem(k); } catch { /* sessão privada */ }
+  });
 }
 
 @Injectable({ providedIn: 'root' })
@@ -48,21 +54,22 @@ export class AuthService {
   readonly canManageUsers = computed(() => this._user()?.can_manage_users ?? null);
 
   constructor(private http: HttpClient, private router: Router) {
-    // Limpa chaves da versão 1.x.
-    ['taskhub_token_v1', 'devhub_token', 'devhub_user', 'planner_workspace_id'].forEach(k => localStorage.removeItem(k));
+    // Limpa chaves da versão 1.x e sessão antiga no localStorage (agora a sessão vive na aba).
+    ['taskhub_token_v1', 'devhub_token', 'devhub_user', 'planner_workspace_id', TOKEN, REFRESH, USER]
+      .forEach(k => { try { localStorage.removeItem(k); } catch { /* sessão privada */ } });
     if (this._token()) this.loadMe().subscribe({ error: () => {} });
   }
 
   private store(s: Session) {
-    localStorage.setItem(TOKEN, JSON.stringify(s.token));
-    localStorage.setItem(REFRESH, JSON.stringify(s.refresh_token));
-    localStorage.setItem(USER, JSON.stringify(s.user));
+    sessionStorage.setItem(TOKEN, JSON.stringify(s.token));
+    sessionStorage.setItem(REFRESH, JSON.stringify(s.refresh_token));
+    sessionStorage.setItem(USER, JSON.stringify(s.user));
     this._token.set(s.token);
     this._user.set(s.user);
   }
 
   setUser(u: User) {
-    localStorage.setItem(USER, JSON.stringify(u));
+    sessionStorage.setItem(USER, JSON.stringify(u));
     this._user.set(u);
   }
 
@@ -228,7 +235,7 @@ export class AuthService {
     if (refresh_token) this.http.post(`${environment.apiUrl}/auth/logout`, { refresh_token }).subscribe({ error: () => {} });
     const app = this.msalApp;
     const account = app?.getAllAccounts()[0];
-    [TOKEN, REFRESH, USER].forEach(k => localStorage.removeItem(k));
+    dropAuthKeys();
     this._token.set(null);
     this._user.set(null);
     if (app && account) {
@@ -243,7 +250,7 @@ export class AuthService {
   }
 
   clear() {
-    [TOKEN, REFRESH, USER].forEach(k => localStorage.removeItem(k));
+    dropAuthKeys();
     this.clearMsalCache();
     this._token.set(null);
     this._user.set(null);
