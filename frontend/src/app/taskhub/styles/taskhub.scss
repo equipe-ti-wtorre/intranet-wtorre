@@ -868,6 +868,9 @@ div.td-kpi { cursor: default; }
   .day-grid, .dash-grid, .notes-split, .dl-grid, .pd-grid, .settings-section, .dl-close-kpis { grid-template-columns: 1fr; }
   .wk-grid, .project-list { grid-template-columns: 1fr; }
   .notes-page { overflow: auto; }
+  .notes-page .page-head { flex-wrap: wrap; align-items: flex-start; }
+  .notes-page .page-head .actions { width: 100%; margin-left: 0; }
+  .notes-page .notes-search { flex: 1; width: auto; min-width: 0; }
   .note-sheet { min-height: 420px; }
   .day-grid .plan-col { order: -1; }
   .trow .meta { flex-shrink: 1; min-width: 0; gap: 8px; }
@@ -919,9 +922,12 @@ div.td-kpi { cursor: default; }
 .ruler-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 
 /* ---------- Notas e lembretes (Individual) ---------- */
-.notes-page { overflow: hidden; }
-.notes-search { width: min(220px, 100%); }
-.notes-split { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+.notes-page { overflow: hidden; min-width: 0; }
+.notes-page .page-head { flex-wrap: nowrap; align-items: flex-end; min-width: 0; }
+.notes-page .page-head > div:first-child { min-width: 0; flex: 1; }
+.notes-page .page-head .actions { flex-wrap: nowrap; width: auto; margin-left: auto; min-width: 0; }
+.notes-search { width: min(220px, 100%); min-width: 0; }
+.notes-split { flex: 1; min-height: 0; min-width: 0; display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
 .notes-list { min-height: 0; overflow: auto; padding-right: 4px; }
 .note-empty { text-align: center; padding: 48px 12px; }
 .note-empty b { display: block; color: var(--tx); margin-bottom: 6px; }
@@ -943,7 +949,7 @@ div.td-kpi { cursor: default; }
 .note-item .preview { display: block; color: var(--mu); font-size: 13px; margin-top: 2px; }
 .note-item .when { display: block; color: var(--mu2); font-size: 12px; margin-top: 2px; }
 .note-sheet {
-  min-height: 0; overflow: auto; background: var(--panel); border-radius: 16px;
+  min-height: 0; min-width: 0; overflow: auto; background: var(--panel); border-radius: 16px;
   border: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 18px 18px;
 }
 .note-blank { margin: auto; color: var(--mu); font-size: 14px; }
@@ -972,7 +978,7 @@ div.td-kpi { cursor: default; }
   color: var(--tx); font-size: 15px; line-height: 1.55; outline: none; padding: 4px 0 12px;
 }
 
-.reminders-page { max-width: 980px; }
+.reminders-page { min-width: 0; }
 .btn.on { border-color: var(--act); color: var(--act); }
 .rem-form {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
