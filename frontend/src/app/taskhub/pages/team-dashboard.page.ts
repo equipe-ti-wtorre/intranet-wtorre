@@ -1,158 +1,301 @@
-import { Component, OnChanges, computed, inject, input, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService, errorMessage } from '../core/api.service';
+import { ToastService } from '../core/toast.service';
 import { UiService } from '../core/ui.service';
-import { TeamDashboard } from '../core/models';
+import { Task, TeamDashboard } from '../core/models';
 import { minutesLabel, relativeTime } from '../core/format';
-import { AvatarComponent, EmptyComponent, TaskRowComponent } from '../shared/ui';
+import { AvatarComponent, IconComponent, TaskRowComponent } from '../shared/ui';
+import { TEAM_SLIDES, TeamSlideKey, buildTeamDeck, defaultTeamSlides } from '../presentation/team-deck';
+import { DeckSlide } from '../presentation/day-deck';
+import { DeckViewerComponent } from '../presentation/deck-viewer.component';
+import { downloadDeckPptx } from '../presentation/deck-pptx';
+
+const KIND_LABEL = { team: 'Equipe', sector: 'Setor' } as const;
+type DashKind = 'team' | 'sector';
 
 @Component({
   selector: 'app-team-dashboard',
   standalone: true,
-  imports: [RouterLink, AvatarComponent, TaskRowComponent, EmptyComponent],
+  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent],
   template: `
-    <div class="page">
-      @if (d(); as d) {
+    @if (d(); as d) {
+      <div class="page td-page">
         <div class="page-head">
-          <div><h1>{{ kind() === 'sector' ? 'Setor' : 'Equipe' }} · {{ d.team.name }}</h1><div class="sub">O trabalho da equipe que foi compartilhado com você. Atualizado {{ rel(d.generated_at) }}; clique em um número para ver as tarefas.</div></div>
-          <div class="actions"><button class="btn btn-sm" (click)="load()">Atualizar</button>
-            @if (kind() === 'team') { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes']" [queryParams]="{ equipe: d.team.id }">Membros da equipe</a> }</div>
-        </div>
-
-        <div class="kpis">
-          <button class="kpi" (click)="go({ status: 'open' })"><div class="v">{{ d.kpis.open }}</div><div class="l">Abertas</div><div class="d">{{ d.kpis.created_week }} criadas nesta semana</div></button>
-          <button class="kpi" (click)="go({ status: 'doing' })"><div class="v">{{ d.kpis.doing }}</div><div class="l">Em andamento</div></button>
-          <button class="kpi" [class.bad]="d.kpis.blocked > 0" (click)="go({ status: 'blocked' })"><div class="v">{{ d.kpis.blocked }}</div><div class="l">Bloqueadas</div></button>
-          <button class="kpi" [class.bad]="d.kpis.overdue > 0" (click)="go({ due: 'overdue' })"><div class="v">{{ d.kpis.overdue }}</div><div class="l">Atrasadas</div></button>
-          <button class="kpi" (click)="go({ status: 'done' })"><div class="v">{{ d.kpis.done_week }}</div><div class="l">Concluídas na semana</div>
-            <div class="d" [class.up]="delta() > 0" [class.down]="delta() < 0">{{ deltaText() }}</div></button>
-          <div class="kpi"><div class="v">{{ onTime() }}</div><div class="l">Pontualidade (30 dias)</div>
-            <div class="d">{{ d.kpis.lead_time_days != null ? 'Tempo médio: ' + leadTime() : 'Sem conclusões no período' }}</div></div>
-        </div>
-
-        <div class="dash-grid">
-          <section class="full">
-            <div class="block-title">Pessoas</div>
-            <div class="block-sub">Carga = horas estimadas de tudo o que está com a pessoa (compartilhado ou não) com prazo até 7 dias ou sem prazo, sobre a capacidade semanal. Os números de tarefas mostram só o que foi compartilhado com você.</div>
-            <div style="overflow-x:auto">
-              <table class="table">
-                <thead><tr><th>Pessoa</th><th class="num">Abertas</th><th class="num">Em andamento</th><th class="num">Bloqueadas</th><th class="num">Atrasadas</th><th class="num">Concluídas 7 d</th><th class="num" title="Tarefas de projetos de outros setores">Para outros setores</th><th>Carga da semana</th></tr></thead>
-                <tbody>
-                  @for (p of d.people; track p.id) {
-                    <tr class="click" (click)="person(p.id)">
-                      <td><div class="row"><app-avatar [person]="p" /><span>{{ p.name }}</span>
-                        @if (p.is_manager) { <span class="muted small">gestor</span> }
-                        @if (p.away_until && p.away_until >= today) { <span class="small" style="color:var(--warn)">ausente</span> }</div></td>
-                      <td class="num">{{ p.open }}</td><td class="num">{{ p.doing }}</td>
-                      <td class="num" [class.bad]="p.blocked > 0">{{ p.blocked }}</td>
-                      <td class="num" [class.bad]="p.overdue > 0">{{ p.overdue }}</td>
-                      <td class="num">{{ p.done_7d }}</td>
-                      <td class="num">{{ p.other_teams || '' }}</td>
-                      <td><span class="loadbar"><i [class.warn]="p.load_pct > 85" [class.over]="p.load_pct > 100" [style.width.%]="min(p.load_pct, 100)"></i></span>
-                        <span class="small muted" style="margin-left:8px">{{ p.load_pct }}% · {{ minutes(p.load_week_min) }}</span>
-                        @if (p.hidden_load_min) { <div class="small muted" title="Tarefas que não foram compartilhadas com o gestor: só as horas entram aqui">{{ minutes(p.hidden_load_min) }} em itens não compartilhados</div> }</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
+          <div>
+            <div class="crumbs">
+              <a routerLink="/ti/taskhub">Início</a>
+              <span>›</span>
+              <a routerLink="/ti/taskhub/equipes">{{ kindLabel() }}s</a>
             </div>
-          </section>
+            <h1 class="td-title">
+              <span class="td-dot" [style.background]="d.team.color"></span>
+              {{ d.team.name }}
+            </h1>
+            <p class="muted">{{ kindLabel() }} · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</p>
+          </div>
+          <div class="actions">
+            <button class="btn-action-primary btn-sm" (click)="openPresent()">Apresentar</button>
+            <button class="btn-action-secondary btn-sm" [disabled]="loading()" (click)="load()">{{ loading() ? 'Atualizando…' : 'Atualizar' }}</button>
+            @if (kind() === 'team') {
+              <a class="btn-action-secondary btn-sm" [routerLink]="['/ti/taskhub/equipes']" [queryParams]="{ equipe: d.team.id }">Membros da equipe</a>
+            }
+          </div>
+        </div>
 
-          <section>
-            <div class="block-title">O que destravar</div>
-            <div class="block-sub">Tarefas bloqueadas, das mais antigas para as mais recentes.</div>
-            <div class="tlist">
-              @for (t of d.blocked; track t.id) {
-                <app-task-row [task]="t" [showStatus]="false" (open)="ui.openTask($event.id)" />
-                @if (t.blocked_reason) { <div class="small" style="padding:0 8px 8px 36px;color:var(--bad)">{{ t.blocked_reason }} · bloqueada {{ rel(t.blocked_since) }}</div> }
+        <div class="td-kpis">
+          <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'open' })">
+            <b>{{ d.kpis.open }}</b>
+            <span><span class="l">Abertas</span>
+              <small>{{ d.kpis.created_week }} {{ d.kpis.created_week === 1 ? 'criada' : 'criadas' }} nesta semana</small></span>
+          </button>
+          <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'doing' })">
+            <b>{{ d.kpis.doing }}</b>
+            <span><span class="l">Em andamento</span><small>sendo feitas agora</small></span>
+          </button>
+          <button class="td-kpi" [class.td-kpi--bad]="d.kpis.overdue" type="button" (click)="goTasks({ status: 'open', due: 'overdue' })">
+            <b>{{ d.kpis.overdue }}</b>
+            <span><span class="l">Atrasadas</span><small>{{ d.kpis.overdue ? 'passaram do prazo' : 'tudo em dia' }}</small></span>
+          </button>
+          <button class="td-kpi" [class.td-kpi--warn]="d.kpis.blocked" type="button" (click)="goTasks({ status: 'blocked' })">
+            <b>{{ d.kpis.blocked }}</b>
+            <span><span class="l">Bloqueadas</span><small>{{ d.kpis.blocked ? 'precisam de ajuda' : 'nada travado' }}</small></span>
+          </button>
+          <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'done' })">
+            <b>{{ d.kpis.done_week }}</b>
+            <span><span class="l">Concluídas na semana</span><small>semana passada: {{ d.kpis.done_prev_week }}</small></span>
+          </button>
+          <div class="td-kpi" [class.td-kpi--ok]="(onTimePct() ?? -1) >= 80" [class.td-kpi--warn]="(onTimePct() ?? 100) < 80">
+            <b [class.td-kpi-txt]="onTimePct() === null">{{ onTime() }}</b>
+            <span><span class="l">Pontualidade</span>
+              <small>{{ onTimePct() === null ? 'ainda sem entregas com prazo' : 'entregas com prazo em 30 dias' }}</small></span>
+          </div>
+        </div>
+
+        @if (kind() === 'sector' && d.teams?.length) {
+          <div class="td-teams">
+            @for (tm of d.teams; track tm.id) {
+              <a class="td-team" [routerLink]="['/ti/taskhub/equipes', tm.id, 'painel']">
+                <b><span class="td-dot" [style.background]="tm.color"></span>{{ tm.name }}</b>
+                <small>{{ tm.members_count }} {{ tm.members_count === 1 ? 'pessoa' : 'pessoas' }} · {{ tm.open }} abertas</small>
+                @if (tm.overdue) { <span class="wk-late">{{ tm.overdue }} atrasadas</span> }
+              </a>
+            }
+          </div>
+        }
+
+        <div class="td-card td-people">
+          <div class="td-card-head">
+            <h2 class="td-card-title">Pessoas</h2>
+            <span class="td-count">{{ d.people.length }}</span>
+          </div>
+          <p class="muted">Carga da semana: tarefas abertas com prazo até sexta, ou sem prazo. 100% = 5 dias no ritmo de cada um.</p>
+          <table class="table">
+            <thead><tr><th>Pessoa</th><th>Abertas</th><th>Atrasadas</th><th>Concluídas 7 d</th><th>Carga da semana</th></tr></thead>
+            <tbody>
+              @for (p of d.people; track p.id) {
+                <tr class="click" (click)="goPerson(p.id)">
+                  <td>
+                    <div class="who">
+                      <app-avatar [person]="p" />
+                      <div>
+                        <div>{{ p.name }}@if (p.is_manager) { <span class="td-badge">Gestor</span> }</div>
+                        <div class="muted">{{ p.job_title || '—' }}@if (p.away_until) { · ausente }</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ p.open }}</td>
+                  <td [class.wk-late]="p.overdue">{{ p.overdue || '—' }}</td>
+                  <td>{{ p.done_7d }}</td>
+                  <td>
+                    <div class="td-load">
+                      <span class="loadbar"><i [class.warn]="p.load_pct > 80" [class.over]="p.load_pct > 100" [style.width.%]="Math.min(p.load_pct, 100)"></i></span>
+                      <b [class.wk-late]="p.load_pct > 100">{{ p.load_pct }}%</b>
+                      <span class="muted">{{ minutesLabel(p.load_week_min) }}</span>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="td-grid">
+          <div class="td-card">
+            <div class="td-card-head">
+              <h2 class="td-card-title">Atrasadas</h2>
+              <span class="td-count" [class.td-count--bad]="d.overdue.length">{{ d.overdue.length }}</span>
+              <span class="td-info" title="Passaram do prazo e continuam abertas."><app-icon name="info" [size]="14" /></span>
+            </div>
+            @for (t of d.overdue; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
+            @if (!d.overdue.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Nenhuma atrasada.</div> }
+          </div>
+          <div class="td-card">
+            <div class="td-card-head">
+              <h2 class="td-card-title">Bloqueadas</h2>
+              <span class="td-count">{{ d.blocked.length }}</span>
+              <span class="td-info" title="Travadas: alguém precisa desbloquear."><app-icon name="info" [size]="14" /></span>
+            </div>
+            @for (t of d.blocked; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
+            @if (!d.blocked.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Nada bloqueado.</div> }
+          </div>
+          <div class="td-card">
+            <div class="td-card-head">
+              <h2 class="td-card-title">Prazos da semana</h2>
+              <span class="td-count">{{ d.due_soon.length }}</span>
+              <span class="td-info" title="Vencem nos próximos 7 dias."><app-icon name="info" [size]="14" /></span>
+            </div>
+            @for (t of d.due_soon; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
+            @if (!d.due_soon.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Sem prazos na semana.</div> }
+          </div>
+          <div class="td-card">
+            <div class="td-card-head">
+              <h2 class="td-card-title">Para triagem</h2>
+              <span class="td-count">{{ d.triage.length }}</span>
+              <span class="td-info" title="Abertas sem prazo. Combinar uma data."><app-icon name="info" [size]="14" /></span>
+            </div>
+            @for (t of d.triage; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
+            @if (!d.triage.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Tudo com prazo.</div> }
+          </div>
+          @if (d.waiting_other.length) {
+            <div class="td-card full">
+              <div class="td-card-head">
+                <h2 class="td-card-title">Aguardando outros setores</h2>
+                <span class="td-count">{{ d.waiting_other.length }}</span>
+                <span class="td-info" title="Etapa atual é de alguém de outro setor."><app-icon name="info" [size]="14" /></span>
+              </div>
+              @for (t of d.waiting_other; track t.id) {
+                <app-task-row [task]="t" (open)="openTask($event)" />
+                <p class="td-wait muted">espera {{ t.waiting_on.map(w => w.name).join(', ') }}</p>
               }
             </div>
-            @if (!d.blocked.length) { <app-empty title="Nada bloqueado" text="" /> }
-          </section>
-
-          @if (d.waiting_other.length) {
-            <section class="full">
-              <div class="block-title">Aguardando outros setores</div>
-              <div class="block-sub">Tarefas da equipe que dependem de alguém de fora, na tarefa inteira ou em uma etapa.</div>
-              <div class="tlist">
-                @for (t of d.waiting_other; track t.id) {
-                  <app-task-row [task]="t" [showStatus]="false" (open)="ui.openTask($event.id)" />
-                  <div class="small muted" style="padding:0 8px 8px 36px">
-                    @for (w of t.waiting_on; track $index) {
-                      <span>{{ w.name }} ({{ w.team }}){{ w.step ? ': ' + w.step : ': tarefa inteira' }}{{ $last ? '' : ' · ' }}</span>
-                    }
-                  </div>
-                }
-              </div>
-            </section>
           }
-
-          <section>
-            <div class="block-title">Prazos dos próximos 7 dias</div>
-            <div class="block-sub">O que pode estourar.</div>
-            <div class="tlist">@for (t of d.due_soon; track t.id) { <app-task-row [task]="t" [showStatus]="false" (open)="ui.openTask($event.id)" /> }</div>
-            @if (!d.due_soon.length) { <app-empty title="Sem prazos na semana" text="" /> }
-          </section>
-
-          <section>
-            <div class="block-title">Atrasadas</div>
-            <div class="tlist">@for (t of d.overdue; track t.id) { <app-task-row [task]="t" [showStatus]="false" (open)="ui.openTask($event.id)" /> }</div>
-            @if (!d.overdue.length) { <app-empty title="Nenhuma atrasada" text="" /> }
-          </section>
-
-          <section>
-            <div class="block-title">Para triagem</div>
-            <div class="block-sub">Tarefas abertas da equipe sem prazo definido.</div>
-            <div class="tlist">@for (t of d.triage; track t.id) { <app-task-row [task]="t" [showStatus]="false" (open)="ui.openTask($event.id)" /> }</div>
-            @if (!d.triage.length) { <app-empty title="Tudo bem definido" text="" /> }
-          </section>
         </div>
-      } @else if (error()) { <div class="error-text">{{ error() }}</div> }
-      @else { <div class="muted">Carregando painel…</div> }
-    </div>
+      </div>
+    } @else if (loading()) {
+      <div class="empty"><p>Carregando o painel…</p></div>
+    }
+
+    @if (choosing()) {
+      <div class="modal-scrim" (click)="choosing.set(false)">
+        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentar o painel">
+          <div class="modal-head">Apresentar<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.team?.name }} · escolha os slides</div></div>
+          <div class="modal-body">
+            <div class="row" style="justify-content: space-between">
+              <span class="form-label">Slides ({{ picked().length }} de {{ slideOptions().length }})</span>
+              <span class="row small"><button type="button" class="link-btn" (click)="picked.set(slideOptions().map(s => s.key))">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
+            </div>
+            <div class="pd-pick">
+              @for (s of slideOptions(); track s.key) {
+                <label class="check-label" style="align-items: flex-start">
+                  <input type="checkbox" style="margin-top: 3px" [checked]="picked().includes(s.key)" (change)="togglePick(s.key)" />
+                  <span>{{ s.label }}<br /><span class="muted small">{{ s.hint }}</span></span>
+                </label>
+              }
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn-action-secondary" [disabled]="!picked().length || exporting()" (click)="downloadPptx()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
+            <button type="button" class="btn-action-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
+          </div>
+        </div>
+      </div>
+    }
+    @if (presenting() && deck().length) {
+      <app-deck-viewer [slides]="deck()" [footer]="'TaskHub · ' + (d()?.team?.name || '')" (close)="presenting.set(false)" />
+    }
   `,
 })
-export class TeamDashboardPage implements OnChanges {
-  id = input.required<string>();
-  kind = input<'team' | 'sector'>('team');
-  ui = inject(UiService);
+export class TeamDashboardPage implements OnInit, OnDestroy {
   private api = inject(ApiService);
+  private ui = inject(UiService);
+  private toast = inject(ToastService);
+  private route = inject(ActivatedRoute);
   private router = inject(Router);
+  kind = input<DashKind>('team');
   d = signal<TeamDashboard | null>(null);
-  error = signal('');
-  today = new Date().toISOString().slice(0, 10);
-
-  delta = computed(() => (this.d() ? this.d()!.kpis.done_week - this.d()!.kpis.done_prev_week : 0));
-  deltaText = computed(() => {
-    const k = this.d()?.kpis; if (!k) return '';
-    const n = this.delta();
-    return n === 0 ? `igual à semana passada (${k.done_prev_week})` : `${n > 0 ? '+' : ''}${n} vs. semana passada`;
+  loading = signal(false);
+  choosing = signal(false);
+  presenting = signal(false);
+  exporting = signal(false);
+  deck = signal<DeckSlide[]>([]);
+  picked = signal<TeamSlideKey[]>([]);
+  readonly Math = Math;
+  readonly minutesLabel = minutesLabel;
+  readonly relativeTime = relativeTime;
+  kindLabel = computed(() => KIND_LABEL[this.kind()]);
+  slideOptions = computed(() => TEAM_SLIDES.filter(s => s.key !== 'equipes' || this.kind() === 'sector'));
+  onTimePct = computed(() => {
+    const k = this.d()?.kpis;
+    if (!k || !Number(k.done_with_due_30d)) return null;
+    return Math.round((Number(k.on_time_30d) / Number(k.done_with_due_30d)) * 100);
   });
   onTime = computed(() => {
-    const k = this.d()?.kpis; if (!k || !k.done_with_due_30d) return '—';
-    return `${Math.round((k.on_time_30d / k.done_with_due_30d) * 100)}%`;
+    const p = this.onTimePct();
+    return p == null ? 'sem dados' : `${p}%`;
   });
-  leadTime = computed(() => {
-    const v = this.d()?.kpis.lead_time_days; if (v == null) return '';
-    return v < 1 ? `${Math.max(1, Math.round(v * 24))} h` : `${v.toFixed(1).replace('.', ',')} dias`;
-  });
+  private sub?: Subscription;
+  private lastId = 0;
 
-  ngOnChanges() { this.load(); }
+  ngOnInit() {
+    this.sub = this.route.paramMap.subscribe(p => {
+      const id = Number(p.get('id') || p.get('teamId'));
+      if (id && id !== this.lastId) { this.lastId = id; this.load(); }
+    });
+  }
+  ngOnDestroy() { this.sub?.unsubscribe(); }
 
   load() {
-    this.d.set(null);
-    this.api.teamDashboard(Number(this.id()), this.kind()).subscribe({
-      next: d => { this.d.set(d); this.error.set(''); },
-      error: e => this.error.set(errorMessage(e)),
+    const id = this.lastId || Number(this.route.snapshot.paramMap.get('id'));
+    if (!id) return;
+    this.loading.set(true);
+    this.api.teamDashboard(id, this.kind()).subscribe({
+      next: d => { this.d.set(d); this.loading.set(false); },
+      error: e => { this.loading.set(false); this.toast.error(errorMessage(e, 'Não foi possível carregar o painel.')); },
     });
   }
 
-  go(q: Record<string, string>) {
-    const scope = this.kind() === 'sector' ? { sector_id: this.id() } : { team_id: this.id() };
-    this.router.navigate(['/ti/taskhub/tarefas'], { queryParams: { v: 'filtro', space: 'profissional', ...scope, ...q } });
+  goTasks(q: Record<string, string>) {
+    const d = this.d();
+    if (!d) return;
+    const scope = this.kind() === 'sector' ? { sector_id: String(d.team.id) } : { team_id: String(d.team.id) };
+    void this.router.navigate(['/ti/taskhub/tarefas'], { queryParams: { v: 'filtro', ...scope, ...q } });
   }
-  person(id: number) { this.router.navigate(['/ti/taskhub/tarefas'], { queryParams: { v: 'pessoa', pessoa: id } }); }
-  rel(iso: string) { return relativeTime(iso); }
-  minutes(m: number) { return minutesLabel(m) || '0 min'; }
-  min(a: number, b: number) { return Math.min(a, b); }
+  goPerson(id: number) {
+    void this.router.navigate(['/ti/taskhub/tarefas'], { queryParams: { v: 'pessoa', pessoa: id, status: 'open' } });
+  }
+  openTask(t: Task) { this.ui.openTask(t.id); }
+
+  openPresent() {
+    const d = this.d();
+    if (!d) return;
+    this.picked.set(defaultTeamSlides(d, this.kind() === 'sector'));
+    this.choosing.set(true);
+  }
+  togglePick(k: TeamSlideKey) {
+    this.picked.update(l => (l.includes(k) ? l.filter(x => x !== k) : [...l, k]));
+  }
+  private buildDeck() {
+    const d = this.d();
+    if (!d) return [];
+    return buildTeamDeck(d, this.picked(), this.kindLabel(), d.team.name);
+  }
+  present() {
+    this.deck.set(this.buildDeck());
+    this.choosing.set(false);
+    this.presenting.set(true);
+  }
+  async downloadPptx() {
+    this.exporting.set(true);
+    try {
+      const name = this.d()?.team.name || 'painel';
+      const file = `painel-${name.replace(/[^\wÀ-ÿ-]+/g, '-').replace(/^-|-$/g, '') || 'painel'}`;
+      await downloadDeckPptx(this.buildDeck(), this.ui.palette(), `TaskHub · ${name}`, file);
+      this.toast.show('PowerPoint gerado. O arquivo foi baixado.');
+      this.choosing.set(false);
+    } catch {
+      this.toast.error('Não foi possível gerar o PowerPoint.');
+    } finally { this.exporting.set(false); }
+  }
 }

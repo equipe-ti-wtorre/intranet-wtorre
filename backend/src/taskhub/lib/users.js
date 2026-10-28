@@ -25,6 +25,7 @@ function formatUser(u) {
     directed_sectors: u.directed_sectors || [],
     sector_id: u.sector_id ?? null,
     team_id: u.team_id ?? null,
+    team_ids: Array.isArray(u.team_ids) ? u.team_ids : [],
     is_admin: (u.profiles || []).includes('admin'),
     is_director: (u.profiles || []).includes('diretoria'),
     // Pode criar no espaço Corporativo quando o perfil ou um acesso extra concede isso.
@@ -54,4 +55,10 @@ function passwordProblem(password, username) {
 const PALETTE = ['#c9a84c', '#3b82f6', '#22c55e', '#a78bfa', '#f97316', '#14b8a6', '#ec4899', '#eab308'];
 const colorFor = (seed) => PALETTE[Math.abs([...String(seed)].reduce((a, c) => a + c.charCodeAt(0), 0)) % PALETTE.length];
 
-module.exports = { initialsFrom, formatUser, passwordProblem, colorFor };
+// Equipes da pessoa (pode ter várias): team_id é a primeira por id, team_ids todas, team_name os nomes juntos.
+const TEAM_FIELDS = (alias) => `
+  (SELECT MIN(m.team_id) FROM team_members m WHERE m.user_id = ${alias}.id) AS team_id,
+  (SELECT JSON_ARRAYAGG(m.team_id) FROM team_members m WHERE m.user_id = ${alias}.id) AS team_ids,
+  (SELECT GROUP_CONCAT(x.name ORDER BY x.name SEPARATOR ', ') FROM team_members m JOIN teams x ON x.id = m.team_id WHERE m.user_id = ${alias}.id) AS team_name`;
+
+module.exports = { initialsFrom, formatUser, passwordProblem, colorFor, TEAM_FIELDS };

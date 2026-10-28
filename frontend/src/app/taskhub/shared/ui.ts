@@ -27,6 +27,8 @@ const ICONS: Record<string, string> = {
   board: '<rect x="2" y="2.5" width="3.5" height="11" rx="1"/><rect x="6.3" y="2.5" width="3.5" height="7" rx="1"/><rect x="10.6" y="2.5" width="3.5" height="9" rx="1"/>',
   list: '<path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><circle cx="2.8" cy="4" r=".6"/><circle cx="2.8" cy="8" r=".6"/><circle cx="2.8" cy="12" r=".6"/>',
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/>',
+  info: '<circle cx="8" cy="8" r="5.8"/><path d="M8 7.3v3.6M8 5.1v.1"/>',
+  refresh: '<path d="M13 3.5v3h-3"/><path d="M12.7 6.5A5 5 0 103 8.5"/>',
   arrow: '<path d="M3 8h10M9 4l4 4-4 4"/>',
   chevron: '<path d="M6 3.5L10.5 8 6 12.5"/>',
   back: '<path d="M13 8H3M7 4L3 8l4 4"/>',

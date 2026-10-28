@@ -1,14 +1,16 @@
-import { Component, EventEmitter, Output, computed, inject, input } from '@angular/core';
+import { Component, EventEmitter, Output, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Section, Status, Task } from '../core/models';
+import { Phase, Section, Status, Task } from '../core/models';
 import { CATEGORY_LABEL, PRIORITY_RANK, addDaysIso, isClosed, todayIso } from '../core/format';
 import { UiService } from '../core/ui.service';
 import { EmptyComponent, TaskRowComponent } from './ui';
 
-export type GroupBy = 'status' | 'section' | 'due' | 'project' | 'assignee' | 'none';
+export type GroupBy = 'status' | 'section' | 'phase' | 'due' | 'project' | 'assignee' | 'none';
 export type SortBy = 'manual' | 'due' | 'priority' | 'title';
 
-interface Group { key: string; label: string; color?: string; tasks: Task[]; add?: Record<string, unknown>; }
+type PhaseState = 'past' | 'current' | 'future';
+interface Group { key: string; label: string; color?: string; tasks: Task[]; add?: Record<string, unknown>; state?: PhaseState; }
+const PHASE_STATE_LABEL: Record<PhaseState, string> = { past: 'Fase anterior', current: 'Fase atual', future: 'Próxima fase' };
 
 @Component({
   selector: 'app-task-list',
@@ -16,13 +18,21 @@ interface Group { key: string; label: string; color?: string; tasks: Task[]; add
   imports: [FormsModule, TaskRowComponent, EmptyComponent],
   template: `
     @for (g of groups(); track g.key) {
-      @if (groupBy() !== 'none') {
+      @if (g.state) {
+        <button type="button" [class]="'group-head phase-head phase-' + g.state" (click)="toggleGroup(g)" [attr.aria-expanded]="isOpen(g)">
+          <span class="phase-caret" [class.open]="isOpen(g)">▸</span>
+          <span class="dot" style="width:8px;height:8px;border-radius:50%" [style.background]="g.color"></span>
+          {{ g.label }} <span class="n">{{ g.tasks.length }}</span>
+          <span class="phase-tag">{{ stateLabel[g.state] }}</span>
+        </button>
+      } @else if (groupBy() !== 'none') {
         <div class="group-head">
           @if (g.color) { <span class="dot" style="width:8px;height:8px;border-radius:50%" [style.background]="g.color"></span> }
           {{ g.label }} <span class="n">{{ g.tasks.length }}</span>
         </div>
       }
-      <div class="tlist">
+      @if (isOpen(g)) {
+      <div class="tlist" [class.phase-current-list]="g.state === 'current'">
         @for (t of g.tasks; track t.id) {
           <app-task-row [task]="t" [showProject]="showProject()" [showStatus]="groupBy() !== 'status'"
                         (open)="ui.openTask($event.id)" (toggle)="toggle.emit($event)" />
@@ -34,6 +44,7 @@ interface Group { key: string; label: string; color?: string; tasks: Task[]; add
           </div>
         }
       </div>
+      }
     }
     @if (!total()) {
       <app-empty [title]="emptyTitle()" [text]="emptyText()" />
@@ -47,7 +58,13 @@ export class TaskListComponent {
   sortBy = input<SortBy>('manual');
   statuses = input<Status[]>([]);
   sections = input<Section[]>([]);
+  phases = input<Phase[]>([]);
+  currentPhaseId = input<number | null>(null);
   showProject = input(true);
+  stateLabel = PHASE_STATE_LABEL;
+  private opened = signal<Record<string, boolean>>({});
+  isOpen(g: Group) { return this.opened()[g.key] ?? g.state !== 'past'; }
+  toggleGroup(g: Group) { const open = !this.isOpen(g); this.opened.update(m => ({ ...m, [g.key]: open })); }
   canAdd = input(false);
   emptyTitle = input('Nada por aqui');
   emptyText = input('');
@@ -82,6 +99,18 @@ export class TaskListComponent {
       const groups: Group[] = [{ key: 'none', label: 'Sem seção', tasks: list.filter(t => !t.section), add: { section_id: null } }];
       for (const s of this.sections()) groups.push({ key: `x${s.id}`, label: s.name, tasks: list.filter(t => t.section?.id === s.id), add: { section_id: s.id } });
       return groups.filter(g => g.tasks.length || g.key !== 'none' || !this.sections().length);
+    }
+    if (by === 'phase' && this.phases().length) {
+      const phases = this.phases();
+      const cur = Math.max(0, phases.findIndex(p => p.id === this.currentPhaseId()));
+      const groups: Group[] = phases.map((p, i) => ({
+        key: `f${p.id}`, label: p.name, color: p.color, tasks: list.filter(t => t.phase?.id === p.id), add: { phase_id: p.id },
+        state: i < cur ? 'past' : i === cur ? 'current' : 'future',
+      }));
+      const ids = new Set(phases.map(p => p.id));
+      const loose = list.filter(t => !t.phase || !ids.has(t.phase.id));
+      if (loose.length) groups.push({ key: 'fnone', label: 'Sem fase', tasks: loose });
+      return groups;
     }
     if (by === 'project') {
       const map = new Map<string, Group>();

@@ -2,7 +2,7 @@ import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject, s
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { AuthService } from '../core/auth.service';
-import { Project } from '../core/models';
+import { Team } from '../core/models';
 import { DataService } from '../core/data.service';
 import { UiService } from '../core/ui.service';
 import { AvatarComponent, IconComponent } from '../shared/ui';
@@ -21,7 +21,8 @@ interface SectorNavGroup {
   name: string;
   color: string;
   canDashboard: boolean;
-  projects: Project[];
+  canCreate: boolean;
+  teams: Team[];
 }
 
 @Component({
@@ -50,13 +51,9 @@ interface SectorNavGroup {
               <a routerLink="/ti/taskhub/tarefas" [queryParams]="{ v: 'delegadas', space: 'profissional' }" [class.active]="isTasks('delegadas', 'profissional')"><app-icon class="ico" name="send" />Atribuídas por mim</a>
             }
             @for (t of dashTeams(); track t.id) {
-              <a [routerLink]="['/ti/taskhub/equipes', t.id]" routerLinkActive="active"><app-icon class="ico" name="chart" /><span class="ellipsis">Equipe · {{ t.name }}</span></a>
+              <a [routerLink]="['/ti/taskhub/equipes', t.id, 'painel']" routerLinkActive="active"><app-icon class="ico" name="chart" /><span class="ellipsis">Equipe · {{ t.name }}</span></a>
             }
-            <div class="nav-title">Projetos por setor
-              @if (auth.user()?.is_manager) {
-                <button type="button" (click)="ui.openNewProject('profissional')" aria-label="Novo projeto corporativo" title="Novo projeto corporativo">+</button>
-              }
-            </div>
+            <div class="nav-title">Equipes por setor</div>
             @for (group of sectorNav(); track group.id) {
               <div class="nav-sector">
                 <button type="button" class="nav-caret" (click)="toggleSector(group.id)" [attr.aria-expanded]="isSectorOpen(group.id)" [attr.aria-label]="(isSectorOpen(group.id) ? 'Recolher ' : 'Expandir ') + group.name">
@@ -65,29 +62,50 @@ interface SectorNavGroup {
                 @if (group.canDashboard) {
                   <a class="nav-sector-name" [routerLink]="['/ti/taskhub/setores', group.id]" routerLinkActive="active" title="Abrir o painel do setor">
                     <app-icon class="ico" name="folder" /><span class="ellipsis">{{ group.name }}</span>
-                    <span class="count quiet">{{ group.projects.length }}</span>
+                    <span class="count quiet">{{ group.teams.length }}</span>
                   </a>
                 } @else {
                   <button type="button" class="nav-sector-name" (click)="toggleSector(group.id)">
                     <app-icon class="ico" name="folder" /><span class="ellipsis">{{ group.name }}</span>
-                    <span class="count quiet">{{ group.projects.length }}</span>
+                    <span class="count quiet">{{ group.teams.length }}</span>
                   </button>
                 }
               </div>
               @if (isSectorOpen(group.id)) {
                 <div class="nav-children">
-                  @for (p of group.projects; track p.id) {
-                    <a [routerLink]="['/ti/taskhub/projetos', p.id]" routerLinkActive="active">
-                      <span class="dot" [style.background]="p.color"></span><span class="ellipsis">{{ p.name }}</span>
-                      @if (p.overdue_count) { <span class="count" title="Atrasadas">{{ p.overdue_count }}</span> }
+                  @for (t of group.teams; track t.id) {
+                    <a [routerLink]="['/ti/taskhub/equipes', t.id]" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: false }" [title]="'Projetos da equipe ' + t.name">
+                      <app-icon class="ico" name="people" [size]="14" /><span class="ellipsis">{{ t.name }}</span>
+                      @if (t.projects_count) { <span class="count quiet">{{ t.projects_count }}</span> }
                     </a>
                   } @empty {
-                    <div class="muted small nav-empty">Nenhum projeto seu aqui.</div>
+                    <div class="muted small nav-empty">Nenhuma equipe sua aqui.</div>
+                  }
+                  @if (group.canCreate) {
+                    <a class="nav-add" routerLink="/ti/taskhub/equipes" [queryParams]="{ nova: group.id }"><app-icon class="ico" name="plus" [size]="14" />Nova equipe</a>
                   }
                 </div>
               }
             } @empty {
-              <div class="muted small nav-empty">{{ auth.user()?.is_manager ? 'Crie um projeto no +.' : 'Quando um gestor incluir você, os projetos aparecem aqui.' }}</div>
+              <div class="muted small nav-empty">Quando um gestor incluir você numa equipe, ela aparece aqui.</div>
+            }
+            @if (legacyProjects().length) {
+              <div class="nav-title">Outros projetos</div>
+              @for (p of legacyProjects(); track p.id) {
+                <a [routerLink]="['/ti/taskhub/projetos', p.id]" routerLinkActive="active">
+                  <span class="dot" [style.background]="p.color"></span><span class="ellipsis">{{ p.name }}</span>
+                  @if (p.overdue_count) { <span class="count" title="Atrasadas">{{ p.overdue_count }}</span> }
+                </a>
+              }
+            }
+            @if (data.guestWorks().length) {
+              <div class="nav-title">Acompanho</div>
+              @for (w of data.guestWorks(); track w.id) {
+                <a [routerLink]="['/ti/taskhub/equipes', w.team_id, 'projetos', w.id]" routerLinkActive="active" [title]="'Projeto da equipe ' + w.team_name">
+                  <span class="dot" [style.background]="w.color"></span><span class="ellipsis">{{ w.name }}</span>
+                  <span class="muted small ellipsis" style="margin-left:auto;max-width:45%">{{ w.team_name }}</span>
+                </a>
+              }
             }
 
           <div class="nav-section">Individual</div>
@@ -153,18 +171,17 @@ export class ShellComponent implements OnInit, OnDestroy {
   private revealedUrls = new Set<string>();
 
   constructor() {
-    // O setor do projeto aberto começa expandido. Recolher depois disso permanece até outra visita.
+    // O setor da equipe aberta começa expandido. Recolher depois disso permanece até outra visita.
     effect(() => {
       const url = this.url();
-      const projects = this.data.projects();
-      const match = url.match(/^\/projetos\/(\d+)/);
+      const match = url.match(/^\/equipes\/(\d+)/);
       if (!match) return;
       const path = url.split('?')[0];
       if (this.revealedUrls.has(path)) return;
-      const project = projects.find(x => x.id === Number(match[1]));
-      if (!project || project.space !== 'profissional') return;
+      const team = this.data.teams().find(x => x.id === Number(match[1]));
+      if (!team?.sector_id) return;
       this.revealedUrls.add(path);
-      const id = project.sector_id ?? 0;
+      const id = team.sector_id;
       if (this.expandedIds().includes(id)) return;
       this.expandedIds.update(ids => [...ids, id]);
       this.persistExpanded();
@@ -172,6 +189,10 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   personalProjects = computed(() => this.data.projects().filter(p => p.space === 'pessoal'));
+  // Projetos corporativos de antes das equipes terem quadro próprio.
+  legacyProjects = computed(() => this.data.projects()
+    .filter(p => p.space === 'profissional' && !p.is_board)
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt')));
   // Equipe com painel cujo setor a pessoa não acompanha: fica acima de "Projetos por setor".
   dashTeams = computed(() => {
     const followed = new Set(this.data.sectors().filter(s => s.can_dashboard).map(s => s.id));
@@ -215,52 +236,35 @@ export class ShellComponent implements OnInit, OnDestroy {
     try { localStorage.setItem(NAV_SECTORS_KEY, JSON.stringify(this.expandedIds())); } catch { /* navegador sem armazenamento */ }
   }
 
+  // Setor > equipes: quem é da equipe vê as suas; gestor vê as que acompanha.
   private buildSectorNav(): SectorNavGroup[] {
     const sectors = this.data.sectors();
-    const teams = this.data.teams();
-    const projects = this.data.projects().filter(p => p.space === 'profissional');
-    const bySector = new Map<number, Project[]>();
-    const loose: Project[] = [];
-    for (const project of projects) {
-      if (project.sector_id) {
-        const list = bySector.get(project.sector_id) ?? [];
-        list.push(project);
-        bySector.set(project.sector_id, list);
-      } else loose.push(project);
+    const creatable = new Set(this.data.creatableSectors());
+    const admin = this.auth.isAdmin();
+    const bySector = new Map<number, Team[]>();
+    for (const team of this.data.teams()) {
+      if (!team.sector_id) continue;
+      if (admin && !team.is_member && !team.can_dashboard) continue;
+      const list = bySector.get(team.sector_id) ?? [];
+      list.push(team);
+      bySector.set(team.sector_id, list);
     }
     const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'pt');
-    const sortProjects = (list: Project[]) => list.slice().sort(byName);
-
-    // O administrador recebe todos os setores para cadastrar pessoas. No Corporativo
-    // ele só vê os setores que gerencia e os em que tem projeto.
-    const catalog = this.auth.isAdmin() ? sectors.filter(s => s.can_dashboard) : sectors;
-    const rows: SectorNavGroup[] = catalog.map(s => ({
-      id: s.id,
-      name: s.name,
-      color: s.color,
-      canDashboard: s.can_dashboard,
-      projects: sortProjects(bySector.get(s.id) ?? []),
-    }));
-    const known = new Set(rows.map(r => r.id));
-    const sectorOf = (id: number) => sectors.find(s => s.id === id);
-    for (const [sectorId, items] of bySector) {
-      if (known.has(sectorId)) continue;
-      const sector = sectorOf(sectorId);
-      const team = teams.find(t => t.sector_id === sectorId);
-      rows.push({
-        id: sectorId,
-        name: sector?.name || items[0]?.sector_name || team?.sector_name || 'Setor',
-        color: sector?.color || team?.color || '#94a3b8',
+    const ids = new Set<number>([...bySector.keys(), ...creatable]);
+    for (const s of sectors) if (s.can_dashboard && !admin) ids.add(s.id);
+    const rows: SectorNavGroup[] = [...ids].map(id => {
+      const sector = sectors.find(s => s.id === id);
+      const teams = (bySector.get(id) ?? []).slice().sort(byName);
+      return {
+        id,
+        name: sector?.name || teams[0]?.sector_name || 'Setor',
+        color: sector?.color || teams[0]?.color || '#94a3b8',
         canDashboard: !!sector?.can_dashboard,
-        projects: sortProjects(items),
-      });
-      known.add(sectorId);
-    }
-    rows.sort(byName);
-    if (loose.length) {
-      rows.push({ id: 0, name: 'Sem setor', color: '#94a3b8', canDashboard: false, projects: sortProjects(loose) });
-    }
-    return rows;
+        canCreate: creatable.has(id),
+        teams,
+      };
+    });
+    return rows.sort(byName);
   }
 
   @HostListener('document:keydown', ['$event'])
@@ -303,13 +307,17 @@ export class ShellComponent implements OnInit, OnDestroy {
     return this.contextDefaults();
   }
   private contextDefaults() {
-    const m = this.router.url.match(/^\/projetos\/(\d+)(?:\/trabalhos\/(\d+))?/);
+    const url = this.router.url.replace(/^\/ti\/taskhub/, '');
+    const t = url.match(/^\/equipes\/(\d+)(?:\/projetos\/(\d+))?(?:[/?]|$)/);
+    const board = t ? this.data.teams().find(x => x.id === Number(t[1]))?.board_id : null;
+    if (t && board) return { project_id: board, section_id: t[2] ? Number(t[2]) : null, space: 'profissional' as const };
+    const m = url.match(/^\/projetos\/(\d+)(?:\/trabalhos\/(\d+))?/);
     if (m) {
       const p = this.data.projects().find(x => x.id === Number(m[1]));
       return { project_id: Number(m[1]), section_id: m[2] ? Number(m[2]) : null, space: p?.space };
     }
-    if (this.router.url.includes('space=pessoal') || this.router.url.startsWith('/notas') || this.router.url.startsWith('/lembretes')) return { space: 'pessoal' as const };
-    if (this.router.url.startsWith('/meu-dia')) return { plan_today: true };
+    if (url.includes('space=pessoal') || url.startsWith('/notas') || url.startsWith('/lembretes')) return { space: 'pessoal' as const };
+    if (url.startsWith('/meu-dia')) return { plan_today: true };
     return {};
   }
 }

@@ -17,6 +17,7 @@ router.use('/auth', require('./routes/auth'));
 const api = express.Router();
 api.use(authenticate, requirePasswordChanged);
 api.use('/users', require('./routes/users'));
+api.use(require('./routes/phases'));
 api.use('/sectors', require('./routes/sectors'));
 api.use('/teams', require('./routes/teams'));
 api.use('/access-profiles', require('./routes/access-profiles'));
@@ -43,6 +44,7 @@ router.use((err, _req, res, _next) => {
   if (status >= 500) console.error('[taskhub]', err);
   res.status(status).json({
     message: status >= 500 ? 'Erro interno do servidor' : err.message,
+    ...(status < 500 && err.extra ? err.extra : {}),
   });
 });
 

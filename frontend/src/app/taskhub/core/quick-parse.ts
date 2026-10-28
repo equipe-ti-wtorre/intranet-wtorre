@@ -3,6 +3,8 @@ import { addDaysIso, todayIso } from './format';
 
 export interface ParsedTask {
   title: string; due_date: string | null; priority: Priority | null; assignee: Person | null;
+  // Cada @pessoa vira "Alinhado com"; assignee fica com a primeira para quem ainda usa.
+  contacts: Person[];
   project: Project | null; estimate_min: number | null; chips: string[];
 }
 
@@ -29,11 +31,13 @@ export function parseQuickTask(input: string, people: Person[], projects: Projec
     return ' ';
   });
 
-  text = text.replace(/\s@([a-z0-9._-]+)/i, (m, u) => {
+  const contacts: Person[] = [];
+  text = text.replace(/\s@([a-z0-9._-]+)/gi, (m, u) => {
     const found = people.find(p => p.username?.toLowerCase() === u.toLowerCase())
       || people.find(p => norm(p.name).split(' ')[0] === norm(u));
     if (!found) return m;
-    assignee = found; chips.push(`Para ${found.name}`);
+    if (!contacts.some(c => c.id === found.id)) { contacts.push(found); chips.push(`Alinhado com ${found.name}`); }
+    assignee = assignee || found;
     return ' ';
   });
 
@@ -84,5 +88,5 @@ export function parseQuickTask(input: string, people: Person[], projects: Projec
     }
   }
 
-  return { title: text.replace(/\s+/g, ' ').trim(), due_date: due, priority, assignee, project, estimate_min: estimate, chips };
+  return { title: text.replace(/\s+/g, ' ').trim(), due_date: due, priority, assignee, contacts, project, estimate_min: estimate, chips };
 }

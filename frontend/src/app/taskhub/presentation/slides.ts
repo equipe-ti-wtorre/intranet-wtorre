@@ -5,7 +5,7 @@ import { WorkDashboard } from '../core/models';
 export type SlideKey = 'capa' | 'resumo' | 'andamento' | 'status' | 'evolucao' | 'prazos' | 'atencao' | 'equipe' | 'entregas';
 
 export const SLIDES: { key: SlideKey; label: string; hint: string }[] = [
-  { key: 'capa', label: 'Capa', hint: 'Trabalho, projeto, responsável e data' },
+  { key: 'capa', label: 'Capa', hint: 'Projeto, equipe, responsável e data' },
   { key: 'resumo', label: 'Resumo', hint: 'Progresso, tempo até o prazo e números principais' },
   { key: 'andamento', label: 'Em andamento', hint: 'O que está sendo feito agora' },
   { key: 'status', label: 'Situação das tarefas', hint: 'Quantas tarefas em cada status' },
@@ -17,6 +17,13 @@ export const SLIDES: { key: SlideKey; label: string; hint: string }[] = [
 ];
 
 export const HEALTH_LABEL = { no_prazo: 'No prazo', em_risco: 'Em risco', atrasado: 'Atrasado', concluido: 'Concluído' } as const;
+
+export function linkPhrase(p: { continues?: string[]; continued_by?: string[] }) {
+  return [
+    p.continues?.length ? `Continua de ${p.continues.join(', ')}` : null,
+    p.continued_by?.length ? `Nova versão: ${p.continued_by.join(', ')}` : null,
+  ].filter(Boolean).join('  ·  ');
+}
 
 export function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';

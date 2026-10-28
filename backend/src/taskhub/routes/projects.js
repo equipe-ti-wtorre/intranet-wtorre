@@ -4,6 +4,8 @@ const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
 const { createDefaultStatuses } = require('../lib/projects');
 const { notify } = require('../lib/notify');
+const { TEAM_FIELDS } = require('../lib/users');
+const { teamOfBoard } = require('../lib/boards');
 
 // partial = participa só de algum trabalho do projeto (vê o projeto e só esses trabalhos).
 const ROLE_RANK = { partial: 0.5, guest: 1, view: 2, edit: 3, manage: 4 };
@@ -38,7 +40,7 @@ const projectSchema = z.object({
 });
 
 const ownerTeam = async (run, userId) =>
-  (await run.query('SELECT team_id FROM team_members WHERE user_id = $1 LIMIT 1', [userId])).rows[0]?.team_id || null;
+  (await run.query('SELECT MIN(team_id) AS team_id FROM team_members WHERE user_id = $1', [userId])).rows[0]?.team_id || null;
 
 router.get('/', ah(async (req, res) => {
   const params = [req.user.id];
@@ -50,6 +52,7 @@ router.get('/', ah(async (req, res) => {
     `SELECT p.*, t.name AS team_name, t.sector_id, s.name AS sector_name, o.name AS owner_name, th_project_role($1, p.id) AS my_role,
             (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS members_count,
             EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = $1) AS is_member,
+            EXISTS (SELECT 1 FROM team_boards b WHERE b.project_id = p.id) AS is_board,
             COUNT(tk.id) FILTER (WHERE ws.category IN ('todo','doing','blocked')) AS open_count,
             COUNT(tk.id) FILTER (WHERE ws.category IN ('todo','doing','blocked') AND tk.deadline < CURRENT_DATE) AS overdue_count,
             COUNT(tk.id) FILTER (WHERE ws.category = 'done') AS done_count,
@@ -58,7 +61,7 @@ router.get('/', ah(async (req, res) => {
        LEFT JOIN teams t ON t.id = p.team_id
        LEFT JOIN sectors s ON s.id = t.sector_id
        LEFT JOIN users o ON o.id = p.owner_id
-       LEFT JOIN tasks tk ON tk.project_id = p.id
+       LEFT JOIN tasks tk ON tk.project_id = p.id AND th_task_access($1, tk.id) IS NOT NULL
        LEFT JOIN workflow_statuses ws ON ws.id = tk.status_id
       WHERE ${where}
       GROUP BY p.id, t.name, t.sector_id, s.name, o.name
@@ -112,20 +115,24 @@ router.get('/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const role = await requireProject(req.user, id, 'partial');
   const { rows: [project] } = await query(
-    `SELECT p.*, t.name AS team_name, t.sector_id, s.name AS sector_name, o.name AS owner_name
+    `SELECT p.*, t.name AS team_name, t.sector_id, s.name AS sector_name, o.name AS owner_name,
+            EXISTS (SELECT 1 FROM team_boards b WHERE b.project_id = p.id) AS is_board
        FROM projects p
        LEFT JOIN teams t ON t.id = p.team_id
        LEFT JOIN sectors s ON s.id = t.sector_id
        LEFT JOIN users o ON o.id = p.owner_id
       WHERE p.id = $1`, [id]
   );
+  // Quem só participa de um trabalho vê apenas os trabalhos dele e não a equipe do projeto.
+  const partial = role === 'partial';
   const [{ rows: statuses }, { rows: sections }, { rows: members }] = await Promise.all([
     query('SELECT * FROM workflow_statuses WHERE project_id = $1 ORDER BY position, id', [id]),
-    query('SELECT * FROM project_sections WHERE project_id = $1 ORDER BY position, id', [id]),
-    query(
-      `SELECT u.id, u.name, u.username, u.initials, u.color, pm.role, th_is_manager(u.id) AS can_coordinate, t.name AS team_name
+    partial
+      ? query('SELECT * FROM project_sections WHERE project_id = $1 AND th_work_role($2, id) IS NOT NULL ORDER BY position, id', [id, req.user.id])
+      : query('SELECT * FROM project_sections WHERE project_id = $1 ORDER BY position, id', [id]),
+    partial ? { rows: [] } : query(
+      `SELECT u.id, u.name, u.username, u.initials, u.color, pm.role, th_is_manager(u.id) AS can_coordinate, ${TEAM_FIELDS('u')}
          FROM project_members pm JOIN users u ON u.id = pm.user_id
-         LEFT JOIN team_members tm ON tm.user_id = u.id LEFT JOIN teams t ON t.id = tm.team_id
         WHERE pm.project_id = $1 ORDER BY u.name`, [id]
     ),
   ]);
@@ -139,11 +146,11 @@ router.get('/:id/people', ah(async (req, res) => {
   await requireProject(req.user, id, 'partial');
   const { rows } = await query(
     `SELECT u.id, u.name, u.username, u.initials, u.color, u.job_title, u.away_until,
-            t.id AS team_id, t.name AS team_name,
-            EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = u.id) AS in_team
+            ${TEAM_FIELDS('u')},
+            (EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = u.id)
+              OR EXISTS (SELECT 1 FROM team_boards b JOIN team_members m ON m.team_id = b.team_id
+                          WHERE b.project_id = $1 AND m.user_id = u.id)) AS in_team
        FROM users u
-       LEFT JOIN team_members tm ON tm.user_id = u.id
-       LEFT JOIN teams t ON t.id = tm.team_id
       WHERE u.active IS DISTINCT FROM false
         AND (u.role <> 'convidado' OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = u.id))
       ORDER BY in_team DESC, u.name`, [id]
@@ -159,6 +166,9 @@ router.patch('/:id', ah(async (req, res) => {
     archived: z.boolean().optional(),
     owner_id: z.coerce.number().int().positive().optional(),
   }), req.body);
+  if (await teamOfBoard({ query }, id)) {
+    for (const k of ['team_id', 'owner_id', 'archived', 'name']) delete d[k];
+  }
   // Passar a posse: o novo dono vira participante. A equipe só muda se a tela não escolheu o setor.
   if (d.owner_id) {
     const { rows: [mgr] } = await query('SELECT th_is_manager($1) AS ok', [d.owner_id]);
@@ -186,6 +196,7 @@ router.patch('/:id', ah(async (req, res) => {
 router.delete('/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
   await requireProject(req.user, id, 'manage');
+  if (await teamOfBoard({ query }, id)) throw new HttpError(400, 'O quadro da equipe só sai junto com a equipe.');
   await query('DELETE FROM projects WHERE id = $1', [id]);
   res.json({ ok: true });
 }));
@@ -196,6 +207,7 @@ router.put('/:id/members/:userId', ah(async (req, res) => {
   await requireProject(req.user, id, 'manage');
   const { role: requested } = parse(z.object({ role: z.enum(['editor', 'leitor']).default('leitor') }), req.body);
   const userId = intParam(req.params.userId, 'userId');
+  if (await teamOfBoard({ query }, id)) throw new HttpError(400, 'Quem participa da equipe é definido em Equipes. Para alguém de fora, convide no próprio projeto.');
   const { rows: [sp] } = await query('SELECT space FROM projects WHERE id = $1', [id]);
   if (sp.space === 'pessoal') throw new HttpError(400, 'Projetos individuais são só seus. Para trabalhar com outras pessoas, use um projeto corporativo.');
   const { rows: [mgr] } = await query('SELECT th_is_manager($1) AS ok', [userId]);
@@ -233,7 +245,7 @@ const statusSchema = z.object({
 
 router.post('/:id/statuses', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireProject(req.user, id, 'manage');
+  await requireProject(req.user, id, 'edit');
   const d = parse(statusSchema, req.body);
   const { rows: [pos] } = await query(
     'SELECT COALESCE(MAX(position), -1) + 1 AS n FROM workflow_statuses WHERE project_id = $1', [id]
@@ -248,7 +260,7 @@ router.post('/:id/statuses', ah(async (req, res) => {
 
 router.put('/:id/statuses/order', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireProject(req.user, id, 'manage');
+  await requireProject(req.user, id, 'edit');
   const { ids } = parse(z.object({ ids: z.array(z.number().int()) }), req.body);
   await tx(async (c) => {
     for (let i = 0; i < ids.length; i++) {
@@ -260,7 +272,7 @@ router.put('/:id/statuses/order', ah(async (req, res) => {
 
 router.patch('/:id/statuses/:statusId', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireProject(req.user, id, 'manage');
+  await requireProject(req.user, id, 'edit');
   const d = parse(statusSchema.partial(), req.body);
   const sets = []; const params = [];
   for (const [k, v] of Object.entries(d)) { params.push(v); sets.push(`${k} = $${params.length}`); }
@@ -277,7 +289,7 @@ router.patch('/:id/statuses/:statusId', ah(async (req, res) => {
 // Exclui um status movendo as tarefas dele para outro.
 router.delete('/:id/statuses/:statusId', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireProject(req.user, id, 'manage');
+  await requireProject(req.user, id, 'edit');
   const statusId = intParam(req.params.statusId, 'statusId');
   const moveTo = intParam(req.query.move_to, 'move_to');
   if (moveTo === statusId) throw new HttpError(400, 'Escolha outro status para receber as tarefas.');

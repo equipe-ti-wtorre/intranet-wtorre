@@ -1,7 +1,7 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 
-export interface QuickAddDefaults { space?: 'profissional' | 'pessoal'; project_id?: number | null; status_id?: number | null; section_id?: number | null; plan_today?: boolean; plan_period?: 'manha' | 'tarde' | 'fim'; assignee_id?: number | null; }
+export interface QuickAddDefaults { space?: 'profissional' | 'pessoal'; project_id?: number | null; status_id?: number | null; section_id?: number | null; phase_id?: number | null; plan_today?: boolean; plan_period?: 'manha' | 'tarde' | 'fim'; assignee_id?: number | null; }
 
 export type AppPalette = 'wtorre' | 'nubank-parque';
 

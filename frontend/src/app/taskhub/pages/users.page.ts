@@ -64,7 +64,7 @@ function tempPassword() {
       <div class="modal-scrim" (click)="close()">
         <div class="modal wide" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="e.id ? 'Editar pessoa' : 'Nova pessoa'">
           <div class="modal-head">{{ e.id ? e.name : 'Nova pessoa' }}</div>
-          <div class="modal-body" style="max-height:68vh;overflow-y:auto">
+          <div class="modal-body">
             @if (e.id) {
               <div class="row" style="align-items:center;gap:14px;margin-bottom:14px">
                 <app-avatar [person]="{ name: e.name || '', initials: e.initials || '?', id: e.id, avatar_url: e.avatar_url }" [large]="true" />

@@ -9,6 +9,7 @@ const TABLES = [
   'project_sections',
   'project_members',
   'task_comments',
+  'task_activity_notes',
   'task_activity',
   'day_plan_items',
   'directory_blocks',
@@ -19,10 +20,20 @@ const TABLES = [
   'sector_managers',
   'team_managers',
   'team_members',
+  'team_boards',
   'access_profiles',
   'work_members',
+  'work_owners',
+  'work_links',
+  'work_phase_log',
   'work_visits',
   'work_schedule',
+  'work_phase',
+  'task_phase',
+  'task_contacts',
+  'task_alignment',
+  'subtask_quiet',
+  'team_phases',
   'job_runs',
   'notifications',
   'categories',
@@ -37,12 +48,12 @@ const TABLES = [
 
 const DATE_COLUMNS = new Set([
   'deadline', 'start_date', 'end_date', 'plan_date', 'due_date', 'away_until',
-  'reminder_date', 'check_date', 'visited_at',
+  'reminder_date', 'check_date', 'visited_at', 'aligned_on',
 ]);
 
 const BOOL_COLUMNS = new Set([
   'active', 'is_director', 'must_change_password', 'archived', 'members_can_create',
-  'is_private', 'migrated_v2', 'done', 'notified', 'pinned', 'system', 'show_to_manager',
+  'is_private', 'migrated_v2', 'done', 'notified', 'pinned', 'system', 'show_to_manager', 'is_board',
 ]);
 
 function prefixTables(sql) {
@@ -103,10 +114,15 @@ function replaceAggregateFilter(sql) {
   return out;
 }
 
+// No MariaDB, JSON_QUOTE de número e JSON_CONTAINS com candidato que não é JSON devolvem NULL,
+// e NULL dentro de NOT (...) descarta a linha. Por isso: CAST para texto e COALESCE em cada teste.
+const anyOf = (list, value) =>
+  `(COALESCE(JSON_CONTAINS(${list}, JSON_QUOTE(CAST(${value} AS CHAR))), 0) OR COALESCE(JSON_CONTAINS(${list}, CAST(${value} AS CHAR)), 0))`;
+
 function replaceAny(sql) {
   let out = sql.replace(
     /\$(\d+)\s*=\s*ANY\(\s*([\w.]+)\s*\)/gi,
-    'JSON_CONTAINS($2, JSON_QUOTE($$$1))'
+    (_, n, list) => anyOf(list, `$${n}`)
   );
   out = out.replace(
     /'([^']*)'\s*=\s*ANY\(\s*([\w.]+)\s*\)/gi,
@@ -114,11 +130,11 @@ function replaceAny(sql) {
   );
   out = out.replace(
     /([\w.]+)\s*=\s*ANY\(\s*\$(\d+)\s*\)/gi,
-    '(JSON_CONTAINS($$$2, JSON_QUOTE($1)) OR JSON_CONTAINS($$$2, CAST($1 AS CHAR)))'
+    (_, col, n) => anyOf(`$${n}`, col)
   );
   out = out.replace(
     /([\w.]+)\s*=\s*ANY\(\s*([\w.]+)\s*\)/gi,
-    'JSON_CONTAINS($2, JSON_QUOTE($1))'
+    (_, col, list) => anyOf(list, col)
   );
   return out;
 }

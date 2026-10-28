@@ -23,7 +23,13 @@ router.get('/works/:id/dashboard', ah(async (req, res) => {
        LEFT JOIN sectors sc ON sc.id = tm.sector_id
       WHERE s.id = $2`, [me, wid]
   );
-  if (!w || !w.my_role) throw new HttpError(404, 'Trabalho não encontrado');
+  if (!w || !w.my_role) throw new HttpError(404, 'Projeto não encontrado');
+  if (w.my_role === 'follow') throw new HttpError(403, 'Como solicitante, você acompanha as fases do projeto, sem o painel de tarefas.');
+
+  const [{ rows: continues }, { rows: continuedBy }] = await Promise.all([
+    query('SELECT r.name FROM work_links lk JOIN project_sections r ON r.id = lk.related_id WHERE lk.work_id = $1 ORDER BY r.name', [wid]),
+    query('SELECT r.name FROM work_links lk JOIN project_sections r ON r.id = lk.work_id WHERE lk.related_id = $1 ORDER BY r.name', [wid]),
+  ]);
 
   const today = isoDate();
   const in14 = addDays(today, 14);
@@ -108,6 +114,8 @@ router.get('/works/:id/dashboard', ah(async (req, res) => {
       id: w.id, name: w.name, color: w.color, description: w.description, health,
       project_id: w.project_id, project_name: w.project_name, sector_name: w.sector_name, owner_name: w.owner_name,
       start_date: startDate, end_date: endDate, completed: !!w.completed_at,
+      continues: continues.map(r => r.name),
+      continued_by: continuedBy.map(r => r.name),
     },
     generated_at: new Date(),
     kpis: {

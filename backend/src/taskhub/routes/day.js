@@ -2,11 +2,11 @@ const router = require('express').Router();
 const { z } = require('zod');
 const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
-const { MINE_SQL, TASK_SELECT, STATUS_CATEGORY_SQL, formatTask, loadMin } = require('../lib/tasks');
+const { MINE_SQL, TASK_SELECT, STATUS_CATEGORY_SQL, formatTask, loadMin, DAY_REF_MIN } = require('../lib/tasks');
 const { isoDate, addDays, isIsoDate } = require('../lib/dates');
 
 // Linha do dia: o plano é dividido em Manhã, Tarde e Fim do dia, sem horários.
-// A carga de cada período usa o tamanho da tarefa (P/M/G) e a capacidade diária da pessoa.
+// A carga de cada período usa o tamanho da tarefa (P/M/G) sobre 7 h por dia.
 const PERIODS = ['manha', 'tarde', 'fim'];
 const PERIOD_SHARE = { manha: 0.45, tarde: 0.4, fim: 0.15 }; // fatia da capacidade em cada período
 
@@ -33,7 +33,7 @@ router.get('/', ah(async (req, res) => {
   const me = req.user.id;
   const date = dateParam(req.query.date);
   const today = isoDate();
-  const capacity = req.user.daily_capacity_min || 420;
+  const capacity = DAY_REF_MIN;
 
   const { rows: planRows } = await query(
     `${TASK_SELECT} JOIN day_plan_items dp ON dp.task_id = t.id AND dp.user_id = $1 AND dp.plan_date = $2
@@ -189,7 +189,7 @@ router.delete('/items/:taskId', ah(async (req, res) => {
 router.post('/distribute', ah(async (req, res) => {
   const me = req.user.id;
   const date = dateParam(req.body?.date);
-  const capacity = req.user.daily_capacity_min || 420;
+  const capacity = DAY_REF_MIN;
   const { rows } = await query(
     `${TASK_SELECT}
       LEFT JOIN day_plan_items dp ON dp.task_id = t.id AND dp.user_id = $1 AND dp.plan_date = $2

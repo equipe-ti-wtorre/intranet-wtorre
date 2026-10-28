@@ -7,11 +7,12 @@ import { DataService } from '../core/data.service';
 import { ToastService } from '../core/toast.service';
 import { Team } from '../core/models';
 import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } from '../shared/ui';
+import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
 
 @Component({
   selector: 'app-teams',
   standalone: true,
-  imports: [FormsModule, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, EmptyComponent],
+  imports: [FormsModule, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, EmptyComponent, ConfirmDeleteComponent],
   template: `
     <div class="page">
       <div class="page-head">
@@ -21,7 +22,7 @@ import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } fr
         }
       </div>
 
-      <div style="display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:28px;align-items:start">
+      <div class="teams-split">
         <div>
           @for (g of grouped(); track g.sector) {
             <div class="team-name" style="padding:12px 8px 4px">{{ g.sector }}</div>
@@ -40,15 +41,16 @@ import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } fr
         </div>
 
         @if (selected(); as t) {
-          <div>
-            <div class="row" style="margin-bottom:4px">
+          <div class="teams-detail">
+            <div class="row" style="margin-bottom:4px;flex-wrap:wrap">
               <h2 style="font-size:18px">{{ t.name }}</h2>
               <span class="muted">· {{ t.sector_name }}</span>
               <span class="grow"></span>
-              @if (t.can_dashboard) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes', t.id]"><app-icon name="chart" [size]="14" />Painel</a> }
+              <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes', t.id]"><app-icon name="board" [size]="14" />Projetos</a>
+              @if (t.can_dashboard) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes', t.id, 'painel']"><app-icon name="chart" [size]="14" />Painel</a> }
               @if (t.can_edit) {
                 <button class="btn btn-sm" (click)="openEdit(t)">Editar</button>
-                <button class="btn btn-sm btn-danger" (click)="remove(t)">Excluir</button>
+                <button class="btn btn-sm btn-danger" (click)="deleting.set(t)">Excluir</button>
               }
             </div>
             @if (t.description) { <p class="muted" style="margin-bottom:12px">{{ t.description }}</p> }
@@ -60,7 +62,7 @@ import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } fr
                   @if (t.can_edit && (t.managers?.length || 0) > 1) { <button (click)="removeManager(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button> }</span>
               }
               @if (t.can_edit) {
-                <select #mg class="select" style="width:220px;height:28px" (change)="addManager(+mg.value); mg.value = ''" aria-label="Adicionar gestor">
+                <select #mg class="select" style="width:220px;max-width:100%;height:28px" (change)="addManager(+mg.value); mg.value = ''" aria-label="Adicionar gestor">
                   <option value="">Adicionar gestor…</option>
                   @for (p of managerCandidates(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
                 </select>
@@ -68,40 +70,44 @@ import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } fr
             </div>
 
             <div class="block-title" style="margin-top:18px">Membros</div>
-            <table class="table">
-              <thead><tr><th>Pessoa</th><th>Cargo</th><th>Capacidade diária</th><th></th></tr></thead>
+            <div class="table-scroll"><table class="table">
+              <thead><tr><th>Pessoa</th><th>Cargo</th><th></th></tr></thead>
               <tbody>
                 @for (m of t.members || []; track m.id) {
                   <tr>
                     <td><div class="row"><app-avatar [person]="m" />{{ m.name }} @if (m.is_manager) { <span class="muted small">gestor</span> }</div></td>
                     <td class="muted">{{ m.job_title }}</td>
-                    <td class="muted">{{ m.daily_capacity_min / 60 }} h</td>
                     <td class="num">@if (t.can_edit) { <button class="btn btn-ghost btn-sm btn-icon" (click)="removeMember(m.id)" aria-label="Tirar da equipe"><app-icon name="x" [size]="14" /></button> }</td>
                   </tr>
                 }
               </tbody>
-            </table>
+            </table></div>
             @if (!(t.members || []).length) { <div class="muted small" style="padding:10px 8px">Nenhum membro ainda.</div> }
             @if (t.can_edit) {
               <div class="mini-form" style="max-width:520px">
                 <select class="select" [(ngModel)]="newMember" aria-label="Pessoa">
                   <option [ngValue]="null">Adicionar pessoa do setor {{ t.sector_name }}</option>
-                  @for (u of memberCandidates(); track u.id) { <option [ngValue]="u.id">{{ u.name }}{{ u.team_name ? ' · hoje em ' + u.team_name : '' }}</option> }
+                  @for (u of memberCandidates(); track u.id) { <option [ngValue]="u.id">{{ u.name }}{{ u.team_name ? ' · também em ' + u.team_name : '' }}</option> }
                 </select>
                 <button class="btn btn-sm" [disabled]="!newMember" (click)="addMember()">Adicionar</button>
               </div>
-              <div class="muted small" style="margin-top:6px">Aparecem as pessoas do setor. Cada pessoa fica em uma equipe; adicionar aqui tira a pessoa da equipe anterior.</div>
+              <div class="muted small" style="margin-top:6px">Aparecem as pessoas do setor. A mesma pessoa pode estar em várias equipes; quem é da equipe vê e cria os projetos dela.</div>
             }
 
-            <div class="block-title" style="margin-top:22px">Projetos da equipe que você vê</div>
+            <div class="block-title" style="margin-top:22px">Projetos da equipe</div>
             <div class="tlist">
+              <a class="trow" [routerLink]="['/ti/taskhub/equipes', t.id]">
+                <span class="dot" style="width:8px;height:8px;border-radius:3px" [style.background]="t.color"></span>
+                <span class="t-title">Abrir o quadro de projetos</span>
+                <span class="muted small">{{ t.projects_count || 0 }} {{ t.projects_count === 1 ? 'projeto em andamento' : 'projetos em andamento' }}</span>
+              </a>
               @for (p of teamProjects(); track p.id) {
                 <a class="trow" [routerLink]="['/ti/taskhub/projetos', p.id]">
                   <span class="dot" style="width:8px;height:8px;border-radius:3px" [style.background]="p.color"></span>
-                  <span class="t-title">{{ p.name }}</span>
+                  <span class="t-title">{{ p.name }} <span class="muted small">· projeto antigo</span></span>
                   <span class="muted small">{{ p.open_count }} abertas</span>
                 </a>
-              } @empty { <div class="muted small" style="padding:10px 8px">Nenhum projeto visível para você.</div> }
+              }
             </div>
           </div>
         }
@@ -129,6 +135,12 @@ import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } fr
         </div>
       </div>
     }
+
+    @if (deleting(); as t) {
+      <app-confirm-delete title="Excluir equipe" [name]="t.name" [busy]="removing()"
+                          [message]="'A equipe ' + t.name + ' e os ' + (t.projects_count || 0) + ' projetos dela, com todas as tarefas, serão apagados. As pessoas continuam no setor.'"
+                          (cancel)="deleting.set(null)" (confirm)="remove(t)" />
+    }
   `,
 })
 export class TeamsPage implements OnInit {
@@ -151,11 +163,13 @@ export class TeamsPage implements OnInit {
     return [...map.entries()].map(([sector, teams]) => ({ sector, teams }));
   });
   creatable = computed(() => this.data.sectors().filter(s => this.data.creatableSectors().includes(s.id)));
-  teamProjects = computed(() => this.data.projects().filter(p => p.team_id === this.selected()?.id && p.space === 'profissional'));
+  teamProjects = computed(() => this.data.projects().filter(p => p.team_id === this.selected()?.id && p.space === 'profissional' && !p.is_board));
+  deleting = signal<Team | null>(null);
+  removing = signal(false);
   memberCandidates = computed(() => {
     const t = this.selected(); if (!t) return [];
     const ids = new Set((t.members || []).map(m => m.id));
-    return this.data.people().filter(p => p.from_directory && p.sector_id === t.sector_id && !ids.has(p.id));
+    return this.data.people().filter(p => p.sector_id === t.sector_id && !ids.has(p.id));
   });
   managerCandidates = computed(() => {
     const t = this.selected(); if (!t) return [];
@@ -165,6 +179,8 @@ export class TeamsPage implements OnInit {
 
   ngOnInit() {
     const q = Number(this.route.snapshot.queryParamMap.get('equipe'));
+    const nova = Number(this.route.snapshot.queryParamMap.get('nova'));
+    if (nova) { this.openNew(); this.form.sector_id = nova; }
     if (q) this.select(q);
     else this.api.teams().subscribe(r => { if (r.teams[0]) this.select(r.teams[0].id); });
   }
@@ -185,17 +201,18 @@ export class TeamsPage implements OnInit {
   }
 
   remove(t: Team) {
-    if (!confirm(`Excluir a equipe ${t.name}? As pessoas continuam no setor, só saem da equipe.`)) return;
+    this.removing.set(true);
     this.api.deleteTeam(t.id).subscribe({
-      next: () => { this.selected.set(null); this.data.reloadTeams(); this.toast.show('Equipe excluída.'); },
-      error: e => this.toast.error(errorMessage(e)),
+      next: () => {
+        this.removing.set(false); this.deleting.set(null); this.selected.set(null);
+        this.data.reloadTeams(); this.data.reloadProjects(); this.toast.show('Equipe excluída.');
+      },
+      error: e => { this.removing.set(false); this.toast.error(errorMessage(e)); },
     });
   }
 
   addMember() {
     if (!this.newMember) return;
-    const person = this.data.people().find(p => p.id === this.newMember);
-    if (person?.team_name && !confirm(`${person.name} sairá da equipe ${person.team_name}. Continuar?`)) return;
     this.api.setTeamMember(this.selected()!.id, this.newMember, 'membro').subscribe({
       next: () => { this.newMember = null; this.reload(); }, error: e => this.toast.error(errorMessage(e)),
     });

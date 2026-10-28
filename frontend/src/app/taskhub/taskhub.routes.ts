@@ -34,8 +34,10 @@ export const TASKHUB_ROUTES: Routes = [
             loadComponent: () => import('./pages/project.page').then((m) => m.ProjectPage),
           },
           { path: 'equipes', loadComponent: () => import('./pages/teams.page').then((m) => m.TeamsPage) },
+          { path: 'equipes/:teamId', loadComponent: () => import('./pages/project-works.page').then((m) => m.ProjectWorksPage) },
+          { path: 'equipes/:teamId/projetos/:workId', loadComponent: () => import('./pages/project.page').then((m) => m.ProjectPage) },
           {
-            path: 'equipes/:id',
+            path: 'equipes/:id/painel',
             data: { kind: 'team' },
             loadComponent: () => import('./pages/team-dashboard.page').then((m) => m.TeamDashboardPage),
           },

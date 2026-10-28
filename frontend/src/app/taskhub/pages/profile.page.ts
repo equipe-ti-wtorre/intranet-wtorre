@@ -34,13 +34,11 @@ import { environment } from '../environments/environment';
       </div>
 
       <div class="settings-section">
-        <div><h2>Dados e capacidade</h2><p class="desc">A capacidade diária define o limite da régua do Meu Dia e a carga no painel do gestor.</p></div>
+        <div><h2>Dados</h2><p class="desc">Nome, cargo e ausência. A carga do Meu Dia e do painel usa 7 horas por dia para todo mundo.</p></div>
         <div class="stack">
           <div class="fields">
             <div class="field"><label for="n">Nome</label><input id="n" class="input" [(ngModel)]="name" /></div>
             <div class="field"><label for="j">Cargo</label><input id="j" class="input" [(ngModel)]="job" placeholder="Ex.: Analista de sistemas" /></div>
-            <div class="field"><label for="c">Horas de trabalho focado por dia</label>
-              <input id="c" class="input" type="number" min="1" max="16" step="0.5" [(ngModel)]="hours" /></div>
             <div class="field"><label for="a">Ausente até</label><input id="a" class="input" type="date" [(ngModel)]="away" />
               <span class="hint">Quem for atribuir algo a você verá o aviso.</span></div>
           </div>
@@ -87,11 +85,10 @@ export class ProfilePage {
   photoBusy = signal(false);
   name = this.auth.user()?.name || '';
   job = this.auth.user()?.job_title || '';
-  hours = (this.auth.user()?.daily_capacity_min || 420) / 60;
   away: string | null = this.auth.user()?.away_until || null;
 
   save() {
-    this.api.updateMe({ name: this.name, job_title: this.job, daily_capacity_min: Math.round(this.hours * 60), away_until: this.away || null }).subscribe({
+    this.api.updateMe({ name: this.name, job_title: this.job, away_until: this.away || null }).subscribe({
       next: u => { this.auth.setUser(u); this.toast.show('Perfil salvo.'); },
       error: e => this.toast.error(errorMessage(e)),
     });

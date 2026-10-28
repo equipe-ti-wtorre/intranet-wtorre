@@ -6,7 +6,7 @@ import { ApiService } from '../core/api.service';
 import { UiService } from '../core/ui.service';
 import { DataService } from '../core/data.service';
 import { AuthService } from '../core/auth.service';
-import { Person, Project, Task } from '../core/models';
+import { Person, SearchResult } from '../core/models';
 import { AvatarComponent, IconComponent, AutofocusDirective } from '../shared/ui';
 
 interface Item { kind: 'cmd' | 'task' | 'project' | 'person'; label: string; note?: string; icon?: string; color?: string; person?: Person; run: () => void; }
@@ -48,7 +48,7 @@ export class PaletteComponent implements OnDestroy {
 
   q = signal('');
   active = signal(0);
-  results = signal<{ tasks: Task[]; projects: Project[]; people: Person[] }>({ tasks: [], projects: [], people: [] });
+  results = signal<SearchResult>({ tasks: [], projects: [], works: [], people: [] });
   private query$ = new Subject<string>();
   private sub: Subscription;
 
@@ -62,7 +62,7 @@ export class PaletteComponent implements OnDestroy {
     { kind: 'cmd', label: 'Lembretes', note: 'G L', icon: 'bell', run: () => this.go('/lembretes') },
     { kind: 'cmd', label: 'Atribuídas por mim', note: 'G A', icon: 'send', run: () => this.go('/tarefas?v=delegadas&space=profissional') },
     { kind: 'cmd', label: 'Equipes', note: 'G E', icon: 'people', run: () => this.go('/equipes') },
-    { kind: 'cmd', label: 'Novo projeto', icon: 'folder', run: () => { this.close(); this.ui.openNewProject(this.auth.user()?.is_manager ? 'profissional' : 'pessoal'); } },
+    { kind: 'cmd', label: 'Novo projeto individual', icon: 'folder', run: () => { this.close(); this.ui.openNewProject('pessoal'); } },
     { kind: 'cmd', label: 'Alternar paleta WTorre / Nubank', icon: 'moon', run: () => { this.ui.togglePalette(); this.close(); } },
     { kind: 'cmd', label: 'Atalhos de teclado', note: '?', icon: 'gear', run: () => { this.close(); this.ui.helpOpen.set(true); } },
   ];
@@ -71,9 +71,13 @@ export class PaletteComponent implements OnDestroy {
     const q = this.q().trim().toLowerCase();
     const r = this.results();
     const cmds = this.commands.filter(c => !q || c.label.toLowerCase().includes(q));
-    const projects: Item[] = (q.length >= 2 ? r.projects : this.data.projects().slice(0, 5)).map(p => ({
-      kind: 'project', label: p.name, note: p.owner_name || p.team_name || undefined, color: p.color, run: () => this.go(`/projetos/${p.id}`),
+    const works: Item[] = (r.works || []).map(w => ({
+      kind: 'project', label: w.name, note: w.team_name, color: w.color, run: () => this.go(`/equipes/${w.team_id}/projetos/${w.id}`),
     }));
+    const projects: Item[] = [...works, ...(q.length >= 2 ? r.projects : this.data.projects().slice(0, 5)).map((p): Item => ({
+      kind: 'project', label: p.name, note: p.is_board ? 'Equipe' : p.owner_name || p.team_name || undefined, color: p.color,
+      run: () => this.go(p.is_board && p.team_id ? `/equipes/${p.team_id}` : `/projetos/${p.id}`),
+    }))];
     const tasks: Item[] = r.tasks.map(t => ({
       kind: 'task', label: t.title, note: t.project?.name || (t.space === 'pessoal' ? 'Individual' : 'Sem projeto'), icon: t.status.category === 'done' ? 'check' : 'list',
       run: () => { this.close(); this.ui.openTask(t.id); },
@@ -84,7 +88,7 @@ export class PaletteComponent implements OnDestroy {
     }));
     return [
       { title: 'Tarefas', items: tasks },
-      { title: 'Projetos', items: projects },
+      { title: 'Projetos e equipes', items: projects },
       { title: 'Pessoas', items: people },
       { title: 'Comandos', items: cmds },
     ].filter(g => g.items.length);
@@ -92,7 +96,7 @@ export class PaletteComponent implements OnDestroy {
   flat = computed(() => this.groups().flatMap(g => g.items));
 
   constructor() {
-    this.sub = this.query$.pipe(debounceTime(180), switchMap(q => (q.trim().length >= 2 ? this.api.search(q) : of({ tasks: [], projects: [], people: [] }))))
+    this.sub = this.query$.pipe(debounceTime(180), switchMap(q => (q.trim().length >= 2 ? this.api.search(q) : of({ tasks: [], projects: [], works: [], people: [] }))))
       .subscribe(r => { this.results.set(r); this.active.set(0); });
   }
 

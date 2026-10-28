@@ -6,7 +6,6 @@ const PERMISSIONS = [
   { key: 'criar_corporativo', label: 'Criar projetos e tarefas no Corporativo', hint: 'Montar projetos, distribuir tarefas e incluir colaboradores.' },
   { key: 'criar_equipes', label: 'Criar equipes', hint: 'Cria equipes no próprio setor (ou nos setores que gerencia) e vira gestor delas.' },
   { key: 'ver_painel_equipe', label: 'Ver o painel e o trabalho da própria equipe', hint: 'Acompanha as tarefas corporativas das pessoas da própria equipe.' },
-  { key: 'ver_todas_equipes', label: 'Ver todos os setores e equipes', hint: 'Visão da empresa inteira (somente leitura).' },
   { key: 'gerenciar_pessoas_equipe', label: 'Cadastrar e editar pessoas dos setores e equipes que gerencia', hint: 'Cria contas de colaborador, edita dados, desativa e gera senha temporária.' },
   { key: 'gerenciar_pessoas_todas', label: 'Administrar pessoas, setores e perfis', hint: 'Define perfis e acessos, cria setores e escolhe os gestores de cada um.' },
 ];

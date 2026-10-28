@@ -7,8 +7,11 @@ import { UiService } from '../core/ui.service';
 import { AuthService } from '../core/auth.service';
 import { ToastService } from '../core/toast.service';
 import { DayData, DayItem, Load, Period, Task } from '../core/models';
-import { addDaysIso, dueLabel, longDate, todayIso } from '../core/format';
+import { TaskSize, addDaysIso, dueLabel, longDate, sizeInfo, todayIso } from '../core/format';
 import { WeatherService } from '../core/weather.service';
+import { DAY_SLIDES, DaySlideKey, DeckSlide, buildDayDeck } from '../presentation/day-deck';
+import { DeckViewerComponent } from '../presentation/deck-viewer.component';
+import { downloadDeckPptx } from '../presentation/deck-pptx';
 
 type PlanTask = Task & { period: Period };
 type Line =
@@ -21,16 +24,15 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'fim', label: 'Fim do dia' },
 ];
 const LOAD_LABEL: Record<Load, string> = { leve: 'leve', equilibrado: 'equilibrada', cheio: 'cheia' };
-const SIZE_LABEL = { P: 'Pequena', M: 'Média', G: 'Grande' } as const;
 // Horário padrão quando a rotina é criada direto num período (o horário não aparece na tela).
 const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fim: '17:30' };
 
 // Meu Dia em "linha do dia": tarefas, rotina e lembretes numa lista só, em Manhã, Tarde e
-// Fim do dia. Sem horários: a carga vem do tamanho da tarefa (P/M/G).
+// Fim do dia. Sem horários: a carga vem do tamanho da tarefa (Rápida/Normal/Longa).
 @Component({
   selector: 'app-my-day',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, DeckViewerComponent],
   template: `
     <div class="page day-line">
       <div class="page-head">
@@ -47,6 +49,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
             <button [class.on]="space() === 'pessoal'" (click)="space.set('pessoal')">Individual</button>
           </div>
           <button class="btn-action-secondary" (click)="distribute()" [disabled]="!d()">Distribuir pelo dia</button>
+          <button class="btn-action-secondary" (click)="openPresent()" [disabled]="!d()">Apresentação</button>
           <button class="btn-action-primary" (click)="openClose()" [disabled]="!d()">Encerrar o dia</button>
         </div>
       </div>
@@ -93,7 +96,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
                       <button class="dl-title" (click)="ui.openTask(l.task.id)">{{ l.task.title }}</button>
                       @if (l.task.project) { <span class="tag">{{ l.task.project.name }}</span> } @else if (l.task.space === 'pessoal') { <span class="tag">Individual</span> }
                       @if (dueText(l.task); as dt) { <span class="dl-due" [class]="'dl-due dl-due--' + dt.tone">{{ dt.text }}</span> }
-                      @if (l.task.size) { <span class="sz" [class]="'sz sz--' + l.task.size" [title]="sizeLabel(l.task.size)">{{ l.task.size }}</span> }
+                      @if (l.task.size) { <span class="sz" [class]="'sz sz--' + l.task.size" [title]="sizeLabel(l.task.size)">{{ sizeShort(l.task.size) }}</span> }
                       <select class="dl-move" [ngModel]="l.task.period" (ngModelChange)="move(l.task, $event)" aria-label="Mover para outro período" title="Mover para outro período">
                         @for (o of periods; track o.key) { <option [value]="o.key">{{ o.label }}</option> }
                       </select>
@@ -133,7 +136,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
               </div>
               @for (t of pick().slice(0, 8); track t.id) {
                 <div class="dl-pick" draggable="true" (dragstart)="drag($event, t.id)">
-                  @if (t.size) { <span class="sz" [class]="'sz sz--' + t.size">{{ t.size }}</span> }
+                  @if (t.size) { <span class="sz" [class]="'sz sz--' + t.size" [title]="sizeLabel(t.size)">{{ sizeShort(t.size) }}</span> }
                   <button class="dl-title" (click)="ui.openTask(t.id)">{{ t.title }}</button>
                   @if (dueText(t); as dt) { <span class="dl-due" [class]="'dl-due dl-due--' + dt.tone">{{ dt.text }}</span> }
                   <button class="dl-plus" (click)="addToPlan(t, d.current_period || 'manha')" [attr.aria-label]="'Adicionar ' + t.title + ' ao plano'" title="Adicionar ao período atual">+</button>
@@ -184,6 +187,35 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
         </div>
       </div>
     }
+
+    @if (choosing()) {
+      <div class="modal-scrim" (click)="choosing.set(false)">
+        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentação do dia">
+          <div class="modal-head">Apresentação do dia<div class="muted small" style="font-weight:500;margin-top:2px">{{ dateLabel() }} · escolha os slides e como apresentar</div></div>
+          <div class="modal-body">
+            <div class="field"><label class="form-label" for="dp-t">Título</label><input id="dp-t" class="form-field" [(ngModel)]="ptitle" /></div>
+            <div class="row" style="justify-content: space-between">
+              <span class="form-label">Slides ({{ picked().length }} de {{ daySlides.length }})</span>
+              <span class="row small"><button type="button" class="link-btn" (click)="picked.set(allSlides)">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
+            </div>
+            <div class="pd-pick">
+              @for (sl of daySlides; track sl.key) {
+                <label class="check-label" style="align-items: flex-start">
+                  <input type="checkbox" style="margin-top: 3px" [checked]="picked().includes(sl.key)" (change)="togglePick(sl.key)" />
+                  <span>{{ sl.label }}<br /><span class="muted small">{{ sl.hint }}</span></span>
+                </label>
+              }
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn-action-secondary" [disabled]="!picked().length || exporting()" (click)="downloadPptx()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
+            <button type="button" class="btn-action-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (presenting()) { <app-deck-viewer [slides]="deck()" [footer]="'TaskHub · Meu Dia · ' + dateLabel()" (close)="presenting.set(false)" /> }
 
     @if (closing()) {
       <div class="modal-scrim" (click)="closing.set(false)">
@@ -247,6 +279,15 @@ export class MyDayPage implements OnInit, OnDestroy {
   closeActions: Record<number, 'amanha' | 'remover'> = {};
   closeNote = '';
   private sub?: Subscription;
+
+  daySlides = DAY_SLIDES;
+  allSlides = DAY_SLIDES.map(x => x.key);
+  choosing = signal(false);
+  presenting = signal(false);
+  exporting = signal(false);
+  picked = signal<DaySlideKey[]>(DAY_SLIDES.map(x => x.key));
+  ptitle = '';
+  deck = signal<DeckSlide[]>([]);
 
   isToday = computed(() => this.date() === todayIso());
   dateLabel = computed(() => { const l = longDate(this.date()); return l.charAt(0).toUpperCase() + l.slice(1); });
@@ -317,7 +358,8 @@ export class MyDayPage implements OnInit, OnDestroy {
   closed(t: Task) { return t.status.category === 'done' || t.status.category === 'canceled'; }
   canTick(t: Task) { return t.access === 'edit' || t.access === 'work'; }
   loadLabel(l: Load) { return LOAD_LABEL[l]; }
-  sizeLabel(s: 'P' | 'M' | 'G') { return SIZE_LABEL[s]; }
+  sizeLabel(s: TaskSize) { return sizeInfo(s).hint; }
+  sizeShort(s: TaskSize) { return sizeInfo(s).short; }
   periodLabel(p: Period) { return PERIODS.find(x => x.key === p)!.label.toLowerCase(); }
   dueText(t: Task): { text: string; tone: string } | null {
     if (!t.due_date || this.closed(t)) return null;
@@ -380,6 +422,27 @@ export class MyDayPage implements OnInit, OnDestroy {
       next: () => { this.routineFor.set(null); this.load(); this.toast.show('Rotina criada.'); },
       error: e => this.toast.error(errorMessage(e, 'Não foi possível criar a rotina.')),
     });
+  }
+
+  openPresent() {
+    this.ptitle = `Meu dia · ${this.dateLabel()}`;
+    this.choosing.set(true);
+  }
+  togglePick(k: DaySlideKey) { this.picked.update(l => (l.includes(k) ? l.filter(x => x !== k) : [...l, k])); }
+  private buildDeck() {
+    const d = this.d(); if (!d) return [];
+    return buildDayDeck(d, this.picked(), this.auth.user()?.name || '', this.ptitle.trim() || `Meu dia · ${this.dateLabel()}`);
+  }
+  present() { this.deck.set(this.buildDeck()); this.choosing.set(false); this.presenting.set(true); }
+  async downloadPptx() {
+    this.exporting.set(true);
+    try {
+      await downloadDeckPptx(this.buildDeck(), this.ui.palette(), `TaskHub · Meu Dia · ${this.dateLabel()}`, `meu-dia-${this.date()}`);
+      this.toast.show('PowerPoint gerado. O arquivo foi baixado.');
+      this.choosing.set(false);
+    } catch {
+      this.toast.error('Não foi possível gerar o PowerPoint.');
+    } finally { this.exporting.set(false); }
   }
 
   openClose() { this.closeActions = {}; this.closeNote = ''; this.closing.set(true); }

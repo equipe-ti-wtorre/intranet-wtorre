@@ -1,6 +1,6 @@
 import { Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, computed, signal } from '@angular/core';
 import { WorkDashboard } from '../core/models';
-import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, weekLabel } from './slides';
+import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from './slides';
 
 // Apresentação dentro do sistema: tela cheia, um slide por vez (← → para navegar, Esc para sair).
 // Usa os mesmos slides e dados do PowerPoint.
@@ -31,7 +31,7 @@ import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, weekLabel } from './slides';
               <div class="pv-meter"><b>Tarefas concluídas · {{ d.kpis.pct }}%</b><div><i [style.width.%]="d.kpis.pct"></i></div></div>
               @if (d.kpis.time_pct !== null) {
                 <div class="pv-meter pv-meter--time"><b>Tempo decorrido até o prazo · {{ d.kpis.time_pct }}%</b><div><i [style.width.%]="d.kpis.time_pct"></i></div></div>
-                <p [class.pv-alert]="(d.kpis.time_pct - d.kpis.pct) > 10">{{ (d.kpis.time_pct - d.kpis.pct) > 10 ? 'O ritmo está ' + (d.kpis.time_pct - d.kpis.pct) + ' pontos abaixo do calendário.' : 'O ritmo acompanha o prazo do trabalho.' }}</p>
+                <p [class.pv-alert]="(d.kpis.time_pct - d.kpis.pct) > 10">{{ (d.kpis.time_pct - d.kpis.pct) > 10 ? 'O ritmo está ' + (d.kpis.time_pct - d.kpis.pct) + ' pontos abaixo do calendário.' : 'O ritmo acompanha o prazo do projeto.' }}</p>
               }
             </div>
           }
@@ -132,7 +132,7 @@ export class PresentationViewerComponent implements OnInit, OnDestroy {
 
   coverMeta() {
     const p = this.d.subject;
-    return [`Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  ');
+    return [linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  ');
   }
   fmt(iso: string | null) { return fmtDate(iso); }
   wk(iso: string) { return weekLabel(iso); }

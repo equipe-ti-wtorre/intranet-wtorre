@@ -1,5 +1,8 @@
 -- TaskHub dentro da intranet. Tabelas com prefixo th_ para não misturar com o restante.
 -- O usuário administrador nasce no bootstrap do processo, não aqui.
+--
+-- ALTER manual (bancos criados antes de a pessoa poder estar em várias equipes), uma vez:
+--   ALTER TABLE th_team_members ADD KEY idx_th_team_members_user (user_id), DROP INDEX uk_th_team_members_user;
 
 CREATE TABLE IF NOT EXISTS th_users (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -94,7 +97,7 @@ CREATE TABLE IF NOT EXISTS th_team_members (
   role VARCHAR(10) NOT NULL DEFAULT 'membro',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (team_id, user_id),
-  UNIQUE KEY uk_th_team_members_user (user_id),
+  KEY idx_th_team_members_user (user_id),
   CONSTRAINT fk_th_tm_team FOREIGN KEY (team_id) REFERENCES th_teams(id) ON DELETE CASCADE,
   CONSTRAINT fk_th_tm_user FOREIGN KEY (user_id) REFERENCES th_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

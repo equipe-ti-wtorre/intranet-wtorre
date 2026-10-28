@@ -1,6 +1,6 @@
 import pptxgen from 'pptxgenjs';
 import { DashItem, WorkDashboard } from '../core/models';
-import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, weekLabel } from './slides';
+import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from './slides';
 
 // Cores por paleta (hex sem "#", como o PowerPoint exige).
 const PALETTES = {
@@ -20,7 +20,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
   const pres = new pptxgen();
   pres.layout = 'LAYOUT_WIDE';
   pres.title = title;
-  pres.subject = `Status do trabalho ${d.subject.name}`;
+  pres.subject = `Status do projeto ${d.subject.name}`;
   pres.author = 'TaskHub';
   pres.theme = { headFontFace: FONT, bodyFontFace: FONT };
 
@@ -61,12 +61,12 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
       s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.25, h: H, fill: { color: C.brand } });
       s.addText('TaskHub', { x: 1, y: 0.8, w: 6, h: 0.5, fontFace: FONT, fontSize: 16, bold: true, color: 'FFFFFF', margin: 0, isTextBox: true });
       s.addText(title, { x: 1, y: 2.3, w: 11, h: 1.6, fontFace: FONT, fontSize: 44, bold: true, color: 'FFFFFF', margin: 0, valign: 'bottom', isTextBox: true });
-      s.addText([`Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  '),
+      s.addText([linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  '),
         { x: 1, y: 4.05, w: 11, h: 0.5, fontFace: FONT, fontSize: 18, color: 'AAB2C8', margin: 0, isTextBox: true });
       s.addShape(pres.ShapeType.roundRect, { x: 1, y: 4.9, w: 2.1, h: 0.5, rectRadius: 0.1, fill: { color: p.health === 'no_prazo' || p.health === 'concluido' ? GREEN : p.health === 'em_risco' ? AMBER : RED } });
       s.addText(HEALTH_LABEL[p.health], { x: 1, y: 4.9, w: 2.1, h: 0.5, fontFace: FONT, fontSize: 14, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', margin: 0, isTextBox: true });
       s.addText(date, { x: 1, y: H - 1, w: 6, h: 0.4, fontFace: FONT, fontSize: 14, color: 'AAB2C8', margin: 0, isTextBox: true });
-      s.addNotes(`Status do trabalho ${p.name} (projeto ${p.project_name}) em ${date}.`);
+      s.addNotes(`Status do projeto ${p.name} (${p.project_name}) em ${date}.`);
     }
 
     if (key === 'resumo') {
@@ -95,7 +95,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
       if (k.time_pct !== null) {
         bar(4.85, 'Tempo decorrido até o prazo', k.time_pct, '94A3B8');
         const gap = k.time_pct - k.pct;
-        s.addText(gap > 10 ? `O ritmo está ${gap} pontos abaixo do calendário.` : 'O ritmo acompanha o prazo do trabalho.',
+        s.addText(gap > 10 ? `O ritmo está ${gap} pontos abaixo do calendário.` : 'O ritmo acompanha o prazo do projeto.',
           { x: MX, y: 5.95, w: W - 2 * MX, h: 0.4, fontFace: FONT, fontSize: 14, color: gap > 10 ? 'BE123C' : MUTED, margin: 0, isTextBox: true });
       }
       s.addNotes(`${k.pct}% concluído, ${k.overdue} atrasadas e ${k.blocked} bloqueadas.`);
@@ -184,5 +184,5 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
   }
 
   const safe = `${d.subject.project_name}-${d.subject.name}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-  await pres.writeFile({ fileName: `status-${safe || 'trabalho'}-${new Date().toISOString().slice(0, 10)}.pptx` });
+  await pres.writeFile({ fileName: `status-${safe || 'projeto'}-${new Date().toISOString().slice(0, 10)}.pptx` });
 }

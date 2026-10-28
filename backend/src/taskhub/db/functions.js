@@ -24,7 +24,6 @@ const FUNCTIONS = [
    RETURNS TINYINT READS SQL DATA
    BEGIN
      IF p_sector IS NULL THEN RETURN 0; END IF;
-     IF th_has(p_user, 'ver_todas_equipes') = 1 THEN RETURN 1; END IF;
      IF EXISTS (SELECT 1 FROM th_sector_managers sm WHERE sm.sector_id = p_sector AND sm.user_id = p_user) THEN
        RETURN 1;
      END IF;
@@ -55,12 +54,12 @@ const FUNCTIONS = [
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE v_sector INT;
-     DECLARE v_team INT;
      IF p_person IS NULL OR p_manager = p_person THEN RETURN 0; END IF;
      SELECT sector_id INTO v_sector FROM th_users WHERE id = p_person;
      IF th_oversees_sector(p_manager, v_sector) = 1 THEN RETURN 1; END IF;
-     SELECT team_id INTO v_team FROM th_team_members WHERE user_id = p_person LIMIT 1;
-     IF th_oversees_team(p_manager, v_team) = 1 THEN RETURN 1; END IF;
+     IF EXISTS (SELECT 1 FROM th_team_members m WHERE m.user_id = p_person AND th_oversees_team(p_manager, m.team_id) = 1) THEN
+       RETURN 1;
+     END IF;
      RETURN 0;
    END`,
 
@@ -74,7 +73,30 @@ const FUNCTIONS = [
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE result VARCHAR(10) DEFAULT NULL;
+     DECLARE v_team INT DEFAULT NULL;
+     DECLARE v_sector INT DEFAULT NULL;
      DECLARE CONTINUE HANDLER FOR NOT FOUND SET result = NULL;
+     -- Quadro de equipe: gestão da equipe/setor gerencia, membro edita (cria e exclui projetos),
+     -- quem acompanha o setor só vê, convidado de um projeto vê só esse projeto.
+     SELECT tb.team_id, t.sector_id INTO v_team, v_sector
+       FROM th_team_boards tb JOIN th_teams t ON t.id = tb.team_id WHERE tb.project_id = p_project;
+     IF v_team IS NOT NULL THEN
+       IF NOT EXISTS (SELECT 1 FROM th_users u WHERE u.id = p_user AND IFNULL(u.active, 1) <> 0) THEN RETURN NULL; END IF;
+       IF th_has(p_user, 'gerenciar_pessoas_todas') = 1
+          OR EXISTS (SELECT 1 FROM th_team_managers tm WHERE tm.team_id = v_team AND tm.user_id = p_user)
+          OR EXISTS (SELECT 1 FROM th_sector_managers sm WHERE sm.sector_id = v_sector AND sm.user_id = p_user) THEN
+         RETURN 'manage';
+       END IF;
+       IF EXISTS (SELECT 1 FROM th_team_members m WHERE m.team_id = v_team AND m.user_id = p_user) THEN RETURN 'edit'; END IF;
+       IF th_oversees_sector(p_user, v_sector) = 1 THEN RETURN 'view'; END IF;
+       IF EXISTS (
+         SELECT 1 FROM th_project_sections s
+         LEFT JOIN th_work_members wm ON wm.work_id = s.id AND wm.user_id = p_user
+         LEFT JOIN th_work_owners wo ON wo.work_id = s.id AND wo.user_id = p_user
+         WHERE s.project_id = p_project AND (s.owner_id = p_user OR wm.user_id IS NOT NULL OR wo.user_id IS NOT NULL)
+       ) THEN RETURN 'partial'; END IF;
+       RETURN NULL;
+     END IF;
      SELECT CASE
        WHEN p.space = 'pessoal' THEN CASE WHEN p.owner_id = u.id THEN 'manage' ELSE NULL END
        WHEN p.owner_id = u.id THEN 'manage'
@@ -85,7 +107,8 @@ const FUNCTIONS = [
        WHEN EXISTS (
          SELECT 1 FROM th_project_sections s
          LEFT JOIN th_work_members wm ON wm.work_id = s.id AND wm.user_id = u.id
-         WHERE s.project_id = p.id AND (s.owner_id = u.id OR wm.user_id IS NOT NULL)
+         LEFT JOIN th_work_owners wo ON wo.work_id = s.id AND wo.user_id = u.id
+         WHERE s.project_id = p.id AND (s.owner_id = u.id OR wm.user_id IS NOT NULL OR wo.user_id IS NOT NULL)
        ) THEN 'partial'
        ELSE NULL
      END INTO result
@@ -106,10 +129,12 @@ const FUNCTIONS = [
      DECLARE CONTINUE HANDLER FOR NOT FOUND SET result = NULL;
      SELECT project_id, owner_id INTO v_project, v_owner FROM th_project_sections WHERE id = p_work;
      SET v_role = th_project_role(p_user, v_project);
-     IF v_role IN ('manage', 'edit') OR v_owner = p_user THEN RETURN 'manage'; END IF;
+     IF v_role IN ('manage', 'edit') OR v_owner = p_user
+        OR EXISTS (SELECT 1 FROM th_work_owners wo WHERE wo.work_id = p_work AND wo.user_id = p_user) THEN RETURN 'manage'; END IF;
      IF v_role IN ('view', 'guest') THEN RETURN 'view'; END IF;
+     -- No quadro da equipe, quem está em work_members é solicitante: acompanha a fase, sem ver tarefas.
      IF EXISTS (SELECT 1 FROM th_work_members wm WHERE wm.work_id = p_work AND wm.user_id = p_user) THEN
-       RETURN 'view';
+       RETURN IF(EXISTS (SELECT 1 FROM th_team_boards tb WHERE tb.project_id = v_project), 'follow', 'view');
      END IF;
      RETURN result;
    END`,

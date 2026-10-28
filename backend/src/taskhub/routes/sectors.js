@@ -17,10 +17,10 @@ const SECTOR_SELECT = `
                 FROM sector_managers sm JOIN users u ON u.id = sm.user_id WHERE sm.sector_id = s.id), '[]') AS managers
   FROM sectors s`;
 
-// Setores visíveis: todos para quem administra ou vê tudo; senão, os que a pessoa gerencia,
+// Setores visíveis: todos para quem administra pessoas; senão, os que a pessoa gerencia,
 // acompanha como diretoria ou em que trabalha.
 router.get('/', ah(async (req, res) => {
-  const all = has(req.user, 'gerenciar_pessoas_todas') || has(req.user, 'ver_todas_equipes');
+  const all = has(req.user, 'gerenciar_pessoas_todas');
   const { rows } = await query(
     `${SECTOR_SELECT}
       WHERE s.archived = false AND ($2 OR th_oversees_sector($1, s.id) OR s.id = $3)
@@ -113,9 +113,24 @@ router.delete('/:id', ah(async (req, res) => {
   requireAdmin(req.user);
   const id = intParam(req.params.id);
   await tx(async (c) => {
+    // O quadro de cada equipe é um projeto, e projects.team_id não deixa apagar a equipe com projeto ligado.
+    await c.query(
+      `DELETE FROM projects WHERE id IN (SELECT b.project_id FROM team_boards b
+         JOIN teams t ON t.id = b.team_id WHERE t.sector_id = $1)`, [id]
+    );
+    const { rows: [left] } = await c.query(
+      'SELECT COUNT(*) AS n FROM projects p JOIN teams t ON t.id = p.team_id WHERE t.sector_id = $1', [id]
+    );
+    if (Number(left.n) > 0) throw new HttpError(409, 'O setor ainda tem projetos antigos ligados às equipes. Exclua-os antes.');
     await c.query('DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE sector_id = $1)', [id]);
     await c.query('UPDATE users SET sector_id = NULL WHERE sector_id = $1', [id]);
-    await c.query('UPDATE users SET directed_sectors = array_remove(directed_sectors, $1)', [id]);
+    const { rows: directors } = await c.query(
+      'SELECT id, directed_sectors FROM users WHERE JSON_CONTAINS(directed_sectors, CAST($1 AS CHAR))', [id]
+    );
+    for (const u of directors) {
+      const list = (u.directed_sectors || []).filter(s => Number(s) !== id);
+      await c.query('UPDATE users SET directed_sectors = $1 WHERE id = $2', [list, u.id]);
+    }
     await c.query('DELETE FROM sectors WHERE id = $1', [id]);
   });
   res.json({ ok: true });

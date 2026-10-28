@@ -43,7 +43,8 @@ async function issueRefresh(userId, userAgent) {
 }
 
 async function session(user, req) {
-  const { rows: [m] } = await query(`SELECT (SELECT team_id FROM team_members WHERE user_id = users.id LIMIT 1) AS team_id, ${PROFILE_SQL('users')}
+  const { rows: [m] } = await query(`SELECT (SELECT MIN(team_id) FROM team_members WHERE user_id = users.id) AS team_id,
+    (SELECT JSON_ARRAYAGG(team_id) FROM team_members WHERE user_id = users.id) AS team_ids, ${PROFILE_SQL('users')}
     FROM users WHERE id = $1`, [user.id]);
   user = { ...user, ...m };
   return {

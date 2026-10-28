@@ -7,7 +7,8 @@ const { PROFILE_SQL } = require('../lib/permissions');
 const USER_FIELDS = `id, name, email, username, initials, color, role, active, is_director, sector_id, directed_sectors,
   must_change_password, daily_capacity_min, job_title, token_version, away_until, profiles, permissions, directed_teams,
   avatar_rev,
-  (SELECT team_id FROM team_members WHERE user_id = users.id LIMIT 1) AS team_id,
+  (SELECT MIN(team_id) FROM team_members WHERE user_id = users.id) AS team_id,
+  (SELECT JSON_ARRAYAGG(team_id) FROM team_members WHERE user_id = users.id) AS team_ids,
   ${PROFILE_SQL('users')}`;
 
 // Valida o token e carrega o usuário atualizado do banco a cada requisição,

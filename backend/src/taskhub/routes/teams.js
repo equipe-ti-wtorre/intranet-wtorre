@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
 const { has } = require('../lib/permissions');
+const { boardOf, ensureTeamBoard } = require('../lib/boards');
 
 async function oversees(user, teamId) {
   const { rows } = await query('SELECT th_oversees_team($1, $2) AS ok', [user.id, teamId]);
@@ -41,20 +42,21 @@ const TEAM_SELECT = `
   SELECT t.id, t.name, t.description, t.color, t.sector_id, s.name AS sector_name, t.created_by,
     th_oversees_team($1, t.id) AS can_dashboard,
     (SELECT COUNT(*) FROM team_members m WHERE m.team_id = t.id) AS members_count,
-    (SELECT COUNT(*) FROM projects p WHERE p.team_id = t.id AND p.archived = false AND p.space = 'profissional') AS projects_count,
+    (SELECT COUNT(*) FROM project_sections s JOIN team_boards b ON b.project_id = s.project_id
+      WHERE b.team_id = t.id AND s.completed_at IS NULL) AS projects_count,
+    (SELECT b.project_id FROM team_boards b WHERE b.team_id = t.id) AS board_id,
     EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1) AS is_member,
     COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color) ORDER BY u.name)
                 FROM team_managers tm JOIN users u ON u.id = tm.user_id WHERE tm.team_id = t.id), '[]') AS managers
   FROM teams t LEFT JOIN sectors s ON s.id = t.sector_id`;
 
 router.get('/', ah(async (req, res) => {
-  const all = has(req.user, 'ver_todas_equipes');
   const { rows } = await query(
     `${TEAM_SELECT}
-      WHERE t.archived = false AND ($2 OR th_oversees_team($1, t.id)
+      WHERE t.archived = false AND (th_oversees_team($1, t.id)
             OR EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1))
       ORDER BY s.name, t.name`,
-    [req.user.id, all]
+    [req.user.id]
   );
   const editable = new Set();
   for (const t of rows) if (await canEdit(req.user, t.id)) editable.add(t.id);
@@ -83,6 +85,7 @@ router.post('/', ah(async (req, res) => {
     );
     // Quem cria vira gestor da equipe.
     await c.query('INSERT INTO team_managers (team_id, user_id) VALUES ($1, $2)', [t.id, req.user.id]);
+    await ensureTeamBoard(c, t.id, req.user.id);
     return t.id;
   });
   const { rows } = await query(`${TEAM_SELECT} WHERE t.id = $2`, [req.user.id, id]);
@@ -112,6 +115,12 @@ router.patch('/:id', ah(async (req, res) => {
   if (!sets.length) throw new HttpError(400, 'Nada para atualizar.');
   params.push(id);
   await query(`UPDATE teams SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+  if (d.name || d.color) {
+    await query(
+      `UPDATE projects SET name = (SELECT name FROM teams WHERE id = $1), color = (SELECT color FROM teams WHERE id = $1)
+        WHERE id IN (SELECT project_id FROM team_boards WHERE team_id = $1)`, [id]
+    );
+  }
   const { rows } = await query(`${TEAM_SELECT} WHERE t.id = $2`, [req.user.id, id]);
   res.json({ ...rows[0], can_edit: true });
 }));
@@ -119,29 +128,50 @@ router.patch('/:id', ah(async (req, res) => {
 router.delete('/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
   await requireEdit(req.user, id);
-  await query('DELETE FROM teams WHERE id = $1', [id]);
+  // Os projetos e tarefas da equipe vão junto com o quadro.
+  await tx(async (c) => {
+    await c.query('DELETE FROM projects WHERE id IN (SELECT project_id FROM team_boards WHERE team_id = $1)', [id]);
+    const { rows: [left] } = await c.query('SELECT COUNT(*) AS n FROM projects WHERE team_id = $1', [id]);
+    if (Number(left.n) > 0) throw new HttpError(409, 'A equipe ainda tem projetos antigos ligados a ela. Exclua-os antes.');
+    await c.query('DELETE FROM teams WHERE id = $1', [id]);
+  });
   res.json({ ok: true });
 }));
 
-// Membros: pessoas do AD, do mesmo setor. Cada pessoa fica em no máximo uma equipe, então incluir
-// aqui tira a pessoa da equipe anterior. Gestor da equipe pode ser uma conta local.
+// Quadro da equipe (a tela da equipe). Membros, gestores e quem acompanha o setor.
+router.get('/:id/board', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  const { rows: [t] } = await query(
+    `SELECT t.id, (th_oversees_team($1, t.id) = 1 OR th_oversees_sector($1, t.sector_id) = 1
+                   OR EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1)) AS ok
+       FROM teams t WHERE t.id = $2 AND t.archived = false`, [req.user.id, id]
+  );
+  if (!t) throw new HttpError(404, 'Equipe não encontrada');
+  if (!t.ok && !has(req.user, 'gerenciar_pessoas_todas')) {
+    // Convidado de um projeto da equipe só chega ao quadro que já existe.
+    const board = await boardOf({ query }, id);
+    const { rows: [r] } = board ? await query('SELECT th_project_role($1, $2) AS role', [req.user.id, board]) : { rows: [] };
+    if (!r?.role) throw new HttpError(404, 'Equipe não encontrada');
+    return res.json({ project_id: board });
+  }
+  const projectId = await tx(c => ensureTeamBoard(c, id, req.user.id));
+  res.json({ project_id: projectId });
+}));
+
+// Membros: pessoas ativas do mesmo setor (AD ou locais). A mesma pessoa pode estar em várias equipes.
 router.put('/:id/members/:userId', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const userId = intParam(req.params.userId, 'userId');
   await requireEdit(req.user, id);
   const { rows: [chk] } = await query(
-    `SELECT u.sector_id = t.sector_id AS same, u.entra_oid IS NOT NULL AS from_directory,
-            (SELECT x.name FROM teams x JOIN team_members m ON m.team_id = x.id WHERE m.user_id = u.id AND x.id <> t.id LIMIT 1) AS other
+    `SELECT u.sector_id = t.sector_id AS same, COALESCE(u.active, true) AS active
        FROM users u, teams t WHERE u.id = $1 AND t.id = $2`, [userId, id]
   );
   if (!chk) throw new HttpError(404, 'Pessoa ou equipe não encontrada');
-  if (!chk.from_directory) throw new HttpError(400, 'Só pessoas do AD entram na equipe.');
+  if (!chk.active) throw new HttpError(400, 'Pessoa inativa não pode entrar na equipe.');
   if (!chk.same) throw new HttpError(400, 'Só pessoas do mesmo setor podem entrar na equipe. O setor da pessoa é definido em Administração.');
-  await tx(async (c) => {
-    await c.query('DELETE FROM team_members WHERE user_id = $1', [userId]);
-    await c.query(`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'membro')`, [id, userId]);
-  });
-  res.json({ ok: true, moved_from: chk.other || null });
+  await query(`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'membro') ON CONFLICT DO NOTHING`, [id, userId]);
+  res.json({ ok: true });
 }));
 
 router.delete('/:id/members/:userId', ah(async (req, res) => {

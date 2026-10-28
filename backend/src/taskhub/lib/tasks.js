@@ -6,6 +6,7 @@ const TASK_SELECT = `
          t.created_at, t.updated_at,
          t.project_id, p.name AS project_name, p.color AS project_color, p.team_id,
          t.section_id, sec.name AS section_name,
+         tph.phase_id, sph.name AS phase_name, sph.color AS phase_color,
          t.status_id, ws.name AS status_name, ws.color AS status_color,
          COALESCE(ws.category, CASE WHEN t.completed_at IS NOT NULL THEN 'done' ELSE 'todo' END) AS status_category,
          t.assignee_id, a.name AS assignee_name, a.initials AS assignee_initials,
@@ -22,6 +23,8 @@ const TASK_SELECT = `
     LEFT JOIN projects p ON p.id = t.project_id
     LEFT JOIN teams pt ON pt.id = p.team_id
     LEFT JOIN project_sections sec ON sec.id = t.section_id
+    LEFT JOIN task_phase tph ON tph.task_id = t.id
+    LEFT JOIN team_phases sph ON sph.id = tph.phase_id
     LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
     LEFT JOIN users a ON a.id = t.assignee_id
     LEFT JOIN users c ON c.id = t.created_by
@@ -31,6 +34,7 @@ const TASK_SELECT = `
 const SPACE_SQL = `COALESCE(p.space, t.space)`;
 // Tamanho → minutos equivalentes (para carga e capacidade). Sem tamanho: estimativa ou 30 min.
 const SIZE_MIN = { P: 30, M: 90, G: 180 };
+const DAY_REF_MIN = 420; // 7 h por dia, referência fixa da carga (não é mais configurável por pessoa)
 const loadMin = (t) => {
   const size = t.size ? String(t.size).trim() : '';
   return SIZE_MIN[size] || (t.estimate_min ?? 30);
@@ -59,6 +63,7 @@ function formatTask(r) {
     tags: r.tags || [],
     project: r.project_id ? { id: r.project_id, name: r.project_name, color: r.project_color, team_id: r.team_id, team_name: r.team_name } : null,
     section: r.section_id ? { id: r.section_id, name: r.section_name } : null,
+    phase: r.phase_id ? { id: r.phase_id, name: r.phase_name, color: r.phase_color } : null,
     status: {
       id: r.status_id || null,
       name: r.status_name || (r.status_category === 'done' ? 'Concluído' : 'A fazer'),
@@ -87,12 +92,13 @@ async function loadTask(run, userId, taskId) {
 }
 
 async function logActivity(run, taskId, userId, type, fromValue = null, toValue = null) {
-  await run.query(
-    `INSERT INTO task_activity (task_id, user_id, type, from_value, to_value) VALUES ($1, $2, $3, $4, $5)`,
+  const { rows: [row] } = await run.query(
+    `INSERT INTO task_activity (task_id, user_id, type, from_value, to_value) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [taskId, userId, type,
       fromValue == null ? null : String(fromValue).slice(0, 200),
       toValue == null ? null : String(toValue).slice(0, 200)]
   );
+  return row?.id ?? null;
 }
 
-module.exports = { SIZE_MIN, loadMin, SPACE_SQL, MINE_SQL, TASK_SELECT, OPEN_CATEGORIES, STATUS_CATEGORY_SQL, formatTask, loadTask, logActivity };
+module.exports = { SIZE_MIN, DAY_REF_MIN, loadMin, SPACE_SQL, MINE_SQL, TASK_SELECT, OPEN_CATEGORIES, STATUS_CATEGORY_SQL, formatTask, loadTask, logActivity };

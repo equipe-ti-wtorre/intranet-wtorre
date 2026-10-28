@@ -38,8 +38,8 @@ import { downloadWorkPptx } from './pptx';
           <div class="pd-meter"><b>Tarefas concluídas · {{ d.kpis.pct }}%</b><div><i [style.width.%]="d.kpis.pct"></i></div></div>
           @if (d.kpis.time_pct !== null) {
             <div class="pd-meter pd-meter--time"><b>Tempo decorrido até o prazo · {{ d.kpis.time_pct }}%</b><div><i [style.width.%]="d.kpis.time_pct"></i></div></div>
-            <p class="small" [class.wk-late]="gap() > 10" [class.muted]="gap() <= 10">{{ gap() > 10 ? 'O ritmo está ' + gap() + ' pontos abaixo do calendário.' : 'O ritmo acompanha o prazo do trabalho.' }}</p>
-          } @else if (!d.subject.completed) { <p class="muted small">Defina o prazo do trabalho nas Configurações para comparar o ritmo com o calendário.</p> }
+            <p class="small" [class.wk-late]="gap() > 10" [class.muted]="gap() <= 10">{{ gap() > 10 ? 'O ritmo está ' + gap() + ' pontos abaixo do calendário.' : 'O ritmo acompanha o prazo do projeto.' }}</p>
+          } @else if (!d.subject.completed) { <p class="muted small">Defina o prazo do projeto nas Configurações para comparar o ritmo com o calendário.</p> }
         </section>
 
         <div class="pd-grid">
@@ -67,12 +67,12 @@ import { downloadWorkPptx } from './pptx';
           <section class="card pd-card">
             <h2>Equipe</h2>
             @if (d.by_person.length) {
-              <table class="table">
+              <div class="table-scroll"><table class="table">
                 <thead><tr><th>Pessoa</th><th class="num">Abertas</th><th class="num">Atrasadas</th><th class="num">Concluídas</th></tr></thead>
                 <tbody>@for (p of d.by_person; track p.id) {
                   <tr><td><span class="pd-av" [style.background]="p.color">{{ p.initials }}</span>{{ p.name }}</td><td class="num">{{ p.open }}</td><td class="num" [class.wk-late]="p.overdue">{{ p.overdue }}</td><td class="num">{{ p.done }}</td></tr>
                 }</tbody>
-              </table>
+              </table></div>
             } @else { <p class="muted small">Nenhuma tarefa com responsável.</p> }
           </section>
         </div>
@@ -94,8 +94,8 @@ import { downloadWorkPptx } from './pptx';
 
     @if (choosing()) {
       <div class="modal-scrim" (click)="choosing.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentação do trabalho">
-          <div class="modal-head">Apresentação do trabalho<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.subject?.project_name }} › {{ d()?.subject?.name }} · escolha os slides e como apresentar</div></div>
+        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentação do projeto">
+          <div class="modal-head">Apresentação do projeto<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.subject?.project_name }} › {{ d()?.subject?.name }} · escolha os slides e como apresentar</div></div>
           <div class="modal-body">
             <div class="field"><label class="form-label" for="pt">Título</label><input id="pt" class="form-field" [(ngModel)]="ptitle" /></div>
             <div class="row" style="justify-content: space-between">

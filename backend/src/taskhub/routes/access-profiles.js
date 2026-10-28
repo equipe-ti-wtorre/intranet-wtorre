@@ -27,6 +27,12 @@ const schema = z.object({
   permissions: z.array(z.enum(PERMISSION_KEYS)).default([]),
 });
 
+// No zod 4, partial() mantém os defaults: sem tirar, um PATCH só com nome inventaria permissions [].
+const patchSchema = schema.extend({
+  description: z.string().trim().max(500),
+  permissions: z.array(z.enum(PERMISSION_KEYS)),
+}).partial();
+
 router.post('/', ah(async (req, res) => {
   requireAdmin(req.user);
   const d = parse(schema, req.body);
@@ -44,9 +50,9 @@ router.post('/', ah(async (req, res) => {
 
 router.patch('/:key', ah(async (req, res) => {
   requireAdmin(req.user);
-  const d = parse(schema.partial(), req.body);
-  if (req.params.key === 'admin' && d.permissions) throw new HttpError(400, 'O perfil Administrador só administra pessoas, setores e perfis.');
-  if (req.params.key !== 'admin' && d.permissions) d.permissions = withoutPeoplePerms(d.permissions);
+  const d = parse(patchSchema, req.body);
+  if (req.params.key === 'admin') delete d.permissions;
+  else if (d.permissions) d.permissions = withoutPeoplePerms(d.permissions);
   const sets = []; const params = [];
   for (const [k, v] of Object.entries(d)) { params.push(v); sets.push(`${k} = $${params.length}`); }
   if (!sets.length) throw new HttpError(400, 'Nada para atualizar.');

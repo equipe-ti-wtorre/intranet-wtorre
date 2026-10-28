@@ -2,6 +2,8 @@ import { Injectable, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { Person, Project, Sector, Team } from './models';
 
+export interface GuestWork { id: number; name: string; color: string; project_id: number; team_id: number; team_name: string; }
+
 // Dados compartilhados pelo menu lateral, seletores e captura rápida.
 @Injectable({ providedIn: 'root' })
 export class DataService {
@@ -11,6 +13,7 @@ export class DataService {
   readonly creatableSectors = signal<number[]>([]);
   readonly people = signal<Person[]>([]);
   readonly unread = signal(0);
+  readonly guestWorks = signal<GuestWork[]>([]);
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private api: ApiService) {}
@@ -25,7 +28,10 @@ export class DataService {
 
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
 
-  reloadProjects() { this.api.projects().subscribe(p => this.projects.set(p)); }
+  reloadProjects() {
+    this.api.projects().subscribe(p => this.projects.set(p));
+    this.api.guestWorks().subscribe({ next: w => this.guestWorks.set(w), error: () => {} });
+  }
   reloadTeams() {
     this.api.teams().subscribe(r => { this.teams.set(r.teams); this.creatableSectors.set(r.creatable_sectors); });
     this.api.sectors().subscribe(s => this.sectors.set(s));

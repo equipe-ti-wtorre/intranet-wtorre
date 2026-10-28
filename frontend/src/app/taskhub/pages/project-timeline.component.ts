@@ -4,24 +4,31 @@ import { Router } from '@angular/router';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
 import { ProjectTimeline, Task, TimelineWork } from '../core/models';
-import { TimelineRow, addDays, businessDiff, businessSpan, computeTimeline, isBusiness, isoOf, parseIso } from '../core/timeline';
+import { TimelineRow, addDays, businessDays, businessDiff, businessSpan, computeTimeline, dayOf, isBusiness, isoOf, parseIso } from '../core/timeline';
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { termsFor } from '../core/format';
 
 interface DraftItem {
   key: string; id?: number; name: string; color: string; duration_days: number; start_date: string | null;
-  completed_at: string | null; removed: boolean; work?: TimelineWork;
+  completed_at: string | null; removed: boolean; work?: TimelineWork; owner_ids?: number[];
 }
 interface Span { start: string; end: string }
 interface Row {
   key: string; id?: number; name: string; color: string; duration: number; done: boolean; removed: boolean; isNew: boolean;
   work?: TimelineWork; planned: Span | null; cur: TimelineRow | null; next: TimelineRow | null;
-  drift: number | null; shift: number | null;
+  drift: number | null; shift: number | null; parallel?: string[];
+}
+interface PhaseCard {
+  phase_id: number; name: string; color: string; days: number; planned: number;
+  from?: string; to?: string; pending?: boolean;
 }
 
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const COLORS = ['#4c8dff', '#2fbf71', '#e11d48', '#f97316', '#a78bfa', '#14b8a6', '#c9a84c', '#ec4899'];
-const fmt = (iso: string | null | undefined) => { if (!iso) return '—'; const d = parseIso(iso.slice(0, 10)); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const fmt = (iso: string | null | undefined) => { if (!iso) return '—'; const d = parseIso(iso.slice(0, 10)); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`; };
+const fmtYear = (iso: string) => { const d = parseIso(iso.slice(0, 10)); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; };
 const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.start && a.end === b.end;
 
 // Régua do projeto: datas planejadas de cada trabalho, o previsto (com empurrões) e a simulação.
@@ -41,7 +48,7 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
         <span class="grow"></span>
         @if (draft()) {
           <span class="tl-sim-tag">Simulação · nada foi gravado</span>
-          <button type="button" class="btn btn-sm" (click)="openInsert()"><app-icon name="plus" [size]="14" />Inserir trabalho</button>
+          <button type="button" class="btn btn-sm" (click)="openInsert()"><app-icon name="plus" [size]="14" />Inserir {{ t().one }}</button>
           <button type="button" class="btn btn-ghost btn-sm" (click)="discard()">Descartar</button>
           <button type="button" class="btn btn-primary btn-sm" [disabled]="!dirty() || saving()" (click)="apply()">{{ saving() ? 'Aplicando…' : 'Aplicar' }}</button>
         } @else if (d.can_edit) {
@@ -51,7 +58,7 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
 
       @if (inserting; as f) {
         <div class="tl-insert">
-          <div class="field"><label for="tl-in">Nome do trabalho</label><input id="tl-in" class="input" appAutofocus [(ngModel)]="f.name" placeholder="Ex.: Homologação" (keydown.enter)="confirmInsert()" /></div>
+          <div class="field"><label for="tl-in">Nome do {{ t().one }}</label><input id="tl-in" class="input" appAutofocus [(ngModel)]="f.name" placeholder="Ex.: Homologação" (keydown.enter)="confirmInsert()" /></div>
           <div class="field" style="max-width: 130px"><label for="tl-id">Duração (dias úteis)</label><input id="tl-id" class="input" type="number" min="1" max="365" [(ngModel)]="f.duration" /></div>
           <div class="field" style="min-width: 200px"><label for="tl-ia">Posição</label>
             <select id="tl-ia" class="select" [(ngModel)]="f.after">
@@ -66,12 +73,12 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
       }
 
       @if (!rows().length) {
-        <div class="tl-empty muted">Nenhum trabalho neste projeto ainda. Crie o primeiro para montar a linha do tempo.</div>
+        <div class="tl-empty muted">{{ board() ? 'Nenhum projeto nesta equipe ainda.' : 'Nenhum trabalho neste projeto ainda.' }} Crie o primeiro para montar a linha do tempo.</div>
       } @else {
         <div class="tl-scroll" #scroller>
           <div class="tl-grid" [style.width.px]="labelWidth + days().length * dayW()">
             <div class="tl-row tl-head">
-              <div class="tl-label tl-label--head"><span>Trabalho</span><span>período</span></div>
+              <div class="tl-label tl-label--head"><span>{{ t().One }}</span><span>período</span></div>
               <div class="tl-track" [style.width.px]="days().length * dayW()">
                 <div class="tl-months">
                   @for (m of months(); track m.key) { <span [style.left.px]="m.at * dayW()" [style.width.px]="m.len * dayW()">{{ m.label }}</span> }
@@ -114,6 +121,9 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
                     } @else if (r.removed) {
                       <div class="tl-label__drift">sai da fila</div>
                     }
+                    @if (!draft() && r.parallel?.length) {
+                      <div class="tl-label__drift">em paralelo com {{ r.parallel!.join(', ') }}</div>
+                    }
                   </div>
                   @if (draft() && !r.removed && !r.done) {
                     <input class="input tl-dur" type="number" min="1" max="365" [ngModel]="r.duration" (ngModelChange)="setDuration(r.key, $event)" (click)="$event.stopPropagation()" [attr.aria-label]="'Duração de ' + r.name" title="Duração em dias úteis" />
@@ -131,11 +141,20 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
                   @if (barOf(r); as b) {
                     <span class="tl-date tl-date--start" [style.right.px]="days().length * dayW() - x(b.start) + 4">{{ fmt(b.start) }}</span>
                     <button type="button" class="tl-bar" [class.tl-bar--done]="r.done" [class.tl-bar--late]="b.late && !r.done" [class.tl-bar--new]="r.isNew"
-                            [class.tl-bar--sel]="selectedKey() === r.key"
+                            [class.tl-bar--sel]="selectedKey() === r.key" [class.tl-bar--phases]="selectedKey() === r.key && phasePlan(r).length"
                             [style.left.px]="x(b.start)" [style.width.px]="span(b)" [style.--c]="r.color"
-                            [title]="r.name + ': ' + fmt(b.start) + ' a ' + fmt(b.end) + (b.late && !r.done ? ' (atrasado)' : '')"
+                            [title]="selectedKey() === r.key && phasePlan(r).length ? '' : r.name + ': ' + fmt(b.start) + ' a ' + fmt(b.end) + (b.late && !r.done ? ' (atrasado)' : '')"
                             (click)="select(r.key)">
-                      @if (r.work && !r.isNew) { <span class="tl-bar__fill" [style.width.%]="pct(r.work)"></span> }
+                      @if (selectedKey() === r.key && phasePlan(r).length) {
+                        <span class="tl-bar__phases">
+                          @for (s of phasePlan(r); track $index) {
+                            <i [style.flex-grow]="s.days" [style.background]="s.color"
+                               [title]="s.name + ': previsto ' + s.days + (s.days === 1 ? ' dia útil' : ' dias úteis')"></i>
+                          }
+                        </span>
+                      } @else if (r.work && !r.isNew) {
+                        <span class="tl-bar__fill" [style.width.%]="pct(r.work)"></span>
+                      }
                       <span class="tl-bar__label">{{ r.name }}</span>
                       @if (draft() && !r.done) { <span class="tl-handle" (pointerdown)="resizeStart($event, r, b)" (click)="$event.stopPropagation()" title="Arraste para mudar a duração"></span> }
                     </button>
@@ -172,13 +191,37 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
                 <div class="muted small row" style="gap: 6px">
                   @if (r.work?.owner_name; as on) { <app-avatar [person]="{ name: on, initials: r.work?.owner_initials || '', color: r.work?.owner_color || '' }" />{{ on }} · }
                   <span [class]="'tl-status tl-status--' + statusOf(r).key">{{ statusOf(r).label }}</span>
+                  @if (r.work?.phase_name; as ph) { <span class="phase-chip" [style.--phase]="r.work?.phase_color">{{ ph }}</span> }
                   @if (r.work) { · {{ r.work.tasks_done }} de {{ r.work.tasks_total }} tarefas ({{ pct(r.work) }}%) }
                 </div>
               </div>
-              @if (r.id && !r.isNew) { <button type="button" class="btn btn-sm" (click)="openWork(r)"><app-icon name="arrow" [size]="14" />Abrir trabalho</button> }
+              @if (r.id && !r.isNew) { <button type="button" class="btn btn-sm" (click)="openWork(r)"><app-icon name="arrow" [size]="14" />Abrir {{ t().one }}</button> }
               <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="selectedKey.set(null)" aria-label="Fechar detalhes" title="Fechar"><app-icon name="x" [size]="14" /></button>
             </div>
 
+            <div class="tl-phases">
+              <h4>Etapas</h4>
+              @if (phaseCards(r); as cards) {
+                @if (cards.length) {
+                  <div class="tl-phase-cards">
+                    @for (c of cards; track $index) {
+                      <div class="tl-phase-card" [class.tl-phase-card--pending]="c.pending" [style.--pc]="c.color">
+                        <b>{{ c.name }}</b>
+                        @if (c.pending) {
+                          <strong>previsto {{ c.planned }} {{ c.planned === 1 ? 'dia útil' : 'dias úteis' }}</strong>
+                          <small>ainda não entrou nesta fase</small>
+                        } @else {
+                          <strong>{{ c.days }} {{ c.days === 1 ? 'dia útil' : 'dias úteis' }}</strong>
+                          <small>{{ fmtYear(c.from!) }} - {{ fmtYear(c.to!) }}@if (c.planned) { · previsto {{ c.planned }} d }</small>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="muted small">Ainda sem histórico de etapas.</p>
+                }
+              }
+            </div>
             <div class="tl-panel__body">
               <section>
                 <h4>Datas</h4>
@@ -218,9 +261,9 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
 
               <section>
                 <h4>Tarefas @if (r.work) { <span class="muted">{{ r.work.tasks_total }}</span> }</h4>
-                @if (r.isNew) { <p class="muted small">Trabalho novo da simulação, ainda sem tarefas.</p> }
+                @if (r.isNew) { <p class="muted small">{{ t().One }} novo da simulação, ainda sem tarefas.</p> }
                 @else if (tasksLoading()) { <p class="muted small">Carregando…</p> }
-                @else if (!tasks().length) { <p class="muted small">Nenhuma tarefa neste trabalho.</p> }
+                @else if (!tasks().length) { <p class="muted small">Nenhuma tarefa neste {{ t().one }}.</p> }
                 @else {
                   <ul class="tl-tasks">
                     @for (t of tasks().slice(0, 8); track t.id) {
@@ -264,11 +307,11 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
               <div><span class="muted small">{{ slack() >= 0 ? 'Folga' : 'Atraso' }}</span>
                 <strong [class.wk-late]="slack() < 0" [class.wk-ok]="slack() >= 0">{{ abs(slack()) }} {{ abs(slack()) === 1 ? 'dia útil' : 'dias úteis' }}</strong></div>
             }
-            <div><span class="muted small">Trabalhos atrasados</span><strong [class.wk-late]="lateCount() > 0">{{ lateCount() }}</strong></div>
+            <div><span class="muted small">{{ t().Many }} atrasados</span><strong [class.wk-late]="lateCount() > 0">{{ lateCount() }}</strong></div>
             <span class="grow"></span>
             <span class="muted small tl-hint">
-              @if (draft()) { Arraste as linhas para reordenar e a ponta da barra para mudar a duração. Clique num trabalho para mudar a data inicial. }
-              @else { Clique num trabalho para ver datas, tarefas e informações. Se um trabalho atrasa, os seguintes são empurrados. }
+              @if (draft()) { Arraste as linhas para reordenar e a ponta da barra para mudar a duração. Clique num {{ t().one }} para mudar a data inicial. }
+              @else { Clique num {{ t().one }} para ver datas, tarefas e informações. O mesmo responsável empurra a fila; pessoas diferentes andam em paralelo. }
             </span>
           </div>
         }
@@ -282,6 +325,8 @@ const same = (a: Span | null, b: Span | null) => !!a && !!b && a.start === b.sta
 })
 export class ProjectTimelineComponent implements OnChanges {
   projectId = input.required<number>();
+  board = input(false);
+  t = computed(() => termsFor(this.board()));
   changed = output<void>();
   private api = inject(ApiService);
   private toast = inject(ToastService);
@@ -291,6 +336,7 @@ export class ProjectTimelineComponent implements OnChanges {
   readonly labelWidth = 320;
   readonly today = isoOf(new Date());
   fmt = fmt;
+  fmtYear = fmtYear;
   abs = Math.abs;
   same = same;
   businessSpan = businessSpan;
@@ -309,12 +355,17 @@ export class ProjectTimelineComponent implements OnChanges {
   private seq = 0;
   private tasksFor: number | null = null;
 
+  private ownersOf(w?: TimelineWork | DraftItem | null) {
+    if (!w) return [] as number[];
+    if ('owner_ids' in w && w.owner_ids?.length) return w.owner_ids;
+    return ((w as TimelineWork).owners || []).map(o => o.id);
+  }
   baseline = computed(() => {
     const d = this.data();
-    return computeTimeline((d?.works || []).map(w => ({ duration_days: w.duration_days, start_date: w.start_date, completed_at: w.completed_at })), d?.project_start || null, this.today);
+    return computeTimeline((d?.works || []).map(w => ({ duration_days: w.duration_days, start_date: w.start_date, completed_at: w.completed_at, owner_ids: this.ownersOf(w) })), d?.project_start || null, this.today);
   });
   private active = computed(() => (this.draft() || []).filter(i => !i.removed));
-  simPlan = computed(() => computeTimeline(this.active(), this.data()?.project_start || null, this.today));
+  simPlan = computed(() => computeTimeline(this.active().map(i => ({ duration_days: i.duration_days, start_date: i.start_date, completed_at: i.completed_at, owner_ids: this.ownersOf(i) })), this.data()?.project_start || null, this.today));
   current = computed(() => (this.draft() ? this.simPlan() : this.baseline()));
 
   rows = computed<Row[]>(() => {
@@ -325,13 +376,15 @@ export class ProjectTimelineComponent implements OnChanges {
       w?.start_date && w.due_date ? { start: w.start_date, end: w.due_date } : null;
     const driftOf = (p: Span | null, c: TimelineRow | null) => (p && c ? businessDiff(p.end, c.end) || null : null);
     const draft = this.draft();
+    const overlap = (a: TimelineRow | null, b: TimelineRow | null) => !!a && !!b && a.start <= b.end && b.start <= a.end;
     if (!draft) {
       return d.works.map((w, i) => {
         const cur = this.baseline().rows[i];
         const planned = plannedOf(w);
+        const parallel = d.works.filter((o, j) => o.id !== w.id && overlap(cur, this.baseline().rows[j])).map(o => o.name);
         return {
           key: `w${w.id}`, id: w.id, name: w.name, color: w.color, duration: w.duration_days, done: !!w.completed_at,
-          removed: false, isNew: false, work: w, planned, cur, next: null, drift: driftOf(planned, cur), shift: null,
+          removed: false, isNew: false, work: w, planned, cur, next: null, drift: driftOf(planned, cur), shift: null, parallel,
         };
       });
     }
@@ -439,6 +492,39 @@ export class ProjectTimelineComponent implements OnChanges {
     return r.planned && !r.done && !same(r.planned, r.cur) ? r.planned : null;
   }
   pct(w: TimelineWork) { return w.tasks_total ? Math.round((w.tasks_done / w.tasks_total) * 100) : 0; }
+  phaseStays(r: Row): { phase_id: number; name: string; color: string; days: number; from: string; to: string }[] {
+    const log = r.work?.phase_log || [];
+    if (!log.length) return [];
+    const until = dayOf(r.work?.completed_at) || this.today;
+    const out: { phase_id: number; name: string; color: string; days: number; from: string; to: string }[] = [];
+    log.forEach((entry, i) => {
+      const from = dayOf(entry.changed_at);
+      if (!from) return;
+      const next = log[i + 1] ? dayOf(log[i + 1].changed_at) : null;
+      const to = next ? addDays(next, -1) : until;
+      const days = businessDays(from, to);
+      if (days > 0) out.push({ phase_id: entry.phase_id, name: entry.phase_name, color: entry.phase_color, days, from, to });
+    });
+    return out;
+  }
+  phasePlan(r: Row): { name: string; color: string; days: number }[] {
+    const phases = this.data()?.phases || [];
+    const planned = phases.filter(p => (p.duration_days ?? 0) > 0);
+    if (planned.length) return planned.map(p => ({ name: p.name, color: p.color, days: p.duration_days || 1 }));
+    return this.phaseStays(r).map(s => ({ name: s.name, color: s.color, days: s.days }));
+  }
+  phaseCards(r: Row): PhaseCard[] {
+    const phases = this.data()?.phases || [];
+    const plannedOf = (id: number) => phases.find(p => p.id === id)?.duration_days ?? 0;
+    const stays = this.phaseStays(r).map(s => ({
+      phase_id: s.phase_id, name: s.name, color: s.color, days: s.days, planned: plannedOf(s.phase_id), from: s.from, to: s.to,
+    }));
+    const seen = new Set(stays.map(s => s.phase_id));
+    const pending = phases.filter(p => (p.duration_days ?? 0) > 0 && !seen.has(p.id)).map(p => ({
+      phase_id: p.id, name: p.name, color: p.color, days: 0, planned: p.duration_days || 0, pending: true,
+    }));
+    return [...stays, ...pending];
+  }
   statusOf(r: Row) {
     if (r.done) return { key: 'done', label: 'Concluído' };
     if (r.cur?.late || (r.work?.tasks_overdue || 0) > 0) return { key: 'late', label: 'Atrasado' };
@@ -474,7 +560,7 @@ export class ProjectTimelineComponent implements OnChanges {
     const d = this.data(); if (!d) return;
     this.draft.set(d.works.map(w => ({
       key: `w${w.id}`, id: w.id, name: w.name, color: w.color, duration_days: w.duration_days, start_date: w.start_date || null,
-      completed_at: w.completed_at, removed: false, work: w,
+      completed_at: w.completed_at, removed: false, work: w, owner_ids: this.ownersOf(w),
     })));
   }
   discard() {
@@ -553,7 +639,7 @@ export class ProjectTimelineComponent implements OnChanges {
     if (removed.length) {
       const tasks = removed.reduce((n, i) => n + (i.work?.tasks_total || 0), 0);
       const names = removed.map(i => i.name).join(', ');
-      const what = removed.length === 1 ? 'O trabalho' : `${removed.length} trabalhos`;
+      const what = removed.length === 1 ? `O ${this.t().one}` : `${removed.length} ${this.t().many}`;
       if (!confirm(`${what} ${names} ${removed.length === 1 ? 'será excluído' : 'serão excluídos'}${tasks ? ` com ${tasks} ${tasks === 1 ? 'tarefa' : 'tarefas'}` : ''}. Não dá para desfazer.\nAplicar a simulação?`)) return;
     }
     const body = {
@@ -566,7 +652,7 @@ export class ProjectTimelineComponent implements OnChanges {
     this.api.saveTimeline(this.projectId(), body).subscribe({
       next: t => {
         this.saving.set(false); this.draft.set(null); this.data.set(t); this.selectedKey.set(null);
-        this.toast.show('Linha do tempo atualizada. As datas dos trabalhos foram recalculadas.');
+        this.toast.show(`Linha do tempo atualizada. As datas dos ${this.t().many} foram recalculadas.`);
         this.changed.emit();
       },
       error: e => {

@@ -3,21 +3,22 @@ const bcrypt = require('bcrypt');
 const { z } = require('zod');
 const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
-const { initialsFrom, formatUser, passwordProblem, colorFor } = require('../lib/users');
+const { initialsFrom, formatUser, passwordProblem, colorFor, TEAM_FIELDS } = require('../lib/users');
 const { avatarUrl, saveAvatar, removeAvatar } = require('../lib/avatars');
 const { PERMISSION_KEYS, PROFILE_SQL, has, syncLegacy } = require('../lib/permissions');
 const { isEnabled } = require('../lib/entra');
 const { syncDirectory } = require('../lib/entra-sync');
 
-const USER_SELECT = `SELECT u.*, tm.team_id, t.name AS team_name, s.name AS sector_name, ${PROFILE_SQL('u')}
-  FROM users u LEFT JOIN team_members tm ON tm.user_id = u.id LEFT JOIN teams t ON t.id = tm.team_id
-  LEFT JOIN sectors s ON s.id = u.sector_id`;
+// A pessoa pode estar em várias equipes: team_id é a primeira (por id), team_name junta todas.
+const USER_SELECT = `SELECT u.*, ${TEAM_FIELDS('u')}, s.name AS sector_name, ${PROFILE_SQL('u')}
+  FROM users u LEFT JOIN sectors s ON s.id = u.sector_id`;
 
 // Setores e equipes que alguém gerencia (para o escopo "pessoas que gerencio").
 const MANAGED = `(
   u.sector_id IN (SELECT sector_id FROM sector_managers WHERE user_id = $1)
-  OR tm.team_id IN (SELECT team_id FROM team_managers WHERE user_id = $1)
-  OR tm.team_id IN (SELECT t2.id FROM teams t2 JOIN sector_managers sm ON sm.sector_id = t2.sector_id WHERE sm.user_id = $1)
+  OR EXISTS (SELECT 1 FROM team_members mm WHERE mm.user_id = u.id AND (
+       mm.team_id IN (SELECT team_id FROM team_managers WHERE user_id = $1)
+       OR mm.team_id IN (SELECT t2.id FROM teams t2 JOIN sector_managers sm ON sm.sector_id = t2.sector_id WHERE sm.user_id = $1)))
 )`;
 
 // Cadastro de pessoas: só o administrador. O gestor de equipe inclui na equipe quem já veio do AD.
@@ -67,9 +68,10 @@ async function checkProfiles(keys) {
   if (rows.length !== new Set(keys).size) throw new HttpError(400, 'Perfil de acesso inválido.');
 }
 
+// Com equipe: inclui a pessoa nela (sem tirar das outras). Sem equipe (mudou de setor): sai de todas.
 async function setTeam(run, userId, teamId) {
-  await run.query('DELETE FROM team_members WHERE user_id = $1', [userId]);
-  if (teamId) await run.query(`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'membro')`, [teamId, userId]);
+  if (!teamId) { await run.query('DELETE FROM team_members WHERE user_id = $1', [userId]); return; }
+  await run.query(`INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'membro') ON CONFLICT DO NOTHING`, [teamId, userId]);
 }
 
 async function blockDirectory(run, oid, motivo) {
@@ -101,10 +103,8 @@ router.get('/directory', ah(async (req, res) => {
     `SELECT u.id, u.name, u.username, u.initials, u.color, u.avatar_rev, u.job_title, u.away_until, u.profiles, u.sector_id,
             (u.entra_oid IS NOT NULL) AS from_directory,
             th_is_manager(u.id) AS can_coordinate,
-            s.name AS sector_name, t.id AS team_id, t.name AS team_name
+            s.name AS sector_name, ${TEAM_FIELDS('u')}
        FROM users u
-       LEFT JOIN team_members tm ON tm.user_id = u.id
-       LEFT JOIN teams t ON t.id = tm.team_id
        LEFT JOIN sectors s ON s.id = u.sector_id
       WHERE u.active IS DISTINCT FROM false ORDER BY u.name`
   );
@@ -136,10 +136,12 @@ router.delete('/me/avatar', ah(async (req, res) => {
 
 // Preferências da própria pessoa.
 router.patch('/me', ah(async (req, res) => {
+  if (req.body?.daily_capacity_min !== undefined) {
+    throw new HttpError(400, 'A carga do dia usa 7 horas para todo mundo; a capacidade por pessoa saiu.');
+  }
   const data = parse(z.object({
     name: z.string().trim().min(2).max(100).optional(),
     job_title: z.string().trim().max(100).optional(),
-    daily_capacity_min: z.coerce.number().int().min(60).max(960).optional(),
     away_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   }), req.body);
   const sets = []; const params = [];
@@ -202,8 +204,8 @@ router.post('/', ah(async (req, res) => {
   const id = await tx(async (c) => {
     const { rows: [u] } = await c.query(
       `INSERT INTO users (name, email, password, initials, color, role, username, job_title, must_change_password,
-                          profiles, permissions, directed_sectors, sector_id)
-       VALUES ($1, $2, $3, $4, $5, 'membro', $6, $7, true, $8, $9, $10, $11) RETURNING id`,
+                          profiles, permissions, directed_teams, directed_sectors, sector_id)
+       VALUES ($1, $2, $3, $4, $5, 'membro', $6, $7, true, $8, $9, '[]', $10, $11) RETURNING id`,
       [data.name, email, await bcrypt.hash(data.password, 10), initialsFrom(data.name), colorFor(data.username),
         data.username, data.job_title, data.profiles || ['colaborador'], data.permissions || [], data.directed_sectors || [], data.sector_id]
     );

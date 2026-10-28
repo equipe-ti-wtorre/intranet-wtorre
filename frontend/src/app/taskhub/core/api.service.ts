@@ -2,8 +2,8 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../environments/environment';
 import {
-  AccessProfile, DayData, Note, Notification, Permission, Person, Project, Sector, Reminder, ReminderRepeat, RoutineBlock, Section, Status, Task, TaskDetail, Work, WorkDashboard, WorkDetail,
-  Team, TeamDashboard, TimelineEntry, User, Subtask, ProjectTimeline,
+  AccessProfile, DayData, Note, Notification, Permission, Person, Project, Sector, Reminder, ReminderRepeat, RoutineBlock, Section, Status, Task, TaskDetail, Work, WorkDashboard, WorkDetail, WorkPhaseLog,
+  Team, TeamDashboard, TimelineEntry, User, Subtask, TaskContact, CreatableWork, ProjectTimeline, Phase, SearchResult, SchedulePreview,
 } from './models';
 
 const U = environment.apiUrl;
@@ -27,6 +27,10 @@ export class ApiService {
   addSubtask(id: number, title: string, extra: Partial<Subtask> = {}) { return this.http.post<Subtask>(`${U}/tasks/${id}/subtasks`, { title, ...extra }); }
   updateSubtask(id: number, sid: number, body: Record<string, unknown>) { return this.http.patch<Subtask>(`${U}/tasks/${id}/subtasks/${sid}`, body); }
   deleteSubtask(id: number, sid: number) { return this.http.delete(`${U}/tasks/${id}/subtasks/${sid}`); }
+  setTaskContacts(id: number, contacts: number[]) { return this.http.put<{ contacts: TaskContact[]; aligned_on: string | null }>(`${U}/tasks/${id}/contacts`, { contacts }); }
+  setTaskAlignment(id: number, alignedOn: string | null) { return this.http.put<{ contacts: TaskContact[]; aligned_on: string | null }>(`${U}/tasks/${id}/alignment`, { aligned_on: alignedOn }); }
+  creatableWorks() { return this.http.get<CreatableWork[]>(`${U}/me/creatable-works`); }
+  reorderSubtasks(id: number, ids: number[]) { return this.http.put<{ ok: boolean }>(`${U}/tasks/${id}/subtasks/order`, { ids }); }
   timeline(id: number) { return this.http.get<TimelineEntry[]>(`${U}/tasks/${id}/timeline`); }
   comment(id: number, body: string) { return this.http.post<TimelineEntry>(`${U}/tasks/${id}/comments`, { body }); }
 
@@ -63,8 +67,19 @@ export class ApiService {
   project(id: number) { return this.http.get<Project>(`${U}/projects/${id}`); }
   projectPeople(id: number) { return this.http.get<Person[]>(`${U}/projects/${id}/people`); }
   workDashboard(id: number) { return this.http.get<WorkDashboard>(`${U}/works/${id}/dashboard`); }
-  works(projectId: number) { return this.http.get<{ works: Work[]; can_create: boolean }>(`${U}/projects/${projectId}/works`); }
+  works(projectId: number) { return this.http.get<{ works: Work[]; can_create: boolean; phases: Phase[]; team_id: number | null; phases_editable: boolean }>(`${U}/projects/${projectId}/works`); }
+  setWorkPhase(id: number, phaseId: number, beforeId?: number | null) {
+    return this.http.patch<Work>(`${U}/works/${id}/phase`, { phase_id: phaseId, ...(beforeId !== undefined ? { before_id: beforeId } : {}) });
+  }
+  teamPhases(teamId: number) { return this.http.get<{ phases: Phase[]; is_default: boolean; can_edit: boolean }>(`${U}/teams/${teamId}/phases`); }
+  saveTeamPhases(teamId: number, items: { id?: number; name: string; color: string; duration_days?: number }[]) {
+    return this.http.put<{ phases: Phase[]; can_edit: boolean }>(`${U}/teams/${teamId}/phases`, { items });
+  }
+  schedulePreview(projectId: number, body: { start_date: string; due_date: string; owner_ids: number[]; exclude_id?: number }) {
+    return this.http.post<SchedulePreview>(`${U}/projects/${projectId}/works/schedule-preview`, body);
+  }
   work(id: number) { return this.http.get<WorkDetail>(`${U}/works/${id}`); }
+  workPhasesLog(id: number) { return this.http.get<WorkPhaseLog[]>(`${U}/works/${id}/phases-log`); }
   createWork(projectId: number, body: Record<string, unknown>) { return this.http.post<Work>(`${U}/projects/${projectId}/works`, body); }
   updateWork(id: number, body: Record<string, unknown>) { return this.http.patch<Work>(`${U}/works/${id}`, body); }
   deleteWork(id: number) { return this.http.delete(`${U}/works/${id}`); }
@@ -106,6 +121,8 @@ export class ApiService {
   updateAccessProfile(key: string, body: Record<string, unknown>) { return this.http.patch<AccessProfile>(`${U}/access-profiles/${key}`, body); }
   deleteAccessProfile(key: string) { return this.http.delete(`${U}/access-profiles/${key}`); }
   team(id: number) { return this.http.get<Team>(`${U}/teams/${id}`); }
+  teamBoard(id: number) { return this.http.get<{ project_id: number }>(`${U}/teams/${id}/board`); }
+  guestWorks() { return this.http.get<{ id: number; name: string; color: string; project_id: number; team_id: number; team_name: string }[]>(`${U}/me/guest-works`); }
   createTeam(body: Record<string, unknown>) { return this.http.post<Team>(`${U}/teams`, body); }
   updateTeam(id: number, body: Record<string, unknown>) { return this.http.patch<Team>(`${U}/teams/${id}`, body); }
   setTeamMember(id: number, userId: number, role: string) { return this.http.put(`${U}/teams/${id}/members/${userId}`, { role }); }
@@ -126,7 +143,7 @@ export class ApiService {
     return this.http.post<{ created: number; updated: number; deactivated: number; skipped: number }>(`${U}/users/sync-directory`, {});
   }
 
-  search(q: string) { return this.http.get<{ tasks: Task[]; projects: Project[]; people: Person[] }>(`${U}/search`, { params: this.params({ q }) }); }
+  search(q: string) { return this.http.get<SearchResult>(`${U}/search`, { params: this.params({ q }) }); }
 }
 
 // Mensagem legível de um erro HTTP.

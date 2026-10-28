@@ -29,7 +29,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
           <span class="muted small grow">O administrador cria os setores e escolhe gestores com o perfil Gestor. Eles criam as equipes dentro do setor.</span>
           <button class="btn btn-primary btn-sm" (click)="newSector()"><app-icon name="plus" [size]="14" />Novo setor</button>
         </div>
-        <table class="table">
+        <div class="table-scroll"><table class="table">
           <thead><tr><th>Setor</th><th>Gestores do setor</th><th class="num">Equipes</th><th class="num">Pessoas</th><th></th></tr></thead>
           <tbody>
             @for (s of sectors(); track s.id) {
@@ -46,7 +46,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
               </tr>
             }
           </tbody>
-        </table>
+        </table></div>
       }
 
       @if (tab() === 'pessoas') {
@@ -58,19 +58,28 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
           <span class="muted small grow">Uma pessoa pode ter mais de um perfil; os acessos se somam. Os perfis padrão podem ter os acessos ajustados, mas não são excluídos.</span>
           <button class="btn btn-primary btn-sm" (click)="newProfile()"><app-icon name="plus" [size]="14" />Novo perfil</button>
         </div>
-        <table class="table">
-          <thead><tr><th>Perfil</th><th>Acessos</th><th class="num">Pessoas</th><th></th></tr></thead>
-          <tbody>
-            @for (p of profiles(); track p.key) {
-              <tr class="click" (click)="editProfile(p)">
-                <td><b>{{ p.label }}</b> @if (p.system) { <span class="muted small">· padrão</span> }<div class="muted small">{{ p.description }}</div></td>
-                <td class="small">{{ p.key === 'admin' ? 'Todos' : (p.permissions.length ? permNames(p.permissions) : 'Nenhum acesso extra: vê o que foi incluído e organiza o Individual') }}</td>
-                <td class="num">{{ p.users_count }}</td>
-                <td class="num"><button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); editProfile(p)">Editar</button></td>
-              </tr>
-            }
-          </tbody>
-        </table>
+        <div class="ap-grid">
+          @for (p of profiles(); track p.key) {
+            <button type="button" class="ap-card" (click)="editProfile(p)">
+              <div class="ap-card__top">
+                <div class="grow" style="min-width:0">
+                  <div class="row" style="gap:8px;flex-wrap:wrap">
+                    <b>{{ p.label }}</b>
+                    @if (p.system) { <span class="pill">padrão</span> }
+                  </div>
+                  @if (p.description) { <p class="ap-card__desc">{{ p.description }}</p> }
+                </div>
+                <span class="ap-card__count">{{ p.users_count }} {{ p.users_count === 1 ? 'pessoa' : 'pessoas' }}</span>
+              </div>
+              <div class="ap-card__perms">
+                @if (p.key === 'admin') { <span class="pill">Todos</span> }
+                @else if (p.permissions.length) {
+                  @for (k of p.permissions; track k) { <span class="pill">{{ permLabel(k) }}</span> }
+                } @else { <span class="pill">Vê o que foi incluído e organiza o Individual</span> }
+              </div>
+            </button>
+          }
+        </div>
       }
 
       @if (tab() === 'microsoft') {
@@ -112,7 +121,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
       <div class="modal-scrim" (click)="sectorForm = null">
         <div class="modal" (click)="$event.stopPropagation()">
           <div class="modal-head">{{ sectorForm.id ? 'Editar setor' : 'Novo setor' }}</div>
-          <div class="modal-body" style="max-height:68vh;overflow-y:auto">
+          <div class="modal-body">
             <div class="field"><label for="sn">Nome</label><input id="sn" class="input" appAutofocus [(ngModel)]="sectorForm.name" placeholder="Ex.: Financeiro" /></div>
             <div class="field"><label for="sd">Descrição</label><input id="sd" class="input" [(ngModel)]="sectorForm.description" /></div>
             <div class="field"><label>Pessoas do setor</label>
@@ -161,16 +170,21 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
           <div class="modal-head">{{ profileForm.key ? 'Editar perfil' : 'Novo perfil' }}</div>
           <div class="modal-body">
             <div class="field"><label for="pn">Nome</label><input id="pn" class="input" appAutofocus [(ngModel)]="profileForm.label" placeholder="Ex.: Coordenador" /></div>
-            <div class="field"><label for="pd">Descrição</label><input id="pd" class="input" [(ngModel)]="profileForm.description" /></div>
+            <div class="field"><label for="pd">Descrição</label>
+              <textarea id="pd" class="textarea" style="min-height:72px" [(ngModel)]="profileForm.description" placeholder="O que esta pessoa vê e pode fazer."></textarea>
+            </div>
             <div class="section-label">Acessos</div>
             @if (profileForm.key === 'admin') {
               <div class="note-info" style="margin-top:0">O Administrador cadastra pessoas, setores e perfis, e não vê o trabalho dos setores.</div>
             } @else {
-              <div class="stack" style="gap:8px">
+              <div class="ap-perms">
                 @for (perm of assignablePerms(); track perm.key) {
-                  <label class="check-label" style="align-items:flex-start">
-                    <input type="checkbox" style="margin-top:3px" [checked]="profileForm.permissions.includes(perm.key)" (change)="togglePerm(perm.key)" />
-                    <span>{{ perm.label }}<br /><span class="muted small">{{ perm.hint }}</span></span>
+                  <label class="ap-perm" [class.on]="profileForm.permissions.includes(perm.key)">
+                    <span class="grow">
+                      <b>{{ perm.label }}</b>
+                      <span class="muted small">{{ perm.hint }}</span>
+                    </span>
+                    <input type="checkbox" class="switch" [checked]="profileForm.permissions.includes(perm.key)" (change)="togglePerm(perm.key)" [attr.aria-label]="perm.label" />
                   </label>
                 }
               </div>
@@ -233,7 +247,7 @@ export class AdminPage implements OnInit {
       error: e => this.toast.error(errorMessage(e, 'Não foi possível ler a configuração da Microsoft.')),
     });
   }
-  permNames(keys: string[]) { return keys.map(k => this.permissions().find(p => p.key === k)?.label || k).join(' · '); }
+  permLabel(key: string) { return this.permissions().find(p => p.key === key)?.label || key; }
 
   newSector() { this.error.set(''); this.peopleIds.set([]); this.managerIds.set([]); this.sectorForm = { name: '', description: '', color: COLORS[0] }; }
   editSector(s: Sector) {
