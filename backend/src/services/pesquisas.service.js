@@ -47,6 +47,51 @@ function isAdminPesquisas(req) {
   return req.user?.perfil === 'ADMIN' || (req.userModulos || []).includes('pesquisas');
 }
 
+const ACOES_ERRO = ['clonar', 'publicar', 'capa', 'salvar', 'responder'];
+
+function sanitizeErroMensagem(err) {
+  let s = String(err?.sqlMessage || err?.message || 'Erro desconhecido').trim();
+  if (!s) s = 'Erro desconhecido';
+  s = s.replace(/[?&](sig|se|sv)=[^&\s]+/gi, '');
+  s = s.replace(/AccountKey=[^;\s]+/gi, '');
+  s = s.replace(/password=[^;\s]+/gi, 'password=***');
+  s = s.replace(/mysql:\/\/[^\s]+/gi, 'mysql://***');
+  return s.slice(0, 500);
+}
+
+async function registrarErro(req, err, { acao, passo, formularioId } = {}) {
+  try {
+    const acaoOk = ACOES_ERRO.includes(acao) ? acao : null;
+    if (!acaoOk) return;
+    let formId = Number(formularioId);
+    if (!Number.isInteger(formId) || formId < 1) {
+      formId = Number(req?.params?.id);
+    }
+    if (!Number.isInteger(formId) || formId < 1) formId = null;
+    await repo.insertPesquisasErro({
+      acao: acaoOk,
+      formularioId: formId,
+      userId: req?.user?.id || null,
+      email: str(req?.user?.email, 200) || null,
+      httpStatus: Number(err?.status) || 500,
+      codigo: str(err?.code || err?.name, 80) || null,
+      passo: str(passo, 80) || null,
+      mensagem: sanitizeErroMensagem(err),
+    });
+  } catch (logErr) {
+    console.error('[pesquisas] falha ao gravar log de erro', logErr.code || logErr.name, logErr.message);
+  }
+}
+
+async function copyCloneOpcional(req, novoId, passo, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[pesquisas] clone: falha ao copiar ${passo}`, err.code || err.name, err.message);
+    await registrarErro(req, err, { acao: 'clonar', passo, formularioId: novoId });
+  }
+}
+
 function normalizeUsuarioIds(raw) {
   const ids = [];
   const seen = new Set();
@@ -310,6 +355,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
   const secoes = !!body.secoes;
   const logicaCondicional = !!body.logicaCondicional;
   const anonimo = !!body.anonimo;
+  const multiplaResposta = !!body.multiplaResposta;
   const perguntas = normalizePerguntas(body.perguntas, {
     logicaOn: logicaCondicional,
     secoesOn: secoes,
@@ -340,6 +386,7 @@ function normalizeFormBody(body, { criadorId } = {}) {
     secoes,
     logicaCondicional,
     anonimo,
+    multiplaResposta,
     perguntas,
     eventoTipo,
     eventoTipoOutro,
@@ -537,10 +584,24 @@ function guestsHaveFreshDocumento(raw) {
   return Array.isArray(raw) && raw.some((g) => isDocumentoValido(digitsCpf(g?.cpf)));
 }
 
-async function resolveConvidadosFromBody(body, formularioId) {
+function permiteNovaResposta(form, ja) {
+  return !ja || !!form.multiplaResposta;
+}
+
+function assertConvidadosIdentidade({ publicoAlvo, exigirIdentidade, count, publicar }) {
+  if (!publicar || publicoAlvo !== 'externos' || !exigirIdentidade) return;
+  if ((Number(count) || 0) < 1) {
+    throw httpError(
+      400,
+      'Inclua ao menos um convidado para exigir a confirmação de identidade.'
+    );
+  }
+}
+
+async function resolveConvidadosFromBody(body, formularioId, { exigirIdentidade } = {}) {
   const fontePlanilha = body?.convidadosFonte === 'planilha';
   const rawGuests = Array.isArray(body?.convidados) ? body.convidados : null;
-  if (fontePlanilha && !guestsHaveFreshDocumento(rawGuests)) {
+  if (fontePlanilha && exigirIdentidade !== false && !guestsHaveFreshDocumento(rawGuests)) {
     let rows = Array.isArray(body.base) ? body.base : null;
     if (!rows && formularioId) {
       rows = await repo.listFormularioBaseDados(formularioId);
@@ -572,6 +633,11 @@ async function normalizeConvidados(raw, formularioId) {
   for (const g of raw) {
     const nome = str(g.nome, 200) || null;
     const emailRaw = str(g.email, 200).toLowerCase();
+    const docPreview = digitsCpf(g.cpf);
+    const rgBruto = String(g.rg ?? '').trim();
+    if (!nome && !emailRaw && !docPreview && !rgBruto && !g.id) {
+      continue;
+    }
     let email = null;
     if (emailRaw) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
@@ -579,7 +645,7 @@ async function normalizeConvidados(raw, formularioId) {
       }
       email = emailRaw;
     }
-    const doc = digitsCpf(g.cpf);
+    const doc = docPreview;
     let cpfHash = null;
     let cpfMascara = null;
     let prevLoaded = false;
@@ -725,6 +791,7 @@ function toFormListItem(form, lista) {
     janela: janelaFora(form),
     prazoInicio: form.prazoInicio || null,
     prazoFim: form.prazoFim || null,
+    multiplaResposta: !!form.multiplaResposta,
   };
 }
 
@@ -792,8 +859,13 @@ function matchQuery(item, q) {
   return item.title.toLowerCase().includes(n) || item.category.toLowerCase().includes(n);
 }
 
+function temChaveLookup(keys) {
+  return !!(keys && (keys.chaveDoc || keys.chaveEmail || keys.chaveRg));
+}
+
 async function getFormularioPorId(id, { includeConvidados } = {}) {
   const form = await repo.findFormularioById(id);
+  if (!form) throw httpError(404, 'Formulário não encontrado.');
   const perguntas = await repo.listPerguntas(id);
   const convidados = includeConvidados ? await repo.listConvidados(id) : undefined;
   const destinatarios = includeConvidados ? await repo.listDestinatarios(id) : undefined;
@@ -879,7 +951,7 @@ async function syncComunicadoFormulario(form, { ativo, userId, bump = true }) {
     console.error('[pesquisas] Categoria de comunicados "pesquisas" não encontrada.');
     return false;
   }
-  const linkPath = `/pesquisas/formulario/${form.slug || form.id}/responder`;
+  const linkPath = `/pesquisas/formulario/${form.id}/responder`;
   const wantAtivo = !!ativo;
   const existing = await comunicadosRepo.buscarPorOrigem(ORIGEM_FORM, form.id);
   if (
@@ -1086,6 +1158,7 @@ async function clonarFormulario(req) {
     secoes: origem.secoes,
     logicaCondicional: origem.logicaCondicional,
     anonimo: origem.anonimo,
+    multiplaResposta: origem.multiplaResposta,
     slug,
     eventoTipo: origem.eventoTipo,
     eventoTipoOutro: origem.eventoTipoOutro,
@@ -1097,14 +1170,24 @@ async function clonarFormulario(req) {
     capaFocoY: origem.capaFocoY,
   });
   await repo.replacePerguntas(novoId, perguntas);
-  await repo.copyFormularioBase(id, novoId);
-  await repo.copyDestinatarios(id, novoId);
+  await copyCloneOpcional(req, novoId, 'copyFormularioBase', () => repo.copyFormularioBase(id, novoId));
+  await copyCloneOpcional(req, novoId, 'copyDestinatarios', () => repo.copyDestinatarios(id, novoId));
+  await copyCloneOpcional(req, novoId, 'copiarCapa', () => copiarCapaFormulario(id, novoId));
   try {
-    await copiarCapaFormulario(id, novoId);
-  } catch {
-    /* rascunho válido mesmo se a capa não puder ser copiada */
+    return await getFormularioPorId(novoId, { includeConvidados: true });
+  } catch (err) {
+    await registrarErro(req, err, {
+      acao: 'clonar',
+      passo: 'getFormularioPorId',
+      formularioId: novoId,
+    });
+    const wrapped = httpError(
+      err.status || 500,
+      err.status && err.message ? err.message : 'Não foi possível carregar a cópia do formulário.'
+    );
+    wrapped.pesquisasErroRegistrado = true;
+    throw wrapped;
   }
-  return getFormularioPorId(novoId, { includeConvidados: true });
 }
 
 async function salvarFormulario(req, { publicar }) {
@@ -1118,7 +1201,19 @@ async function salvarFormulario(req, { publicar }) {
   }
   const status = publicar ? 'publicado' : 'rascunho';
   const idParam = req.params.id ? parseId(req.params.id) : null;
-  const guests = await resolveConvidadosFromBody(req.body, idParam);
+  const guests = await resolveConvidadosFromBody(req.body, idParam, {
+    exigirIdentidade: body.exigirIdentidade,
+  });
+  let guestCount = Array.isArray(guests) ? guests.length : null;
+  if (guestCount == null && publicar && body.publicoAlvo === 'externos' && body.exigirIdentidade) {
+    guestCount = idParam ? await repo.countConvidados(idParam) : 0;
+  }
+  assertConvidadosIdentidade({
+    publicoAlvo: body.publicoAlvo,
+    exigirIdentidade: body.exigirIdentidade,
+    count: guestCount == null ? 0 : guestCount,
+    publicar,
+  });
   const usuarioIds = await resolveDestinatarioIds(req.body, body.publicoAlvo);
 
   if (idParam) {
@@ -1180,6 +1275,14 @@ async function publicarFormulario(req) {
         );
       }
     }
+    if (existing.publicoAlvo === 'externos') {
+      assertConvidadosIdentidade({
+        publicoAlvo: existing.publicoAlvo,
+        exigirIdentidade: existing.exigirIdentidade,
+        count: await repo.countConvidados(idParam),
+        publicar: true,
+      });
+    }
     if (!existing.slug) {
       await repo.setFormularioSlug(idParam, await uniquePublicToken());
     }
@@ -1188,10 +1291,23 @@ async function publicarFormulario(req) {
   } else {
     form = await salvarFormulario(req, { publicar: true });
   }
-  if (form.publicoAlvo === 'externos') {
-    await removerComunicadoFormulario(form.id);
-  } else {
-    await atualizarComunicadoDoFormulario(form, req.user.id);
+  try {
+    if (form.publicoAlvo === 'externos') {
+      await removerComunicadoFormulario(form.id);
+    } else {
+      await atualizarComunicadoDoFormulario(form, req.user.id);
+    }
+  } catch (err) {
+    console.error(
+      '[pesquisas] falha ao sincronizar comunicado após publicar',
+      err.code || err.name,
+      err.message
+    );
+    await registrarErro(req, err, {
+      acao: 'publicar',
+      passo: 'comunicado',
+      formularioId: form.id,
+    });
   }
   return form;
 }
@@ -1260,7 +1376,9 @@ async function payloadResponder(req) {
   assertJanelaAberta(form);
   await assertElegivelIntranet(form, req.user);
   const ja = await repo.findRespostaDoUsuario(id, req.user.id);
-  if (ja) throw httpError(409, 'Você já respondeu este formulário.');
+  if (!permiteNovaResposta(form, ja)) {
+    throw httpError(409, 'Você já respondeu este formulário.');
+  }
   const perguntas = await repo.listPerguntas(id);
   const visual = await decorateForm(form);
   return {
@@ -1299,7 +1417,10 @@ async function lookupBaseIntranet(req) {
   }
   assertJanelaAberta(form);
   await assertElegivelIntranet(form, req.user);
-  return { campos: {} };
+  const keys = lookupKeysFromValor(req.body?.valor);
+  if (!temChaveLookup(keys)) return { campos: {} };
+  const dados = await repo.lookupFormularioBase(id, keys);
+  return { campos: dados || {} };
 }
 
 function parseItensBody(req) {
@@ -1468,8 +1589,26 @@ async function enviarResposta(req) {
   return { ok: true };
 }
 
+function refFormularioFromRaw(raw) {
+  let s = String(raw ?? '').trim();
+  try {
+    s = decodeURIComponent(s);
+  } catch {
+    /* mantém o valor original */
+  }
+  const m = s.match(/\/pesquisas\/formulario\/([^/?#]+)/i);
+  if (m) return m[1];
+  if (s.includes('/')) {
+    const parts = s.split('/').filter(Boolean);
+    const i = parts.findIndex((p) => p.toLowerCase() === 'formulario');
+    if (i >= 0 && parts[i + 1]) return parts[i + 1];
+    return parts[parts.length - 1] || s;
+  }
+  return s;
+}
+
 async function findFormularioByRef(raw) {
-  const s = String(raw ?? '').trim();
+  const s = refFormularioFromRaw(raw);
   if (/^\d+$/.test(s)) {
     const id = Number(s);
     if (Number.isInteger(id) && id >= 1) {
@@ -1624,15 +1763,39 @@ function nomeArquivoZip(titulo) {
 
 function buffersParaZip(entradas) {
   return new Promise((resolve, reject) => {
+    if (!Array.isArray(entradas) || !entradas.length) {
+      reject(httpError(404, 'Nenhum anexo encontrado para download.'));
+      return;
+    }
     const archive = new ZipArchive({ zlib: { level: 6 } });
     const chunks = [];
-    archive.on('data', (chunk) => chunks.push(chunk));
-    archive.on('error', reject);
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    const done = () => {
+      if (settled) return;
+      const out = Buffer.concat(chunks);
+      if (out.length < 30 || out[0] !== 0x50 || out[1] !== 0x4b) {
+        fail(httpError(500, 'Não foi possível gerar o arquivo ZIP dos anexos.'));
+        return;
+      }
+      settled = true;
+      resolve(out);
+    };
+    archive.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    archive.on('error', fail);
+    archive.on('finish', done);
+    archive.on('end', done);
     for (const entrada of entradas) {
-      archive.append(entrada.buffer, { name: entrada.nome });
+      const nome = entrada?.nome || 'arquivo';
+      const raw = entrada?.buffer;
+      if (raw == null) continue;
+      archive.append(Buffer.from(raw), { name: nome });
     }
-    archive.finalize();
+    void archive.finalize();
   });
 }
 
@@ -1660,9 +1823,18 @@ async function zipAnexos(req) {
   if (chaves.length > 200) throw httpError(400, 'Selecione no máximo 200 anexos por vez.');
 
   const perguntas = await repo.listPerguntas(form.id);
-  const anexoIds = new Set(perguntas.filter((p) => p.blocoTipo === 'anexo').map((p) => p.id));
+  const anexoIds = new Set(
+    perguntas
+      .filter((p) => p.blocoTipo === 'anexo')
+      .map((p) => Number(p.id))
+      .filter((n) => Number.isInteger(n) && n > 0)
+  );
   const respostas = await repo.listRespostasDetalhadas(form.id);
-  const porResposta = new Map(respostas.map((r) => [r.id, r]));
+  const porResposta = new Map(
+    respostas
+      .map((r) => [Number(r.id), r])
+      .filter(([id]) => Number.isInteger(id) && id > 0)
+  );
 
   const usados = new Set();
   const entradas = [];
@@ -1670,7 +1842,7 @@ async function zipAnexos(req) {
     if (!anexoIds.has(chave.perguntaId)) continue;
     const resposta = porResposta.get(chave.respostaId);
     if (!resposta) continue;
-    const item = (resposta.itens || []).find((i) => i.perguntaId === chave.perguntaId);
+    const item = (resposta.itens || []).find((i) => Number(i.perguntaId) === chave.perguntaId);
     const anexo = parseAnexosLista(item?.valor)[chave.indice];
     if (!anexo) continue;
     let downloaded;
@@ -1680,9 +1852,11 @@ async function zipAnexos(req) {
       if (err.status === 404) continue;
       throw err;
     }
+    const raw = downloaded?.buffer;
+    if (raw == null || !Buffer.byteLength(raw)) continue;
     entradas.push({
       nome: nomeEntradaZip(anexo.nome || downloaded.filename, usados),
-      buffer: downloaded.buffer,
+      buffer: Buffer.from(raw),
     });
   }
   if (!entradas.length) throw httpError(404, 'Nenhum anexo encontrado para download.');
@@ -1938,6 +2112,11 @@ async function excluirRequisicao(req) {
     }
   }
   return { ok: true };
+}
+
+async function listAdminErros(req) {
+  if (!isAdminPesquisas(req)) throw httpError(403, 'Acesso negado.');
+  return repo.listPesquisasErros({ q: str(req.query.q, 120) });
 }
 
 async function listAdminFormularios(req) {
@@ -2224,7 +2403,9 @@ async function publicoFormulario(req) {
   if (form.exigirIdentidade) {
     const guest = await resolveGuestDoForm(form, req.guest);
     const ja = await repo.findRespostaDoConvidado(form.id, guest.id);
-    if (ja) throw httpError(409, 'Você já respondeu este formulário.');
+    if (!permiteNovaResposta(form, ja)) {
+      throw httpError(409, 'Você já respondeu este formulário.');
+    }
   }
   const perguntas = await repo.listPerguntas(form.id);
   const visual = await decorateForm(form);
@@ -2258,7 +2439,7 @@ async function lookupBasePublico(req) {
     await resolveGuestDoForm(form, req.guest);
   }
   const keys = lookupKeysFromValor(req.body?.valor);
-  if (!keys.chaveDoc && !keys.chaveEmail) return { campos: {} };
+  if (!temChaveLookup(keys)) return { campos: {} };
   const dados = await repo.lookupFormularioBase(form.id, keys);
   return { campos: dados || {} };
 }
@@ -2272,7 +2453,9 @@ async function publicoResponder(req) {
     const guest = await resolveGuestDoForm(form, req.guest);
     convidadoId = guest.id;
     const ja = await repo.findRespostaDoConvidado(form.id, convidadoId);
-    if (ja) throw httpError(409, 'Você já respondeu este formulário.');
+    if (!permiteNovaResposta(form, ja)) {
+      throw httpError(409, 'Você já respondeu este formulário.');
+    }
   }
   const perguntas = await repo.listPerguntas(form.id);
   const anexos = await processarAnexosResposta(req, perguntas);
@@ -2623,6 +2806,15 @@ module.exports = {
   decidirRequisicao,
   anexoRequisicao,
   excluirRequisicao,
+  registrarErro,
+  sanitizeErroMensagem,
+  lookupKeysFromValor,
+  temChaveLookup,
+  refFormularioFromRaw,
+  buffersParaZip,
+  assertConvidadosIdentidade,
+  permiteNovaResposta,
+  listAdminErros,
   listAdminFormularios,
   listAdminRequisicoes,
   buscarAprovadores,

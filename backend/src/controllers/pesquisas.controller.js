@@ -1,5 +1,6 @@
 const service = require('../services/pesquisas.service');
 const auditRepo = require('../repositories/auditLog.repository');
+const pesquisasBlobLocal = require('../services/pesquisas-blob-local');
 
 function auditMeta(req) {
   return {
@@ -10,7 +11,14 @@ function auditMeta(req) {
   };
 }
 
-function handleError(res, err) {
+function handleError(res, err, req, meta) {
+  if (req && meta?.acao && !err?.pesquisasErroRegistrado) {
+    void service.registrarErro(req, err, {
+      acao: meta.acao,
+      passo: meta.passo || null,
+      formularioId: meta.formularioId,
+    });
+  }
   if (err.status && err.message) {
     return res.status(err.status).json({ mensagem: err.message });
   }
@@ -69,10 +77,18 @@ async function getFormulario(req, res) {
 async function clonar(req, res) {
   try {
     const form = await service.clonarFormulario(req);
-    await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_FORMULARIO_CLONAR' });
+    try {
+      await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_FORMULARIO_CLONAR' });
+    } catch (auditErr) {
+      console.error(
+        '[pesquisas] falha ao gravar auditoria de clone',
+        auditErr.code || auditErr.name,
+        auditErr.message
+      );
+    }
     res.status(201).json(form);
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'clonar', passo: 'clonarFormulario' });
   }
 }
 
@@ -80,7 +96,7 @@ async function criarRascunho(req, res) {
   try {
     res.status(201).json(await service.salvarRascunho(req));
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'salvar', passo: 'criarRascunho' });
   }
 }
 
@@ -88,7 +104,7 @@ async function atualizarRascunho(req, res) {
   try {
     res.json(await service.salvarRascunho(req));
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'salvar', passo: 'atualizarRascunho' });
   }
 }
 
@@ -98,7 +114,7 @@ async function publicar(req, res) {
     await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_FORMULARIO_PUBLICAR' });
     res.json(form);
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'publicar', passo: 'publicarFormulario' });
   }
 }
 
@@ -142,7 +158,7 @@ async function enviarResposta(req, res) {
   try {
     res.status(201).json(await service.enviarResposta(req));
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'responder', passo: 'enviarResposta' });
   }
 }
 
@@ -291,7 +307,7 @@ async function publicoResponder(req, res) {
   try {
     res.status(201).json(await service.publicoResponder(req));
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'responder', passo: 'publicoResponder' });
   }
 }
 
@@ -342,6 +358,14 @@ async function excluirRequisicao(req, res) {
     const out = await service.excluirRequisicao(req);
     await auditRepo.log({ ...auditMeta(req), action: 'PESQUISAS_REQUISICAO_EXCLUIR' });
     res.json(out);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function listAdminErros(req, res) {
+  try {
+    res.json(await service.listAdminErros(req));
   } catch (err) {
     handleError(res, err);
   }
@@ -409,11 +433,25 @@ async function excluirTemplate(req, res) {
   }
 }
 
+async function localBlob(req, res) {
+  if (!pesquisasBlobLocal.ativo()) {
+    return res.status(404).json({ mensagem: 'Rota não encontrada.' });
+  }
+  try {
+    const file = await pesquisasBlobLocal.ler(req.params.blob);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.send(file.buffer);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
 async function uploadCapa(req, res) {
   try {
     res.json(await service.uploadCapa(req));
   } catch (err) {
-    handleError(res, err);
+    handleError(res, err, req, { acao: 'capa', passo: 'uploadCapa' });
   }
 }
 
@@ -519,6 +557,7 @@ module.exports = {
   decidirRequisicao,
   anexoRequisicao,
   excluirRequisicao,
+  listAdminErros,
   listAdminFormularios,
   listAdminRequisicoes,
   listTemplates,
@@ -526,6 +565,7 @@ module.exports = {
   criarTemplate,
   atualizarTemplate,
   excluirTemplate,
+  localBlob,
   uploadCapa,
   removerCapa,
   publicoCarrossel,

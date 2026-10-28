@@ -25,6 +25,7 @@ function maybeUploadAnexosResposta(req, res, next) {
   });
 }
 
+router.get('/local-blob/:blob', rateLimitPesquisasPublico, controller.localBlob);
 router.get('/publico/carrossel', rateLimitPesquisasPublico, controller.publicoCarrossel);
 router.get('/publico/hub', rateLimitPesquisasPublico, controller.publicoHubMeta);
 router.post('/publico/hub/verificar', rateLimitPesquisasPublico, controller.publicoHubVerificar);
@@ -116,6 +117,7 @@ router.get('/requisicoes/:id/anexo', requireJwt, controller.anexoRequisicao);
 router.get('/requisicoes/:id', requireJwt, controller.getRequisicao);
 router.delete('/requisicoes/:id', requireJwt, controller.excluirRequisicao);
 
+router.get('/admin/erros', ...adminGuard, controller.listAdminErros);
 router.get('/admin/formularios', ...adminGuard, controller.listAdminFormularios);
 router.get('/admin/requisicoes', ...adminGuard, controller.listAdminRequisicoes);
 router.post('/admin/formularios/:id/encerrar', ...adminGuard, controller.encerrar);

@@ -87,6 +87,16 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="toggle-row">
+          <div class="toggle-text">
+            <b>Múltipla resposta</b>
+            <span>A mesma pessoa pode enviar o formulário mais de uma vez</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="multiplaResposta()" (ngModelChange)="multiplaResposta.set($event)" />
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
 
       <div class="form-card">
@@ -264,6 +274,7 @@
               <p class="page-sub" style="margin: 0">Salve o rascunho para gerar o link público.</p>
             }
           </div>
+          @if (exigirIdentidade()) {
           <h3 style="margin-top: 22px"><app-pesq-icon name="users" [size]="17" /> Lista de convidados</h3>
           <div class="guest-add-grid">
             <div class="field">
@@ -323,6 +334,7 @@
             </div>
           } @else {
             <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
+          }
           }
         }
       </div>
@@ -488,7 +500,7 @@
         [capaFocoY]="capaFocoY()"
         [template]="templateAtual()"
         [perguntas]="previewPerguntas()"
-        [secoes]="false"
+        [secoes]="secoes()"
         [respostas]="previewRespostas()"
         (valorChange)="onPreviewValor($event)"
         (arquivoChange)="onPreviewArquivo($event)"

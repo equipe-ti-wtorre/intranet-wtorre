@@ -68,6 +68,7 @@ export interface PesquisasListItem {
   janela?: 'antes' | 'depois' | null;
   prazoInicio?: string | null;
   prazoFim?: string | null;
+  multiplaResposta?: boolean;
 }
 
 export interface PesquisasLogica {
@@ -131,6 +132,7 @@ export interface PesquisasFormulario {
   secoes: boolean;
   logicaCondicional: boolean;
   anonimo: boolean;
+  multiplaResposta?: boolean;
   slug?: string | null;
   eventoTipo?: EventoTipo | null;
   eventoTipoOutro?: string | null;
@@ -361,4 +363,28 @@ export const STATUS_LABEL: Record<BadgeStatus, string> = {
   done: 'Concluído',
   draft: 'Rascunho',
   review: 'Em andamento',
+};
+
+export type PesquisasErroAcao = 'clonar' | 'publicar' | 'capa' | 'salvar' | 'responder';
+
+export interface PesquisasErroLog {
+  id: number;
+  acao: PesquisasErroAcao | string;
+  formularioId: number | null;
+  formularioTitulo: string | null;
+  userId: number | null;
+  email: string | null;
+  httpStatus: number;
+  codigo: string | null;
+  passo: string | null;
+  mensagem: string;
+  criadoEm: string | null;
+}
+
+export const PESQUISAS_ERRO_ACAO_LABEL: Record<string, string> = {
+  clonar: 'Clonar',
+  publicar: 'Publicar',
+  capa: 'Capa',
+  salvar: 'Salvar',
+  responder: 'Responder',
 };

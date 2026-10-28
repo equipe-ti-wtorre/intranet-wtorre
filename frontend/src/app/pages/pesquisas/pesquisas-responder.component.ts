@@ -53,7 +53,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível abrir o formulário.');
         this.loading.set(false);
-        void this.router.navigate(['/pesquisas']);
+        this.irOrigem();
       },
     });
   }
@@ -99,7 +99,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
       next: () => {
         this.alertas.sucesso('Resposta enviada com sucesso.');
         this.enviando.set(false);
-        void this.router.navigate(['/pesquisas']);
+        this.irOrigem();
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível enviar a resposta.');
@@ -109,7 +109,11 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   }
 
   voltar(): void {
-    void this.router.navigate(['/pesquisas']);
+    this.irOrigem();
+  }
+
+  private irOrigem(): void {
+    void this.router.navigateByUrl('/inicio');
   }
 
   private agendarLookup(id: number, valor: string): void {

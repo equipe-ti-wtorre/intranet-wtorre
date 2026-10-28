@@ -5,11 +5,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import { AlertasService } from '../../../services/alertas.service';
 import { PesquisasService } from '../../../services/pesquisas.service';
-import { PesquisasListItem, PesquisasPortalSlide, PesquisasTemplateVisual, STATUS_LABEL } from '../../../models/pesquisas.model';
+import {
+  PESQUISAS_ERRO_ACAO_LABEL,
+  PesquisasErroLog,
+  PesquisasListItem,
+  PesquisasPortalSlide,
+  PesquisasTemplateVisual,
+  STATUS_LABEL,
+} from '../../../models/pesquisas.model';
 import { AdminModalComponent } from '../../../shared/admin/admin-modal/admin-modal.component';
 import { pesquisasResultadosPath } from '../../pesquisas/shared/pesquisas-public-url';
 
-type Aba = 'formularios' | 'templates' | 'carrossel';
+type Aba = 'formularios' | 'templates' | 'carrossel' | 'logs';
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 const CODIGO = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -37,8 +44,12 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
   readonly items = signal<PesquisasListItem[]>([]);
   readonly templates = signal<PesquisasTemplateVisual[]>([]);
   readonly slides = signal<PesquisasPortalSlide[]>([]);
+  readonly erros = signal<PesquisasErroLog[]>([]);
+  readonly erroCarregamento = signal('');
   readonly q = signal('');
   readonly statusLabel = STATUS_LABEL;
+  readonly acaoLabel = PESQUISAS_ERRO_ACAO_LABEL;
+  readonly logAberto = signal<PesquisasErroLog | null>(null);
 
   readonly modalAberto = signal(false);
   readonly salvando = signal(false);
@@ -78,6 +89,7 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
   selecionarAba(aba: Aba): void {
     this.aba.set(aba);
     this.q.set('');
+    this.fecharLog();
     this.carregar();
   }
 
@@ -87,6 +99,7 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
 
   carregar(): void {
     this.loading.set(true);
+    this.erroCarregamento.set('');
     if (this.aba() === 'templates') {
       this.api.adminTemplates(this.q()).subscribe({
         next: (rows) => {
@@ -108,6 +121,23 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
         },
         error: (err: HttpErrorResponse) => {
           this.alertas.erro(err.error?.mensagem || 'Erro ao carregar o carrossel.');
+          this.loading.set(false);
+        },
+      });
+      return;
+    }
+    if (this.aba() === 'logs') {
+      this.api.adminErros(this.q()).subscribe({
+        next: (rows) => {
+          this.erros.set(rows);
+          this.erroCarregamento.set('');
+          this.loading.set(false);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.erros.set([]);
+          const msg = err.error?.mensagem || 'Não foi possível carregar os logs.';
+          this.erroCarregamento.set(msg);
+          this.alertas.erro(msg);
           this.loading.set(false);
         },
       });
@@ -382,6 +412,25 @@ export class PesquisasAdminComponent implements OnInit, OnDestroy {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível reordenar.');
       },
     });
+  }
+
+  abrirLog(row: PesquisasErroLog): void {
+    this.logAberto.set(row);
+  }
+
+  fecharLog(): void {
+    this.logAberto.set(null);
+  }
+
+  formatarDataLog(iso: string | null): string {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
+  }
+
+  rotuloAcao(acao: string): string {
+    return this.acaoLabel[acao] || acao;
   }
 
   private revokeSlidePreview(): void {
