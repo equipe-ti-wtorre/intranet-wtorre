@@ -7,7 +7,7 @@ import { AlertasService } from '../../services/alertas.service';
 import { PesquisasPergunta, PesquisasResponderPayload } from '../../models/pesquisas.model';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
-import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
+import { isChaveHeader, lookupPronto, matchCampos, mesclarTetos } from './shared/pesquisas-base.util';
 
 @Component({
   selector: 'app-pesquisas-responder',
@@ -25,6 +25,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
   readonly enviando = signal(false);
   readonly payload = signal<PesquisasResponderPayload | null>(null);
   readonly respostas = signal<Record<number, string>>({});
+  readonly tetos = signal<Record<string, number>>({});
   readonly anexos = signal<Record<string, File[]>>({});
   readonly respostasGuest = computed(() => {
     const out: Record<string, string> = {};
@@ -131,6 +132,7 @@ export class PesquisasResponderComponent implements OnInit, OnDestroy {
           const fill = matchCampos(out.campos || {}, p.perguntas, id);
           if (!Object.keys(fill).length) return;
           this.respostas.update((r) => ({ ...r, ...fill }));
+          this.tetos.update((t) => mesclarTetos(t, fill, p.perguntas));
         },
         error: () => undefined,
       });

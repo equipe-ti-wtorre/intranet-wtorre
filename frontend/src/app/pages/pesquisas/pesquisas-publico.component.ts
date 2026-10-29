@@ -17,7 +17,7 @@ import {
 } from '../../models/pesquisas.model';
 import { PesquisasGuestFormComponent } from './shared/pesquisas-guest-form.component';
 import { PesqIconComponent } from './shared/pesq-icon.component';
-import { isChaveHeader, lookupPronto, matchCampos } from './shared/pesquisas-base.util';
+import { isChaveHeader, lookupPronto, matchCampos, mesclarTetos } from './shared/pesquisas-base.util';
 import { formatDocumento } from './shared/pesquisas-documento.util';
 import { PESQUISAS_TPL_WTORRE } from './shared/pesquisas-marca.util';
 
@@ -45,6 +45,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   readonly portal = signal<PesquisasPortal | null>(null);
   readonly payload = signal<PesquisasResponderPayload | null>(null);
   readonly respostas = signal<Record<number, string>>({});
+  readonly tetos = signal<Record<string, number>>({});
   readonly anexos = signal<Record<string, File[]>>({});
   readonly anexosGuest = computed(() => this.anexos());
   readonly identificador = signal('');
@@ -187,12 +188,8 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   }
 
   formatIdentificador(raw: string): void {
-    if (raw.includes('@')) {
+    if (raw.includes('@') || /[a-zA-Z]/.test(raw)) {
       this.identificador.set(raw);
-      return;
-    }
-    if (/[a-zA-Z]/.test(raw)) {
-      this.identificador.set(raw.toUpperCase());
       return;
     }
     const digits = raw.replace(/\D/g, '');
@@ -236,6 +233,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
   voltarPainel(): void {
     this.payload.set(null);
     this.respostas.set({});
+    this.tetos.set({});
     this.anexos.set({});
     this.passo.set('portal');
   }
@@ -246,6 +244,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
     this.portal.set(null);
     this.payload.set(null);
     this.respostas.set({});
+    this.tetos.set({});
     this.anexos.set({});
     this.identificador.set('');
     this.passo.set('gate');
@@ -290,6 +289,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
         this.alertas.sucesso('Resposta enviada com sucesso.');
         this.payload.set(null);
         this.respostas.set({});
+        this.tetos.set({});
         this.anexos.set({});
         const comIdentidade = !!this.meta()?.exigirIdentidade && !!this.guestToken;
         const passo = comIdentidade ? 'portal' : 'done';
@@ -359,14 +359,34 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
       next: (p) => {
         this.payload.set(p);
         this.respostas.set({});
+        this.tetos.set({});
         this.anexos.set({});
         this.passo.set('form');
         this.loading.set(false);
+        this.preencherDaBase(p);
       },
       error: (err: HttpErrorResponse) => {
         this.alertas.erro(err.error?.mensagem || 'Não foi possível abrir o formulário.');
         this.loading.set(false);
       },
+    });
+  }
+
+  private preencherDaBase(p: PesquisasResponderPayload): void {
+    if (!p?.temBase || !p.slug) return;
+    const valor = this.identificador().trim();
+    const token = this.guestToken || undefined;
+    if (!token && !lookupPronto(valor)) return;
+    const seq = ++this.lookupSeq;
+    this.api.publicoLookupBase(p.slug, valor, token).subscribe({
+      next: (out) => {
+        if (seq !== this.lookupSeq) return;
+        const fill = matchCampos(out.campos || {}, p.perguntas);
+        if (!Object.keys(fill).length) return;
+        this.respostas.update((r) => ({ ...r, ...fill }));
+        this.tetos.update((t) => mesclarTetos(t, fill, p.perguntas));
+      },
+      error: () => undefined,
     });
   }
 
@@ -386,6 +406,7 @@ export class PesquisasPublicoComponent implements OnInit, OnDestroy {
           const fill = matchCampos(out.campos || {}, p.perguntas, id);
           if (!Object.keys(fill).length) return;
           this.respostas.update((r) => ({ ...r, ...fill }));
+          this.tetos.update((t) => mesclarTetos(t, fill, p.perguntas));
         },
         error: () => undefined,
       });

@@ -138,3 +138,28 @@ export function matchCampos(
   }
   return out;
 }
+
+export function parseTetoPlanilha(raw: string | null | undefined): number | null {
+  const m = String(raw || '').match(/\d+/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
+export function mesclarTetos(
+  atual: Record<string, number>,
+  fill: Record<number, string>,
+  perguntas: { id?: number | null; limiteBase?: boolean }[]
+): Record<string, number> {
+  const next = { ...atual };
+  for (const p of perguntas) {
+    if (!p.id || !p.limiteBase) continue;
+    if (!Object.prototype.hasOwnProperty.call(fill, p.id)) continue;
+    const key = String(p.id);
+    const teto = parseTetoPlanilha(fill[p.id]);
+    if (teto) next[key] = teto;
+    else delete next[key];
+  }
+  return next;
+}

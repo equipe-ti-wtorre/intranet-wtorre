@@ -267,6 +267,11 @@ function isBlocoPergunta(p) {
   return !p.blocoTipo || p.blocoTipo === 'pergunta';
 }
 
+function perguntaPersistId(raw) {
+  const id = Number(raw?.id);
+  return Number.isInteger(id) && id >= 1 ? id : undefined;
+}
+
 function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
   if (!Array.isArray(raw) || !raw.length) {
     if (allowEmpty) return [];
@@ -276,12 +281,14 @@ function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
     const blocoTipo = BLOCO_TIPOS.includes(p.blocoTipo) ? p.blocoTipo : 'pergunta';
     const ajuda = str(p.ajuda, 500) || null;
     const novaLinha = p.novaLinha !== false;
+    const id = perguntaPersistId(p);
     if (blocoTipo === 'texto') {
       const estilo =
         p.textoEstilo === 'titulo' || (Array.isArray(p.opcoes) && p.opcoes[0] === 'titulo')
           ? 'titulo'
           : 'paragrafo';
       return {
+        id,
         ordem: idx + 1,
         texto: str(p.texto, 500) || 'Texto',
         tipo: 'texto_curto',
@@ -292,10 +299,12 @@ function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
         blocoTipo,
         ajuda,
         novaLinha,
+        limiteBase: false,
       };
     }
     if (blocoTipo === 'anexo') {
       return {
+        id,
         ordem: idx + 1,
         texto: str(p.texto, 500) || 'Anexar arquivo',
         tipo: 'texto_curto',
@@ -306,6 +315,7 @@ function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
         blocoTipo,
         ajuda,
         novaLinha,
+        limiteBase: false,
       };
     }
     const texto = str(p.texto, 500);
@@ -327,6 +337,7 @@ function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
       logica = { perguntaOrdem, condicao };
     }
     return {
+      id,
       ordem: idx + 1,
       texto,
       tipo,
@@ -337,6 +348,7 @@ function normalizePerguntas(raw, { logicaOn, secoesOn, allowEmpty }) {
       blocoTipo,
       ajuda,
       novaLinha,
+      limiteBase: tipo === 'texto_curto' && !!p.limiteBase,
     };
   });
 }
@@ -863,6 +875,68 @@ function temChaveLookup(keys) {
   return !!(keys && (keys.chaveDoc || keys.chaveEmail || keys.chaveRg));
 }
 
+function parseTetoPlanilha(raw) {
+  const m = String(raw || '').match(/\d+/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
+function validarLimiteBase(perguntas, itens, dados) {
+  if (!dados || typeof dados !== 'object') return;
+  const byNorm = new Map();
+  for (const [k, v] of Object.entries(dados)) {
+    byNorm.set(normHeader(k), String(v ?? ''));
+  }
+  const byPergunta = new Map((itens || []).map((i) => [i.perguntaId, i]));
+  for (const p of perguntas || []) {
+    if (!p.limiteBase || p.blocoTipo === 'texto' || p.blocoTipo === 'anexo') continue;
+    const teto = parseTetoPlanilha(byNorm.get(normHeader(p.texto)));
+    if (!teto) continue;
+    const raw = String(byPergunta.get(p.id)?.valor ?? '').trim();
+    if (!raw) continue;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1 || n > teto) {
+      throw httpError(400, `Informe de 1 a ${teto} em “${p.texto}”.`);
+    }
+  }
+}
+
+async function resolverDadosPorItens(formId, perguntas, rawItens) {
+  const byPergunta = new Map();
+  for (const item of Array.isArray(rawItens) ? rawItens : []) {
+    const perguntaId = Number(item.perguntaId);
+    if (!perguntaId) continue;
+    byPergunta.set(perguntaId, item.valor == null ? '' : String(item.valor));
+  }
+  for (const p of perguntas || []) {
+    if (p.blocoTipo === 'texto' || p.blocoTipo === 'anexo') continue;
+    if (!isDocHeader(p.texto) && !isEmailHeader(p.texto) && !isRgHeader(p.texto)) continue;
+    const valor = byPergunta.get(p.id);
+    if (!valor) continue;
+    const keys = lookupKeysFromValor(valor);
+    if (!temChaveLookup(keys)) continue;
+    const dados = await repo.lookupFormularioBase(formId, keys);
+    if (dados) return dados;
+  }
+  return null;
+}
+
+async function resolverDadosBase(formId, req, perguntas, rawItens) {
+  if (!(perguntas || []).some((p) => p.limiteBase)) return null;
+  if (req.guest) {
+    const ids = guestIdentidades(req.guest);
+    const dados = await repo.lookupFormularioBase(formId, {
+      chaveDoc: ids.cpfHashes[0] || null,
+      chaveEmail: ids.emails[0] || null,
+      chaveRg: ids.rgHashes[0] || null,
+    });
+    if (dados) return dados;
+  }
+  return resolverDadosPorItens(formId, perguntas, rawItens);
+}
+
 async function getFormularioPorId(id, { includeConvidados } = {}) {
   const form = await repo.findFormularioById(id);
   if (!form) throw httpError(404, 'Formulário não encontrado.');
@@ -1221,9 +1295,6 @@ async function salvarFormulario(req, { publicar }) {
     if (!existing) throw httpError(404, 'Formulário não encontrado.');
     if (existing.criadorId !== req.user.id && !isAdminPesquisas(req)) {
       throw httpError(403, 'Você não pode alterar este formulário.');
-    }
-    if ((existing.totalRespostas || 0) > 0) {
-      throw httpError(409, 'Este formulário já possui respostas e não pode ser alterado.');
     }
     await repo.updateFormularioMeta(idParam, { ...body, status });
     await repo.replacePerguntas(idParam, body.perguntas);
@@ -2438,7 +2509,15 @@ async function lookupBasePublico(req) {
   if (form.exigirIdentidade) {
     await resolveGuestDoForm(form, req.guest);
   }
-  const keys = lookupKeysFromValor(req.body?.valor);
+  let keys = lookupKeysFromValor(req.body?.valor);
+  if (!temChaveLookup(keys) && req.guest) {
+    const ids = guestIdentidades(req.guest);
+    keys = {
+      chaveDoc: ids.cpfHashes[0] || null,
+      chaveEmail: ids.emails[0] || null,
+      chaveRg: ids.rgHashes[0] || null,
+    };
+  }
   if (!temChaveLookup(keys)) return { campos: {} };
   const dados = await repo.lookupFormularioBase(form.id, keys);
   return { campos: dados || {} };
@@ -2458,8 +2537,11 @@ async function publicoResponder(req) {
     }
   }
   const perguntas = await repo.listPerguntas(form.id);
+  const rawItens = parseItensBody(req);
   const anexos = await processarAnexosResposta(req, perguntas);
-  const itens = montarItensResposta(perguntas, parseItensBody(req), anexos);
+  const itens = montarItensResposta(perguntas, rawItens, anexos);
+  const dadosBase = await resolverDadosBase(form.id, req, perguntas, rawItens);
+  validarLimiteBase(perguntas, itens, dadosBase);
   try {
     await repo.insertResposta(form.id, null, itens, convidadoId);
   } catch (err) {
@@ -2810,6 +2892,8 @@ module.exports = {
   sanitizeErroMensagem,
   lookupKeysFromValor,
   temChaveLookup,
+  parseTetoPlanilha,
+  validarLimiteBase,
   refFormularioFromRaw,
   buffersParaZip,
   assertConvidadosIdentidade,

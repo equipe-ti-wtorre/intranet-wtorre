@@ -1,0 +1,99 @@
+<app-admin-modal
+  [open]="open()"
+  [title]="titulo()"
+  [subtitle]="subtitle()"
+  size="wide"
+  [showSave]="!!editando()"
+  saveLabel="Salvar"
+  [cancelLabel]="cancelLabel()"
+  (save)="salvarEdicao()"
+  (cancel)="onCancel()"
+>
+  @if (editando(); as g) {
+    <div class="field">
+      <label>Nome</label>
+      <input type="text" name="listaNome" autocomplete="name" [ngModel]="nome()" (ngModelChange)="nome.set($event)" />
+    </div>
+    <div class="field">
+      <label>CPF ou CNPJ</label>
+      <input
+        type="text"
+        name="listaDocumento"
+        inputmode="numeric"
+        autocomplete="off"
+        placeholder="000.000.000-00 ou 00.000.000/0001-00"
+        [ngModel]="documento()"
+        (ngModelChange)="formatarDocumento($event)"
+      />
+      @if (!g.cpf && g.cpfMascara) {
+        <p class="help">Documento atual: {{ g.cpfMascara }}. Deixe em branco para manter.</p>
+      }
+    </div>
+    <div class="field">
+      <label>RG</label>
+      <input
+        type="text"
+        name="listaRg"
+        autocomplete="off"
+        placeholder="00.000.000-0"
+        [ngModel]="rg()"
+        (ngModelChange)="formatarRg($event)"
+      />
+      @if (!g.rg && g.rgMascara) {
+        <p class="help">RG atual: {{ g.rgMascara }}. Deixe em branco para manter.</p>
+      }
+    </div>
+    <div class="field">
+      <label>E-mail</label>
+      <input
+        type="email"
+        name="listaEmail"
+        autocomplete="email"
+        placeholder="email@exemplo.com"
+        [ngModel]="email()"
+        (ngModelChange)="email.set($event)"
+      />
+    </div>
+  } @else {
+    <input
+      type="search"
+      class="guest-lista-search"
+      placeholder="Buscar por nome, documento ou e-mail..."
+      name="listaBusca"
+      [ngModel]="busca()"
+      (ngModelChange)="busca.set($event)"
+    />
+    @if (!convidados().length) {
+      <p class="guest-lista-empty">Nenhum convidado na lista ainda.</p>
+    } @else if (!filtrados().length) {
+      <p class="guest-lista-empty">Nenhum convidado encontrado.</p>
+    } @else {
+      <div class="guest-lista-table">
+        <div class="guest-lista-row guest-lista-head">
+          <span>Nome</span>
+          <span>CPF/CNPJ</span>
+          <span>RG</span>
+          <span>E-mail</span>
+          <span></span>
+        </div>
+        @for (g of filtrados(); track g.key) {
+          <div class="guest-lista-row">
+            <span>{{ g.nome || '—' }}</span>
+            <span>{{ g.cpfMascara || g.cpf || '—' }}</span>
+            <span>{{ g.rgMascara || g.rg || '—' }}</span>
+            <span>{{ g.email || '—' }}</span>
+            <span class="guest-lista-actions">
+              <button type="button" class="guest-lista-edit" (click)="iniciarEdicao(g)">
+                <app-pesq-icon name="edit" [size]="14" />
+                Editar
+              </button>
+              <button type="button" class="guest-lista-del" (click)="confirmarRemocao(g)" aria-label="Excluir convidado">
+                <app-pesq-icon name="trash" [size]="15" />
+              </button>
+            </span>
+          </div>
+        }
+      </div>
+    }
+  }
+</app-admin-modal>

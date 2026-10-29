@@ -119,6 +119,7 @@ function mapPergunta(row) {
     blocoTipo: row.bloco_tipo || 'pergunta',
     ajuda: row.ajuda || null,
     novaLinha: row.nova_linha == null ? true : !!row.nova_linha,
+    limiteBase: !!row.limite_base,
   };
 }
 
@@ -459,31 +460,77 @@ async function updateFormularioMeta(id, data) {
   );
 }
 
+function perguntaBind(formularioId, p) {
+  return [
+    formularioId,
+    p.ordem,
+    p.texto,
+    p.tipo,
+    p.obrigatoria ? 1 : 0,
+    toJsonBind(p.opcoes),
+    p.secaoTitulo || null,
+    toJsonBind(p.logica),
+    p.blocoTipo || 'pergunta',
+    p.ajuda || null,
+    p.novaLinha === false ? 0 : 1,
+    p.limiteBase ? 1 : 0,
+  ];
+}
+
 async function replacePerguntas(formularioId, perguntas) {
   const pool = getPool();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.execute('DELETE FROM pesquisas_perguntas WHERE formulario_id = ?', [formularioId]);
+    const [existingRows] = await conn.execute(
+      'SELECT id FROM pesquisas_perguntas WHERE formulario_id = ?',
+      [formularioId]
+    );
+    const existingIds = new Set((existingRows || []).map((row) => Number(row.id)));
+    const kept = new Set();
     for (const p of perguntas) {
+      const id = Number(p.id);
+      if (Number.isInteger(id) && id >= 1 && existingIds.has(id)) {
+        await conn.execute(
+          `UPDATE pesquisas_perguntas
+            SET ordem = ?, texto = ?, tipo = ?, obrigatoria = ?,
+                opcoes = CONVERT(? USING utf8mb4), secao_titulo = ?,
+                logica = CONVERT(? USING utf8mb4), bloco_tipo = ?, ajuda = ?,
+                nova_linha = ?, limite_base = ?
+           WHERE id = ? AND formulario_id = ?`,
+          [
+            p.ordem,
+            p.texto,
+            p.tipo,
+            p.obrigatoria ? 1 : 0,
+            toJsonBind(p.opcoes),
+            p.secaoTitulo || null,
+            toJsonBind(p.logica),
+            p.blocoTipo || 'pergunta',
+            p.ajuda || null,
+            p.novaLinha === false ? 0 : 1,
+            p.limiteBase ? 1 : 0,
+            id,
+            formularioId,
+          ]
+        );
+        kept.add(id);
+        continue;
+      }
       await conn.execute(
         `INSERT INTO pesquisas_perguntas
           (formulario_id, ordem, texto, tipo, obrigatoria, opcoes, secao_titulo, logica,
-           bloco_tipo, ajuda, nova_linha)
-         VALUES (?, ?, ?, ?, ?, CONVERT(? USING utf8mb4), ?, CONVERT(? USING utf8mb4), ?, ?, ?)`,
-        [
-          formularioId,
-          p.ordem,
-          p.texto,
-          p.tipo,
-          p.obrigatoria ? 1 : 0,
-          toJsonBind(p.opcoes),
-          p.secaoTitulo || null,
-          toJsonBind(p.logica),
-          p.blocoTipo || 'pergunta',
-          p.ajuda || null,
-          p.novaLinha === false ? 0 : 1,
-        ]
+           bloco_tipo, ajuda, nova_linha, limite_base)
+         VALUES (?, ?, ?, ?, ?, CONVERT(? USING utf8mb4), ?, CONVERT(? USING utf8mb4), ?, ?, ?, ?)`,
+        perguntaBind(formularioId, p)
+      );
+    }
+    const toDelete = [...existingIds].filter((id) => !kept.has(id));
+    if (toDelete.length) {
+      const ph = toDelete.map(() => '?').join(', ');
+      await conn.execute(
+        `DELETE FROM pesquisas_perguntas WHERE formulario_id = ? AND id IN (${ph})`,
+        [formularioId, ...toDelete]
       );
     }
     await conn.commit();

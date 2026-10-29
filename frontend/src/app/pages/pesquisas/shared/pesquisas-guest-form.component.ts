@@ -35,6 +35,7 @@ export class PesquisasGuestFormComponent {
   readonly perguntas = input<PesquisasPergunta[]>([]);
   readonly secoes = input(false);
   readonly respostas = input<Record<string, string>>({});
+  readonly tetos = input<Record<string, number>>({});
   /** Lista já escolhida, vinda de quem envia. Quando vier preenchida, ela manda na tela. */
   readonly escolhidos = input<Record<string, File[]>>({});
   readonly mode = input<'preview' | 'answer'>('answer');
@@ -167,7 +168,39 @@ export class PesquisasGuestFormComponent {
     return (q.opcoes || [])[0] === 'titulo' ? 'titulo' : 'paragrafo';
   }
 
-  setValor(key: string, valor: string): void {
+  tetoDe(key: string): number | null {
+    const n = Number(this.tetos()[key]);
+    return Number.isInteger(n) && n >= 1 ? n : null;
+  }
+
+  setValor(key: string, valor: string, inputEl?: HTMLInputElement): void {
+    const teto = this.tetoDe(key);
+    if (teto) {
+      const trimmed = String(valor ?? '').trim();
+      if (!trimmed) {
+        this.valorChange.emit({ key, valor: '' });
+        return;
+      }
+      const n = Number(trimmed);
+      if (Number.isInteger(n) && n >= 1 && n <= teto) {
+        this.valorChange.emit({ key, valor: String(n) });
+        return;
+      }
+      const atual = Number(this.respostas()[key]);
+      const valido = Number.isInteger(atual) && atual >= 1 && atual <= teto ? String(atual) : String(teto);
+      this.alertas.erro(`Informe de 1 a ${teto}.`);
+      const writeBack = () => {
+        this.valorChange.emit({ key, valor: valido });
+        if (inputEl) inputEl.value = valido;
+      };
+      if (this.respostas()[key] === valido) {
+        this.valorChange.emit({ key, valor: '' });
+        queueMicrotask(writeBack);
+      } else {
+        writeBack();
+      }
+      return;
+    }
     this.valorChange.emit({ key, valor });
   }
 
@@ -210,6 +243,18 @@ export class PesquisasGuestFormComponent {
   }
 
   onSubmit(): void {
+    if (this.mode() === 'answer') {
+      for (const [key, teto] of Object.entries(this.tetos())) {
+        if (!Number.isInteger(teto) || teto < 1) continue;
+        const raw = String(this.respostas()[key] ?? '').trim();
+        if (!raw) continue;
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 1 || n > teto) {
+          this.alertas.erro(`Informe de 1 a ${teto}.`);
+          return;
+        }
+      }
+    }
     this.enviar.emit();
   }
 

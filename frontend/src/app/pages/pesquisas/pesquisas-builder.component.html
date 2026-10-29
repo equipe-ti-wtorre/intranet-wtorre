@@ -97,6 +97,16 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="toggle-row">
+          <div class="toggle-text">
+            <b>Limitar valores da planilha</b>
+            <span>Mostra nos campos a opção de não passar do valor importado</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="mostrarLimiteBase()" (ngModelChange)="mostrarLimiteBase.set($event)" />
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
 
       <div class="form-card">
@@ -307,6 +317,22 @@
               <app-pesq-icon name="download" [size]="15" />
               Baixar modelo Excel
             </button>
+            <button type="button" class="add-q-btn" (click)="abrirListaConvidados()">
+              <app-pesq-icon name="users" [size]="15" />
+              Acessar convidados
+              @if (convidados().length) {
+                <span class="guest-count">{{ convidados().length }}</span>
+              }
+            </button>
+            <button
+              type="button"
+              class="add-q-btn add-q-btn-danger"
+              [disabled]="!podeExcluirPlanilha()"
+              (click)="excluirPlanilha()"
+            >
+              <app-pesq-icon name="trash" [size]="15" />
+              Excluir planilha
+            </button>
             <input
               #guestsExcelInput
               type="file"
@@ -318,23 +344,6 @@
           <p class="page-sub" style="margin-top: 8px">
             Preencha ao menos um: nome, CPF, CNPJ, RG ou e-mail. As demais colunas da planilha viram campos do formulário.
           </p>
-          @if (convidados().length) {
-            <div class="guest-table">
-              @for (g of convidados(); track g.key) {
-                <div class="guest-row">
-                  <span>{{ g.nome || '—' }}</span>
-                  <span>{{ g.cpfMascara || g.cpf || '—' }}</span>
-                  <span>{{ g.rgMascara || g.rg || '—' }}</span>
-                  <span>{{ g.email || '—' }}</span>
-                  <button type="button" class="q-del" (click)="removeConvidado(g.key)" aria-label="Remover">
-                    <app-pesq-icon name="x" [size]="15" />
-                  </button>
-                </div>
-              }
-            </div>
-          } @else {
-            <p class="page-sub" style="margin-top: 12px">Nenhum convidado na lista ainda.</p>
-          }
           }
         }
       </div>
@@ -354,10 +363,21 @@
           <p class="hint">Importar cria um campo por coluna da planilha.</p>
         }
         <div class="add-block-menu-wrap">
-          <button type="button" class="add-block-main-btn" (click)="menuAddOpen.set(!menuAddOpen())">
-            <app-pesq-icon name="plus" [size]="15" />
-            Adicionar campo
-          </button>
+          <div class="add-block-actions">
+            <button type="button" class="add-block-main-btn" (click)="menuAddOpen.set(!menuAddOpen())">
+              <app-pesq-icon name="plus" [size]="15" />
+              Adicionar campo
+            </button>
+            <button
+              type="button"
+              class="add-q-btn add-q-btn-danger"
+              [disabled]="!perguntas().length"
+              (click)="excluirCampos()"
+            >
+              <app-pesq-icon name="trash" [size]="15" />
+              Excluir campos
+            </button>
+          </div>
           @if (menuAddOpen()) {
             <div class="add-block-menu open">
               <button type="button" class="add-block-menu-item" (click)="addBloco('pergunta')">
@@ -429,6 +449,12 @@
                     Obrigatória
                   </label>
                 </div>
+                @if (mostrarLimiteBase() && p.tipo === 'texto_curto') {
+                  <label class="q-req" style="margin-top: 8px">
+                    <input type="checkbox" [ngModel]="p.limiteBase" (ngModelChange)="patch(p.key, { limiteBase: $event })" style="accent-color: var(--primary-600); width: 15px; height: 15px" />
+                    Limitar ao valor da planilha
+                  </label>
+                }
                 @if (p.tipo === 'multipla_escolha') {
                   <div class="blk-options-wrap">
                     <div class="blk-options-list">
@@ -502,6 +528,7 @@
         [perguntas]="previewPerguntas()"
         [secoes]="secoes()"
         [respostas]="previewRespostas()"
+        [tetos]="previewTetos()"
         (valorChange)="onPreviewValor($event)"
         (arquivoChange)="onPreviewArquivo($event)"
         (blocosReorder)="onPreviewReorder($event)"
@@ -528,4 +555,12 @@
   [selecionados]="destinatarios()"
   (confirm)="confirmarDestinatarios($event)"
   (cancel)="cancelarDestinatarios()"
+/>
+
+<app-pesquisas-convidados-lista-modal
+  [open]="convidadosModalAberto()"
+  [convidados]="convidados()"
+  (fechar)="fecharListaConvidados()"
+  (remover)="removeConvidado($event)"
+  (atualizar)="atualizarConvidadoLista($event)"
 />

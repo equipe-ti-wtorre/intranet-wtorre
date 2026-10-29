@@ -1122,6 +1122,31 @@
   width: auto;
 }
 
+.pesq-app .guest-import-row .add-q-btn-danger {
+  border-color: #e7b3bf;
+  background: #fdecef;
+  color: #b42345;
+}
+
+.pesq-app .guest-import-row .add-q-btn-danger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pesq-app .guest-count {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-700, #1d54e6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .pesq-app .stepper {
   display: flex;
   align-items: center;
@@ -2737,6 +2762,30 @@
   margin-bottom: 16px;
 }
 
+.pesq-app .add-block-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pesq-app .add-block-actions .add-block-main-btn,
+.pesq-app .add-block-actions .add-q-btn {
+  flex: 1;
+  min-width: 160px;
+  width: auto;
+}
+
+.pesq-app .add-block-actions .add-q-btn-danger {
+  border-color: #e7b3bf;
+  background: #fdecef;
+  color: #b42345;
+}
+
+.pesq-app .add-block-actions .add-q-btn-danger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .pesq-app .add-block-main-btn {
   width: 100%;
   display: flex;
@@ -4270,15 +4319,48 @@
   -webkit-backdrop-filter: blur(28px) saturate(1.35);
 }
 
+.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .guest-frame::before,
+.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .guest-frame::before {
+  content: '';
+  grid-row: 1 / -1;
+  background: rgba(16, 24, 48, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 24px 60px -24px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .guest-frame::before {
+  grid-column: 2;
+  border-radius: 0 28px 28px 0;
+}
+
+.pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .guest-frame::before {
+  grid-column: 1;
+  border-radius: 28px 0 0 28px;
+}
+
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .canvas-white,
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .canvas-white {
   anchor-name: --portal-card;
-  align-self: center;
-  height: calc(100vh - 4rem);
-  height: calc(100dvh - 4rem);
-  max-height: calc(100vh - 4rem);
-  max-height: calc(100dvh - 4rem);
+  align-self: stretch;
+  height: auto;
+  max-height: none;
+  min-height: 0;
   margin-bottom: 0;
+  padding-bottom: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  z-index: 1;
 }
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .btn-back,
@@ -4291,14 +4373,14 @@
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .canvas-white {
   grid-column: 2;
-  grid-row: 1 / -1;
-  border-radius: 0 28px 28px 0;
+  grid-row: 1;
+  border-radius: 0;
 }
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .canvas-white {
   grid-column: 1;
-  grid-row: 1 / -1;
-  border-radius: 28px 0 0 28px;
+  grid-row: 1;
+  border-radius: 0;
 }
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-top.is-on) .canvas-white,
@@ -4349,14 +4431,10 @@
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .guest-frame .guest-submit,
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .guest-frame .guest-submit {
-  position: absolute;
-  position-anchor: --portal-card;
-  top: auto;
-  bottom: calc(anchor(bottom) + 18px);
-  left: calc(anchor(left) + 28px);
-  right: calc(anchor(right) + 28px);
-  width: auto;
-  margin: 0;
+  position: relative;
+  z-index: 2;
+  width: calc(100% - 56px);
+  margin: 22px auto 24px;
 }
 
 .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .guest-frame .guest-submit,
@@ -4519,6 +4597,54 @@
     height: auto;
     max-height: none;
     overflow: visible;
+  }
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on),
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) {
+    align-self: center;
+    width: min(560px, 100%);
+    max-width: min(560px, 100%);
+    height: auto;
+    max-height: calc(100vh - 5.5rem);
+    max-height: calc(100dvh - 5.5rem);
+    overflow: hidden;
+  }
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) app-pesquisas-guest-form,
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) app-pesquisas-guest-form {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .zone-left.is-on,
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .zone-right.is-on {
+    display: none;
+  }
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .guest-frame,
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .guest-frame {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+  }
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .canvas-white,
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .canvas-white {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: stretch;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    padding-bottom: 72px;
+    border-radius: 28px;
+  }
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-left.is-on) .guest-frame .guest-submit,
+  .pesq-app.pesq-public-bid .portal-form-wrap:has(.zone-right.is-on) .guest-frame .guest-submit {
+    position: static;
+    inset: auto;
+    grid-column: 1;
+    grid-row: 2;
+    width: calc(100% - 32px);
+    margin: 8px auto 16px;
   }
 }
 
