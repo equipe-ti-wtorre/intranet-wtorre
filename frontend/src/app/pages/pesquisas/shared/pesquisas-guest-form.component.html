@@ -180,13 +180,30 @@
                         </div>
                       }
                       @default {
-                        <input
-                          class="guest-input"
-                          placeholder="Digite sua resposta..."
-                          [ngModel]="respostas()[keyOf(q, i)]"
-                          (ngModelChange)="setValor(keyOf(q, i), $event)"
-                        />
+                        @if (tetoDe(keyOf(q, i)); as teto) {
+                          <input
+                            #tetoInput
+                            type="number"
+                            class="guest-input"
+                            min="1"
+                            [max]="teto"
+                            step="1"
+                            [placeholder]="'Informe de 1 a ' + teto"
+                            [ngModel]="respostas()[keyOf(q, i)]"
+                            (ngModelChange)="setValor(keyOf(q, i), $event, tetoInput)"
+                          />
+                        } @else {
+                          <input
+                            class="guest-input"
+                            placeholder="Digite sua resposta..."
+                            [ngModel]="respostas()[keyOf(q, i)]"
+                            (ngModelChange)="setValor(keyOf(q, i), $event)"
+                          />
+                        }
                       }
+                    }
+                    @if (tetoDe(keyOf(q, i)); as teto) {
+                      <div class="guest-q-help">Informe de 1 a {{ teto }}.</div>
                     }
                     @if (q.ajuda) {
                       <div class="guest-q-help">{{ q.ajuda }}</div>

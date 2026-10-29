@@ -8,6 +8,8 @@ const {
   sanitizeErroMensagem,
   lookupKeysFromValor,
   temChaveLookup,
+  parseTetoPlanilha,
+  validarLimiteBase,
   refFormularioFromRaw,
   buffersParaZip,
   assertConvidadosIdentidade,
@@ -185,5 +187,62 @@ describe('permiteNovaResposta', () => {
   it('sempre libera a primeira resposta', () => {
     assert.equal(permiteNovaResposta({ multiplaResposta: false }, null), true);
     assert.equal(permiteNovaResposta({ multiplaResposta: true }, null), true);
+  });
+});
+
+describe('parseTetoPlanilha', () => {
+  it('pega o primeiro inteiro positivo', () => {
+    assert.equal(parseTetoPlanilha('5'), 5);
+    assert.equal(parseTetoPlanilha('12 cadeiras'), 12);
+    assert.equal(parseTetoPlanilha('tem 3 unidades'), 3);
+  });
+
+  it('ignora célula sem número útil', () => {
+    assert.equal(parseTetoPlanilha('sim'), null);
+    assert.equal(parseTetoPlanilha('0'), null);
+    assert.equal(parseTetoPlanilha(''), null);
+    assert.equal(parseTetoPlanilha(null), null);
+  });
+});
+
+describe('validarLimiteBase', () => {
+  const pergunta = {
+    id: 10,
+    texto: 'Cadeiras',
+    tipo: 'texto_curto',
+    limiteBase: true,
+    blocoTipo: 'pergunta',
+  };
+
+  it('aceita valor dentro do teto da planilha', () => {
+    assert.doesNotThrow(() =>
+      validarLimiteBase([pergunta], [{ perguntaId: 10, valor: '3' }], { Cadeiras: '5' })
+    );
+  });
+
+  it('recusa valor acima do teto', () => {
+    assert.throws(
+      () => validarLimiteBase([pergunta], [{ perguntaId: 10, valor: '6' }], { Cadeiras: '5' }),
+      (err) => err.status === 400 && /1 a 5/.test(err.message)
+    );
+  });
+
+  it('não limita sem número na célula ou sem linha', () => {
+    assert.doesNotThrow(() =>
+      validarLimiteBase([pergunta], [{ perguntaId: 10, valor: '99' }], { Cadeiras: 'sim' })
+    );
+    assert.doesNotThrow(() =>
+      validarLimiteBase([pergunta], [{ perguntaId: 10, valor: '99' }], null)
+    );
+  });
+
+  it('ignora campo sem a flag', () => {
+    assert.doesNotThrow(() =>
+      validarLimiteBase(
+        [{ ...pergunta, limiteBase: false }],
+        [{ perguntaId: 10, valor: '99' }],
+        { Cadeiras: '5' }
+      )
+    );
   });
 });

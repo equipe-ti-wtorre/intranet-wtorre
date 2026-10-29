@@ -563,9 +563,7 @@ export class PesquisasResultadosComponent implements OnInit {
   }
 
   podeEditar(): boolean {
-    const d = this.data();
-    if (!d) return false;
-    return d.formulario.status === 'rascunho' || !d.total;
+    return !!this.data();
   }
 
   editar(): void {

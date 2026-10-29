@@ -21,6 +21,7 @@ import {
   TextoEstilo,
 } from '../../models/pesquisas.model';
 import { PesquisasDestinatariosModalComponent } from './shared/pesquisas-destinatarios-modal.component';
+import { PesquisasConvidadosListaModalComponent } from './shared/pesquisas-convidados-lista-modal.component';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkInterno, pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
@@ -39,6 +40,7 @@ import {
   lookupLocal,
   lookupPronto,
   matchCampos,
+  mesclarTetos,
 } from './shared/pesquisas-base.util';
 import {
   digitsDocumento,
@@ -58,6 +60,7 @@ import {
 
 interface QDraft {
   key: number;
+  id?: number;
   blocoTipo: BlocoTipo;
   texto: string;
   tipo: PerguntaTipo;
@@ -68,6 +71,7 @@ interface QDraft {
   ajuda: string;
   novaLinha: boolean;
   textoEstilo: TextoEstilo;
+  limiteBase: boolean;
 }
 
 interface GuestDraft {
@@ -79,6 +83,7 @@ interface GuestDraft {
   rg: string;
   rgMascara: string;
   email: string;
+  origem: 'manual' | 'planilha';
 }
 
 let qKey = 0;
@@ -120,6 +125,7 @@ function titulosDaPlanilha(XLSX: typeof import('xlsx'), sheet: import('xlsx').Wo
     PesquisasGuestFormComponent,
     PesquisasQrCardComponent,
     PesquisasDestinatariosModalComponent,
+    PesquisasConvidadosListaModalComponent,
   ],
   templateUrl: './pesquisas-builder.component.html',
   host: {
@@ -148,11 +154,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly publicoDepartamento = signal('');
   readonly destinatarios = signal<PesquisasDestinatario[]>([]);
   readonly destinatariosModalAberto = signal(false);
+  readonly convidadosModalAberto = signal(false);
   private publicoAntesPersonalizado: PublicoAlvo = 'todos';
   readonly secoes = signal(false);
   readonly logica = signal(false);
   readonly anonimo = signal(false);
   readonly multiplaResposta = signal(false);
+  readonly mostrarLimiteBase = signal(false);
   readonly perguntas = signal<QDraft[]>([]);
   readonly departamentos = signal<string[]>([]);
   readonly eventoTipo = signal<EventoTipo>('show');
@@ -161,6 +169,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly exigirIdentidade = signal(true);
   readonly convidados = signal<GuestDraft[]>([]);
   readonly temBaseSalva = signal(false);
+  readonly podeExcluirPlanilha = computed(
+    () => this.temBaseSalva() || this.convidados().some((g) => g.origem === 'planilha')
+  );
   readonly guestNome = signal('');
   readonly guestCpf = signal('');
   readonly guestRg = signal('');
@@ -177,8 +188,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly menuAddOpen = signal(false);
   readonly qrAberto = signal(false);
   readonly previewRespostas = signal<Record<string, string>>({});
+  readonly previewTetos = signal<Record<string, number>>({});
   private capaPendente: File | null = null;
   private baseLinhas: Record<string, unknown>[] | null = null;
+  private limparBaseNoSave = false;
   private previewLookupTimer: ReturnType<typeof setTimeout> | null = null;
   private listDragKey: number | null = null;
   readonly listDrop = signal<{ targetKey: number; insertBefore: boolean } | null>(null);
@@ -224,6 +237,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       ajuda: p.ajuda || null,
       novaLinha: p.novaLinha,
       textoEstilo: p.textoEstilo,
+      limiteBase: p.blocoTipo === 'pergunta' && p.tipo === 'texto_curto' && !!p.limiteBase,
     }))
   );
   ngOnInit(): void {
@@ -272,9 +286,13 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           this.eventoTipoOutro.set(form.eventoTipoOutro || '');
           this.eventoAtivo.set(form.eventoAtivo !== false);
           this.exigirIdentidade.set(form.exigirIdentidade !== false);
-          this.convidados.set((form.convidados || []).map((g) => this.fromGuestApi(g)));
-          this.temBaseSalva.set((form.baseResumo?.total || 0) > 0);
-          this.perguntas.set((form.perguntas || []).map((p) => this.fromApi(p)));
+          const temBase = (form.baseResumo?.total || 0) > 0;
+          this.convidados.set((form.convidados || []).map((g) => this.fromGuestApi(g, temBase)));
+          this.temBaseSalva.set(temBase);
+          this.limparBaseNoSave = false;
+          const perguntas = form.perguntas || [];
+          this.perguntas.set(perguntas.map((p) => this.fromApi(p)));
+          this.mostrarLimiteBase.set(perguntas.some((p) => !!p.limiteBase));
           this.templateCodigo.set(form.template?.codigo || form.templateCodigo || 'wtorre');
           this.capaUrl.set(form.capaUrl || null);
           this.capaLayout.set(form.capaLayout || 'top');
@@ -353,13 +371,15 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       if (!lookupPronto(ev.valor)) return;
       const campos = lookupLocal(this.baseLinhas || [], ev.valor);
       if (!campos) return;
-      const fill = matchCampos(campos, this.previewPerguntas(), q.id);
+      const perguntas = this.previewPerguntas();
+      const fill = matchCampos(campos, perguntas, q.id);
       if (!Object.keys(fill).length) return;
       this.previewRespostas.update((r) => {
         const next = { ...r };
         for (const [id, val] of Object.entries(fill)) next[id] = val;
         return next;
       });
+      this.previewTetos.update((t) => mesclarTetos(t, fill, perguntas));
     }, 400);
   }
 
@@ -392,6 +412,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     }
     this.perguntas.set(next);
     this.previewRespostas.set({});
+    this.previewTetos.set({});
   }
 
   escolherLayout(layout: CapaLayout): void {
@@ -591,6 +612,21 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     this.perguntas.update((list) => list.filter((p) => p.key !== key));
   }
 
+  async excluirCampos(): Promise<void> {
+    if (!this.perguntas().length) return;
+    const ok = await this.alertas.confirmarExclusao({
+      titulo: 'Excluir campos',
+      texto:
+        'Todas as perguntas, textos e anexos serão removidos. Os convidados e a planilha importada ficam.',
+    });
+    if (!ok) return;
+    this.perguntas.set([]);
+    this.previewRespostas.set({});
+    this.previewTetos.set({});
+    this.menuAddOpen.set(false);
+    this.alertas.sucesso('Campos excluídos.');
+  }
+
   patch(key: number, patch: Partial<QDraft>): void {
     this.perguntas.update((list) => list.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   }
@@ -622,6 +658,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     if (value !== 'externos') {
       this.baseLinhas = null;
       this.temBaseSalva.set(false);
+      this.limparBaseNoSave = true;
     }
   }
 
@@ -653,6 +690,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       rg: g.rg,
       rgMascara: maskRg(g.rg),
       email: g.email,
+      origem: 'planilha',
     };
   }
 
@@ -663,8 +701,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         .map((g) => [g.email.toLowerCase(), g])
     );
     return rows.map((g) => {
-      const draft = this.fromGuestApi(g);
-      const prev = prevByEmail.get((g.email || '').toLowerCase());
+      const draft = this.fromGuestApi(g, this.temBaseSalva());
+      const prev =
+        prevByEmail.get((g.email || '').toLowerCase()) ||
+        this.convidados().find((item) => item.id && item.id === g.id);
       if (prev?.cpf && isDocumentoValido(digitsDocumento(prev.cpf))) {
         draft.cpf = prev.cpf;
         draft.cpfMascara = prev.cpfMascara || draft.cpfMascara;
@@ -673,6 +713,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         draft.rg = prev.rg;
         draft.rgMascara = prev.rgMascara || draft.rgMascara;
       }
+      if (prev?.origem) draft.origem = prev.origem;
       return draft;
     });
   }
@@ -736,6 +777,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         rg: rgSalvo,
         rgMascara: rgNorm ? maskRg(rgNorm) : rgComoCpf ? maskDocumento(rgDigits) : '',
         email,
+        origem: 'manual',
       },
     ]);
     this.guestNome.set('');
@@ -746,6 +788,44 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
   removeConvidado(key: number): void {
     this.convidados.update((list) => list.filter((g) => g.key !== key));
+  }
+
+  abrirListaConvidados(): void {
+    this.convidadosModalAberto.set(true);
+  }
+
+  fecharListaConvidados(): void {
+    this.convidadosModalAberto.set(false);
+  }
+
+  atualizarConvidadoLista(item: {
+    key: number;
+    nome: string;
+    cpf: string;
+    cpfMascara: string;
+    rg: string;
+    rgMascara: string;
+    email: string;
+  }): void {
+    this.convidados.update((list) =>
+      list.map((g) => (g.key === item.key ? { ...g, ...item } : g))
+    );
+    this.alertas.sucesso('Convidado atualizado.');
+  }
+
+  async excluirPlanilha(): Promise<void> {
+    if (!this.podeExcluirPlanilha()) return;
+    const ok = await this.alertas.confirmarExclusao({
+      titulo: 'Excluir planilha',
+      texto:
+        'Os convidados importados da planilha serão removidos. Os campos do formulário e os convidados adicionados à mão ficam.',
+    });
+    if (!ok) return;
+    this.convidados.update((list) => list.filter((g) => g.origem !== 'planilha'));
+    this.baseLinhas = null;
+    this.temBaseSalva.set(false);
+    this.limparBaseNoSave = true;
+    this.alertas.sucesso('Planilha importada excluída.');
   }
 
   async copiarLink(): Promise<void> {
@@ -848,6 +928,12 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         if (form.destinatarios) {
           this.destinatarios.set(form.destinatarios);
         }
+        const savedPerguntas = form.perguntas;
+        if (savedPerguntas?.length) {
+          this.perguntas.update((list) =>
+            list.map((p, i) => ({ ...p, id: savedPerguntas[i]?.id ?? p.id }))
+          );
+        }
         if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
         if (form.capaUrl) this.capaUrl.set(form.capaUrl);
         if (this.capaPendente && !capaErro) this.clearCapaPendente();
@@ -903,6 +989,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         ajuda: '',
         novaLinha: true,
         textoEstilo: 'paragrafo',
+        limiteBase: false,
       };
     }
     if (tipo === 'anexo') {
@@ -918,6 +1005,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         ajuda: '',
         novaLinha: true,
         textoEstilo: 'paragrafo',
+        limiteBase: false,
       };
     }
     return {
@@ -932,6 +1020,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       ajuda: '',
       novaLinha: true,
       textoEstilo: 'paragrafo',
+      limiteBase: false,
     };
   }
 
@@ -942,6 +1031,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       p.textoEstilo === 'titulo' || (p.opcoes || [])[0] === 'titulo' ? 'titulo' : 'paragrafo';
     return {
       key: qKey,
+      id: p.id,
       blocoTipo,
       texto: p.texto,
       tipo: p.tipo,
@@ -957,6 +1047,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       ajuda: p.ajuda || '',
       novaLinha: p.novaLinha !== false,
       textoEstilo,
+      limiteBase: p.tipo === 'texto_curto' && !!p.limiteBase,
     };
   }
 
@@ -994,6 +1085,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       return out;
     });
     this.temBaseSalva.set(true);
+    this.limparBaseNoSave = false;
 
     const { guests, ignoradas } = extractGuestsFromRows(rows);
     const existing = new Set(
@@ -1058,7 +1150,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     return created;
   }
 
-  private fromGuestApi(g: PesquisasConvidado): GuestDraft {
+  private fromGuestApi(g: PesquisasConvidado, daPlanilha = false): GuestDraft {
     gKey += 1;
     return {
       key: gKey,
@@ -1069,6 +1161,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       rg: '',
       rgMascara: g.rgMascara || '',
       email: g.email || '',
+      origem: daPlanilha ? 'planilha' : 'manual',
     };
   }
 
@@ -1155,7 +1248,10 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       capaFocoX: this.capaFocoX(),
       capaFocoY: this.capaFocoY(),
       convidadosFonte: 'manual',
-      base: this.publicoAlvo() === 'externos' ? this.baseLinhas || undefined : [],
+      base:
+        this.publicoAlvo() === 'externos'
+          ? this.baseLinhas || (this.limparBaseNoSave ? [] : undefined)
+          : [],
       convidados: this.convidados().map((g) => ({
         id: g.id,
         nome: g.nome,
@@ -1164,6 +1260,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         rg: g.rg || undefined,
       })),
       perguntas: this.perguntas().map((p, idx) => ({
+        id: p.id,
         blocoTipo: p.blocoTipo,
         texto: p.texto,
         tipo: p.tipo,
@@ -1178,6 +1275,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         ajuda: p.ajuda,
         novaLinha: p.novaLinha,
         secaoTitulo: p.secaoTitulo,
+        limiteBase: p.blocoTipo === 'pergunta' && p.tipo === 'texto_curto' && !!p.limiteBase,
         logica:
           this.logica() && idx > 0
             ? { perguntaOrdem: idx, condicao: p.logicaCondicao }

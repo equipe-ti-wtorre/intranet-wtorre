@@ -90,6 +90,7 @@ export interface PesquisasPergunta {
   ajuda?: string | null;
   novaLinha?: boolean;
   textoEstilo?: TextoEstilo;
+  limiteBase?: boolean;
 }
 
 export interface PesquisasConvidado {
