@@ -35,6 +35,7 @@ export interface SolicitacaoColaborador {
   tipo: SolicitacaoTipo;
   nome: string;
   sobrenome: string;
+  nome_completo?: string | null;
   genero?: 'M' | 'F' | null;
   email_novo?: string | null;
   data_nascimento?: string | null;

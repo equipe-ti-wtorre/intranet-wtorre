@@ -25,7 +25,7 @@ const PREFIXO_INDIVIDUAL = /^E-mail individual\s*[—–-]\s*/i;
 
 const ASSUNTO_PADRAO = 'Nova solicitação de colaborador — {nome} ({tipo})';
 const ASSUNTO_PLACEHOLDERS =
-  'Placeholders: {nome}, {sobrenome}, {tipo}, {departamento}, {cargo}, {empresa}, {solicitante}, {data_inicio}';
+  'Placeholders: {nome}, {sobrenome}, {nome_completo}, {tipo}, {departamento}, {cargo}, {empresa}, {solicitante}, {data_inicio}';
 
 @Component({
   selector: 'app-solicitacao-colaborador-admin',

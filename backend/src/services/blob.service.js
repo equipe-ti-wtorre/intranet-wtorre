@@ -11,6 +11,13 @@ const { env } = require('../config/env');
 const { validarNomeContainer } = require('../utils/container-nome.validation');
 const { mapAzureBlobError } = require('../utils/azure-blob.errors');
 const pesquisasBlobLocal = require('./pesquisas-blob-local');
+const solicitacaoBlobLocal = require('./solicitacao-blob-local');
+
+function discoLocal(container) {
+  if (pesquisasBlobLocal.isLocalContainer(container)) return pesquisasBlobLocal;
+  if (solicitacaoBlobLocal.isLocalContainer(container)) return solicitacaoBlobLocal;
+  return null;
+}
 
 const account = env.azureStorageAccount;
 const credential = new DefaultAzureCredential();
@@ -41,8 +48,9 @@ async function garantirContainer(nome) {
     err.status = 400;
     throw err;
   }
-  if (pesquisasBlobLocal.isLocalContainer(v.nome)) {
-    await pesquisasBlobLocal.garantirDir();
+  const local = discoLocal(v.nome);
+  if (local) {
+    await local.garantirDir();
     return v.nome;
   }
   return withBlobError(async () => {
@@ -91,8 +99,9 @@ async function listarContainersDaConta() {
 }
 
 async function enviarArquivo(container, caminhoTmp, blobName, contentType) {
-  if (pesquisasBlobLocal.isLocalContainer(container)) {
-    return pesquisasBlobLocal.salvarArquivo(blobName, caminhoTmp, contentType);
+  const local = discoLocal(container);
+  if (local) {
+    return local.salvarArquivo(blobName, caminhoTmp, contentType);
   }
   return withBlobError(async () => {
     const client = svc.getContainerClient(container).getBlockBlobClient(blobName);
@@ -104,8 +113,9 @@ async function enviarArquivo(container, caminhoTmp, blobName, contentType) {
 }
 
 async function enviarBuffer(container, buffer, blobName, contentType) {
-  if (pesquisasBlobLocal.isLocalContainer(container)) {
-    return pesquisasBlobLocal.salvarBuffer(blobName, buffer, contentType);
+  const local = discoLocal(container);
+  if (local) {
+    return local.salvarBuffer(blobName, buffer, contentType);
   }
   return withBlobError(async () => {
     const client = svc.getContainerClient(container).getBlockBlobClient(blobName);
@@ -118,8 +128,9 @@ async function enviarBuffer(container, buffer, blobName, contentType) {
 
 async function removerBlob(container, blobName) {
   if (!blobName) return;
-  if (pesquisasBlobLocal.isLocalContainer(container)) {
-    return pesquisasBlobLocal.remover(blobName);
+  const local = discoLocal(container);
+  if (local) {
+    return local.remover(blobName);
   }
   return withBlobError(() =>
     svc.getContainerClient(container).getBlockBlobClient(blobName).deleteIfExists()
@@ -162,6 +173,11 @@ async function gerarSasLeitura(container, blobName, opts = {}) {
   if (pesquisasBlobLocal.isLocalContainer(container)) {
     return pesquisasBlobLocal.sasLocal(blobName);
   }
+  if (solicitacaoBlobLocal.isLocalContainer(container)) {
+    const err = new Error('Arquivo da solicitação fica só no disco deste ambiente e não tem link público.');
+    err.status = 400;
+    throw err;
+  }
   return withBlobError(async () => {
     const now = new Date();
     const startsOn = new Date(now.getTime() - 5 * 60 * 1000);
@@ -187,8 +203,9 @@ async function gerarSasLeitura(container, blobName, opts = {}) {
 }
 
 async function baixarBuffer(container, blobName) {
-  if (pesquisasBlobLocal.isLocalContainer(container)) {
-    const file = await pesquisasBlobLocal.ler(blobName);
+  const local = discoLocal(container);
+  if (local) {
+    const file = await local.ler(blobName);
     return { buffer: file.buffer, contentType: file.contentType, filename: file.filename };
   }
   return withBlobError(async () => {
@@ -211,6 +228,7 @@ function urlBlobPublico(container, blobName) {
   if (pesquisasBlobLocal.isLocalContainer(container)) {
     return pesquisasBlobLocal.publicUrl(blobName);
   }
+  if (solicitacaoBlobLocal.isLocalContainer(container)) return null;
   const baseUrl = svc.getContainerClient(container).getBlockBlobClient(blobName).url;
   return baseUrl;
 }

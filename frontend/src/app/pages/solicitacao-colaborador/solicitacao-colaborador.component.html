@@ -3,7 +3,7 @@
     <div class="top">
       <h1>Solicitação de Colaborador</h1>
       <div class="sub">
-        Preencha os dados do novo colaborador. As áreas envolvidas serão notificadas automaticamente.
+        {{ textoIntro() }}
       </div>
     </div>
 
@@ -76,6 +76,7 @@
               Efetivação
             </label>
           </div>
+          <p class="note">{{ textoTipo() }}</p>
         </div>
 
         <div class="card">
@@ -95,6 +96,16 @@
                 required
               />
             </div>
+          </div>
+          <div class="field mb16">
+            <label>Nome completo <span class="req">*</span></label>
+            <input
+              type="text"
+              [ngModel]="nomeCompleto()"
+              (ngModelChange)="nomeCompleto.set($event)"
+              name="nome_completo"
+              required
+            />
           </div>
           <div class="field mb16">
             <label>Gênero</label>
@@ -132,7 +143,7 @@
             </div>
           </div>
           <div class="field mb16">
-            <label>E-mail – novo colaborador</label>
+            <label>{{ rotuloEmailColaborador() }}</label>
             <input type="email" [ngModel]="emailNovo()" (ngModelChange)="emailNovo.set($event)" name="email_novo" />
           </div>
           <div class="grid g3 mb16">
@@ -372,7 +383,7 @@
               </label>
             </div>
             <div class="note">
-              Se o perfil do novo colaborador não se adequar às regras já estabelecidas, será necessária autorização
+              Se o perfil do {{ tipo() === 'novo' ? 'novo colaborador' : 'colaborador' }} não se adequar às regras já estabelecidas, será necessária autorização
               do diretor da área.
             </div>
           </div>

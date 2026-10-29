@@ -135,6 +135,7 @@ function validarPayload(body, files = {}) {
   else if (!validarEmail(out.solicitante_email)) erros.push('E-mail do solicitante inválido.');
   if (!out.nome) erros.push('Nome é obrigatório.');
   if (!out.sobrenome) erros.push('Sobrenome é obrigatório.');
+  if (!out.nome_completo) erros.push('Nome completo é obrigatório.');
   if (!out.tipo) erros.push('Tipo é obrigatório.');
   if (!out.equipamento) erros.push('Equipamento é obrigatório.');
 

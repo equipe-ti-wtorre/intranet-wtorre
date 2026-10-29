@@ -15,6 +15,7 @@ const CAMPOS = [
   },
   { chave: 'nome', label: 'Nome', tipo: 'text', obrigatorio: true },
   { chave: 'sobrenome', label: 'Sobrenome', tipo: 'text', obrigatorio: true },
+  { chave: 'nome_completo', label: 'Nome completo', tipo: 'text', obrigatorio: true },
   {
     chave: 'genero',
     label: 'Gênero',

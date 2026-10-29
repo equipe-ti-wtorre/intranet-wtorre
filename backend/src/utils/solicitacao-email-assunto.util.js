@@ -20,6 +20,7 @@ function buildPlaceholderMap(solicitacao) {
   return {
     nome: solicitacao?.nome || '',
     sobrenome: solicitacao?.sobrenome || '',
+    nome_completo: solicitacao?.nome_completo || '',
     tipo: tipoLabel,
     departamento: solicitacao?.departamento || '',
     cargo: solicitacao?.cargo || '',

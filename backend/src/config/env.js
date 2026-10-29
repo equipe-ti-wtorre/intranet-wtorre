@@ -99,6 +99,9 @@ const env = {
   solicitacaoColaboradorArquivoMaxMb: Number(process.env.SOLICITACAO_ARQUIVO_MAX_MB) || 10,
   solicitacaoColaboradorSmtpAnexoMaxMb:
     Number(process.env.SOLICITACAO_SMTP_ANEXO_MAX_MB) || 25,
+  /** Só nbpdev: foto, crachá e boas-vindas em disco. Nunca ligar em produção. */
+  solicitacaoBlobLocal:
+    process.env.SOLICITACAO_BLOB_LOCAL === '1' || process.env.SOLICITACAO_BLOB_LOCAL === 'true',
   pesquisasContainer: process.env.PESQUISAS_CONTAINER || 'pesquisas',
   pesquisasTmpDir: process.env.PESQUISAS_TMP_DIR || os.tmpdir(),
   pesquisasAnexoMaxMb: Number(process.env.PESQUISAS_ANEXO_MAX_MB) || 10,
