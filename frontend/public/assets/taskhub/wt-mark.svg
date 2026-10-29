@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="64" height="64" role="img" aria-label="TaskHub">
+  <title>TaskHub</title>
+  <g transform="translate(0 0) scale(1)">
+  <rect width="32" height="32" rx="8.5" fill="#1d54e6"/>
+  <path d="M8.6 9.6h7.2M8.6 14.2h4.6" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M8.6 19.6l4.1 4.1L23.6 10" fill="none" stroke="#fff" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

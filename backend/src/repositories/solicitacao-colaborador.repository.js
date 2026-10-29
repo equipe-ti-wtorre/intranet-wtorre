@@ -1,5 +1,16 @@
 const { getPool } = require('../db/pool');
 const { decodeBlobRef } = require('../utils/solicitacao-validation.util');
+const { formatYmd } = require('../utils/parse-date.util');
+
+function dataIso(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatYmd(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  }
+  const iso = String(value).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return String(value).slice(0, 10);
+}
 
 function parseJson(value, fallback = null) {
   if (value == null) return fallback;
@@ -21,9 +32,10 @@ function mapSolicitacao(row) {
     tipo: row.tipo,
     nome: row.nome,
     sobrenome: row.sobrenome,
+    nome_completo: row.nome_completo,
     genero: row.genero,
     email_novo: row.email_novo,
-    data_nascimento: row.data_nascimento ? String(row.data_nascimento).slice(0, 10) : null,
+    data_nascimento: dataIso(row.data_nascimento),
     cpf: row.cpf,
     rg: row.rg,
     departamento: row.departamento,
@@ -40,7 +52,7 @@ function mapSolicitacao(row) {
     precisa_celular: !!row.precisa_celular,
     equipamento: row.equipamento,
     credencial_estacionamento: !!row.credencial_estacionamento,
-    data_inicio: row.data_inicio ? String(row.data_inicio).slice(0, 10) : null,
+    data_inicio: dataIso(row.data_inicio),
     status: row.status,
     criado_em: row.criado_em,
     criado_por: row.criado_por,
@@ -107,12 +119,12 @@ async function createSolicitacao(data) {
   const [result] = await pool.execute(
     `INSERT INTO solicitacoes_colaborador (
       solicitante_usuario_id, solicitante_nome, solicitante_email, tipo,
-      nome, sobrenome, genero, email_novo, data_nascimento, cpf, rg,
+      nome, sobrenome, nome_completo, genero, email_novo, data_nascimento, cpf, rg,
       departamento, cargo, supervisor, centro_custo, empresa, local_trabalho,
       foto_url, boas_vindas_url, cracha_url, credencial_veiculo_url,
       precisa_ramal, precisa_celular, equipamento, credencial_estacionamento,
       data_inicio, status, criado_por
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.solicitante_usuario_id ?? null,
       data.solicitante_nome ?? data.solicitante ?? null,
@@ -120,6 +132,7 @@ async function createSolicitacao(data) {
       data.tipo ?? null,
       data.nome ?? null,
       data.sobrenome ?? null,
+      data.nome_completo ?? null,
       data.genero ?? null,
       data.email_novo ?? null,
       data.data_nascimento ?? null,

@@ -25,9 +25,12 @@ function parseDate(value) {
 
 function formatDateBr(value) {
   if (!value) return '—';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${pad2(value.getDate())}/${pad2(value.getMonth() + 1)}/${value.getFullYear()}`;
+  }
   const s = String(value).slice(0, 10);
   const [y, m, d] = s.split('-');
-  if (y && m && d) return `${d}/${m}/${y}`;
+  if (y && m && d && /^\d{4}$/.test(y)) return `${pad2(d)}/${pad2(m)}/${y}`;
   return s;
 }
 

@@ -69,7 +69,7 @@ const CAMPO_COL_MAP = {
 const SECOES = [
   {
     titulo: 'Identificação',
-    campos: ['nome', 'sobrenome', 'genero', 'cpf', 'rg', 'data_nascimento', 'tipo'],
+    campos: ['nome', 'sobrenome', 'nome_completo', 'genero', 'cpf', 'rg', 'data_nascimento', 'tipo'],
   },
   {
     titulo: 'Vínculo profissional',
@@ -110,18 +110,6 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
-function formatDateShortBr(value) {
-  if (!value) return null;
-  const s = String(value).slice(0, 10);
-  const parts = s.split('-').map(Number);
-  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return null;
-  const [y, m, d] = parts;
-  const date = new Date(y, m - 1, d);
-  const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  return `${dias[date.getDay()]}, ${d} ${meses[m - 1]}`;
-}
-
 function formatValor(chave, solicitacao) {
   const campo = getCampo(chave);
   if (!campo) return '—';
@@ -136,7 +124,7 @@ function formatValor(chave, solicitacao) {
     return raw ? 'Sim' : 'Não';
   }
   if (campo.tipo === 'date') {
-    return formatDateShortBr(raw) || formatDateBr(raw);
+    return formatDateBr(raw);
   }
   if (chave === 'tipo') {
     return TIPO_LABELS[raw] || raw || '—';
@@ -297,12 +285,14 @@ function renderSecao(titulo, conteudo) {
 }
 
 function buildBannerHtml(solicitacao, camposSet) {
-  const nomeCompleto = escapeHtml(`${solicitacao.nome} ${solicitacao.sobrenome}`.trim());
+  const nomeCompleto = escapeHtml(
+    (solicitacao.nome_completo || `${solicitacao.nome || ''} ${solicitacao.sobrenome || ''}`).trim()
+  );
   const tipoLabel = escapeHtml(TIPO_LABELS[solicitacao.tipo] || solicitacao.tipo || '—');
 
   let inicioHtml = '';
   if (camposSet.has('data_inicio') && solicitacao.data_inicio) {
-    const inicio = escapeHtml(formatDateShortBr(solicitacao.data_inicio) || formatDateBr(solicitacao.data_inicio));
+    const inicio = escapeHtml(formatDateBr(solicitacao.data_inicio));
     inicioHtml = `<td align="right" style="font-family:Arial,sans-serif;font-size:12px;color:${C.primary};white-space:nowrap;">
       Início: <strong>${inicio}</strong>
     </td>`;
@@ -324,8 +314,18 @@ function buildBannerHtml(solicitacao, camposSet) {
   </tr>`;
 }
 
+function incluirNomeCompleto(solicitacao, campos) {
+  const lista = Array.isArray(campos) ? [...campos] : [];
+  const nome = String(solicitacao?.nome_completo || '').trim();
+  if (!nome || lista.includes('nome_completo')) return lista;
+  const idx = lista.indexOf('sobrenome');
+  if (idx >= 0) lista.splice(idx + 1, 0, 'nome_completo');
+  else lista.unshift('nome_completo');
+  return lista;
+}
+
 function buildSecoesHtml(solicitacao, campos) {
-  const camposSet = new Set(campos);
+  const camposSet = new Set(incluirNomeCompleto(solicitacao, campos));
   const partes = [];
 
   for (const secao of SECOES) {
@@ -432,7 +432,7 @@ function buildGrupoHtml(solicitacao, campos) {
 }
 
 function buildTextoPlano(solicitacao, campos) {
-  const linhas = campos.map((chave) => {
+  const linhas = incluirNomeCompleto(solicitacao, campos).map((chave) => {
     const campo = getCampo(chave);
     if (!campo) return null;
     return `${fieldLabel(chave)}: ${formatValor(chave, solicitacao)}`;

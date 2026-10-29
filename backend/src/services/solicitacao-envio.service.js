@@ -16,6 +16,7 @@ const { env } = require('../config/env');
 const MOCK_SOLICITACAO = {
   nome: 'Ana',
   sobrenome: 'Oliveira',
+  nome_completo: 'Ana Maria Oliveira',
   genero: 'F',
   tipo: 'novo',
   cpf: '123.456.789-00',

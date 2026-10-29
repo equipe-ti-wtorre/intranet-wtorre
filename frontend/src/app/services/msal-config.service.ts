@@ -24,6 +24,32 @@ export class MsalConfigService {
     return window.location.origin;
   }
 
+  private marcaTaskhub(): boolean {
+    try { return !!sessionStorage.getItem('taskhub_msal_tid'); } catch { return false; }
+  }
+
+  private respostaMicrosoft(): boolean {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    return ['code', 'error', 'id_token'].some(key => query.has(key) || hash.has(key));
+  }
+
+  /** A Microsoft devolve na origem do site. Leva o código para o login do TaskHub. */
+  private encaminharRetornoTaskhub(): boolean {
+    if (typeof window === 'undefined' || !this.marcaTaskhub()) return false;
+    const path = window.location.pathname.replace(/\/$/, '') || '/';
+    if (path === '/ti/taskhub/entrar' || !this.respostaMicrosoft()) return false;
+    window.location.replace(`/ti/taskhub/entrar${window.location.search}${window.location.hash}`);
+    return true;
+  }
+
+  /** O retorno do TaskHub usa o mesmo aplicativo da intranet. Não consumir esse redirect aqui. */
+  private retornoDoTaskhub(): boolean {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.replace(/\/$/, '') || '/';
+    return path === '/ti/taskhub/entrar' && this.marcaTaskhub();
+  }
+
   private resolveRedirectUri(config: MsalConfigResposta): string {
     const origin = this.redirectUriAtual();
     const allowed = config.redirectUris || [];
@@ -48,6 +74,7 @@ export class MsalConfigService {
   }
 
   private async _doInitialize(): Promise<void> {
+    const saindo = this.encaminharRetornoTaskhub();
     try {
       const config = await firstValueFrom(
         this.http.get<MsalConfigResposta>(`${environment.apiBaseUrl}/tenants/msal-config`)
@@ -66,7 +93,7 @@ export class MsalConfigService {
       };
       this.instance = new PublicClientApplication(msalConfig);
       await this.instance.initialize();
-      this.redirectResult = await this.instance.handleRedirectPromise();
+      if (!saindo && !this.retornoDoTaskhub()) this.redirectResult = await this.instance.handleRedirectPromise();
       if (!this.clientId) {
         this.loadError = 'MSAL não configurado: cadastre um tenant principal no painel admin.';
       }
@@ -83,7 +110,7 @@ export class MsalConfigService {
       };
       this.instance = new PublicClientApplication(msalConfig);
       await this.instance.initialize();
-      this.redirectResult = await this.instance.handleRedirectPromise();
+      if (!saindo && !this.retornoDoTaskhub()) this.redirectResult = await this.instance.handleRedirectPromise();
     }
   }
 

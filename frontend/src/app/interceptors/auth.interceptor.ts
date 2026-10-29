@@ -2,6 +2,8 @@ import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { AuthService as TaskhubAuthService } from '../taskhub/core/auth.service';
+import { Router } from '@angular/router';
 import {
   TabletAuthService,
   isTabletApiUrl,
@@ -40,13 +42,22 @@ function usesGraphToken(url: string): boolean {
   return isApiRequest(url) && url.includes('/assinaturas/me');
 }
 
+function isTaskhubApiUrl(url: string): boolean {
+  return url.includes('/api/v1/taskhub');
+}
+
+function isTaskhubAuthPublic(url: string): boolean {
+  return /\/taskhub\/auth\/(login|refresh|microsoft\/config)/.test(url);
+}
+
 function shouldAttachIntranetToken(url: string): boolean {
   return (
     isApiRequest(url) &&
     !isPublic(url) &&
     !usesGraphToken(url) &&
     !isTabletApiUrl(url) &&
-    !isRamalApiUrl(url)
+    !isRamalApiUrl(url) &&
+    !isTaskhubApiUrl(url)
   );
 }
 
@@ -62,7 +73,40 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const tabletAuth = inject(TabletAuthService);
   const ramalAuth = inject(RamalAuthService);
+  const taskhubAuth = inject(TaskhubAuthService);
+  const router = inject(Router);
   let request = req;
+
+  if (isTaskhubApiUrl(req.url)) {
+    const taskhubToken = taskhubAuth.token();
+    if (taskhubToken && !isTaskhubAuthPublic(req.url)) {
+      request = req.clone({
+        setHeaders: { Authorization: `Bearer ${taskhubToken}` },
+      });
+    }
+
+    return next(request).pipe(
+      catchError((err: HttpErrorResponse) => {
+        if (isTaskhubAuthPublic(req.url)) return throwError(() => err);
+        if (err.status === 401 && err.error?.code === 'TOKEN_EXPIRED') {
+          return taskhubAuth.refresh().pipe(
+            switchMap((newToken) =>
+              next(req.clone({ setHeaders: { Authorization: `Bearer ${newToken}` } }))
+            ),
+            catchError((refreshErr) => {
+              taskhubAuth.clear();
+              return throwError(() => refreshErr);
+            })
+          );
+        }
+        if (err.status === 401) taskhubAuth.clear();
+        if (err.status === 403 && err.error?.code === 'PASSWORD_CHANGE_REQUIRED') {
+          void router.navigate(['/ti/taskhub/trocar-senha']);
+        }
+        return throwError(() => err);
+      })
+    );
+  }
 
   if (isTabletApiUrl(req.url)) {
     const tabletToken = tabletAuth.getToken();

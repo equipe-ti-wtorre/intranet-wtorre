@@ -61,6 +61,7 @@ export class SolicitacaoColaboradorComponent implements OnInit {
   readonly tipo = signal<SolicitacaoTipo>('novo');
   readonly nome = signal('');
   readonly sobrenome = signal('');
+  readonly nomeCompleto = signal('');
   readonly genero = signal<'M' | 'F' | ''>('');
   // Texto que aparece no balão de fala do cartão de boas-vindas gerado automaticamente
   // (mesmo campo "Texto de apresentação" da ferramenta /cracha-boas-vindas).
@@ -102,6 +103,37 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     () => !!this.fotoAjuste() && !!this.nome().trim() && !!this.sobrenome().trim() && !!this.empresa()
   );
 
+  readonly textoIntro = computed(() => {
+    const aviso = ' As áreas envolvidas serão notificadas automaticamente.';
+    switch (this.tipo()) {
+      case 'reposicao':
+        return `Preencha os dados de quem vai repor a vaga.${aviso}`;
+      case 'mudanca':
+        return `Preencha os dados de quem muda de área ou de empresa.${aviso}`;
+      case 'efetivacao':
+        return `Preencha os dados de quem será efetivado.${aviso}`;
+      default:
+        return `Preencha os dados do novo colaborador.${aviso}`;
+    }
+  });
+
+  readonly textoTipo = computed(() => {
+    switch (this.tipo()) {
+      case 'reposicao':
+        return 'Reposição de uma vaga já existente.';
+      case 'mudanca':
+        return 'Mudança de área ou de empresa de quem já colabora.';
+      case 'efetivacao':
+        return 'Efetivação de quem já está na empresa.';
+      default:
+        return 'Entrada de um novo colaborador.';
+    }
+  });
+
+  readonly rotuloEmailColaborador = computed(() =>
+    this.tipo() === 'novo' ? 'E-mail – novo colaborador' : 'E-mail do colaborador'
+  );
+
   /** Cor da marca selecionada, pro círculo de ajuste ficar com o mesmo anel do crachá - igual ao padrão usado em /cracha-boas-vindas. */
   readonly corDaMarcaAtual = computed(() => {
     const brandId = EMPRESA_PARA_BRAND[this.empresa()] ?? BRAND_ORDER[0];
@@ -127,8 +159,9 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     // A pré-visualização (SVG/HTML - barato, só montagem de string) atualiza na hora, a cada
     // mudança de nome, sobrenome, gênero, departamento, cargo, empresa, texto de apresentação
     // ou foto - pra ficar dinâmico igual a ferramenta /cracha-boas-vindas (sem esperar nenhum
-    // debounce). Só a geração dos ARQUIVOS finais (JPEG via html2canvas - caro) continua com
-    // um pequeno debounce, já que isso não afeta o que a pessoa vê, só o que vai ser enviado.
+    // debounce). Nome completo não entra aqui: ele só vai no e-mail. Só a geração dos
+    // ARQUIVOS finais (JPEG via html2canvas - caro) continua com um pequeno debounce, já que
+    // isso não afeta o que a pessoa vê, só o que vai ser enviado.
     effect(() => {
       this.nome();
       this.sobrenome();
@@ -371,6 +404,7 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     this.tipo.set('novo');
     this.nome.set('');
     this.sobrenome.set('');
+    this.nomeCompleto.set('');
     this.genero.set('');
     this.bio.set('');
     this.emailNovo.set('');
@@ -405,6 +439,7 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     if (!this.solicitanteEmail().trim()) return 'Informe o e-mail do solicitante.';
     if (!this.nome().trim()) return 'Informe o nome.';
     if (!this.sobrenome().trim()) return 'Informe o sobrenome.';
+    if (!this.nomeCompleto().trim()) return 'Informe o nome completo.';
     if (!this.dataNascimento()) return 'Informe a data de nascimento.';
     if (!this.cpf().trim()) return 'Informe o CPF.';
     if (!this.departamento().trim()) return 'Informe o departamento.';
@@ -436,6 +471,7 @@ export class SolicitacaoColaboradorComponent implements OnInit {
     fd.append('tipo', this.tipo());
     fd.append('nome', this.nome().trim());
     fd.append('sobrenome', this.sobrenome().trim());
+    fd.append('nome_completo', this.nomeCompleto().trim());
     if (this.genero()) fd.append('genero', this.genero());
     if (this.emailNovo().trim()) fd.append('email_novo', this.emailNovo().trim());
     fd.append('data_nascimento', this.dataNascimento());
