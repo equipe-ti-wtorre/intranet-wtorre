@@ -215,6 +215,7 @@ pm2 restart intranet-api   # ou o nome do processo PM2
 
 ```nginx
 client_max_body_size 50M;
+client_body_buffer_size 4096k;
 
 location /api/ {
     proxy_pass http://127.0.0.1:3001/api/;
@@ -244,6 +245,8 @@ location / {
 
 > `client_max_body_size` deve ser igual ou maior que `MAX_UPLOAD_MB` (padrão 50M). Sem isso, uploads maiores que 1 MB retornam **413** do Nginx antes de chegar à API.
 
+> `client_body_buffer_size` precisa caber o JSON de publicação de formulário (planilha + convidados). Com 512k o WAF do painel intercepta o POST como "Nginx buffer overflow" e a requisição não chega na API. No servidor isso fica em `/www/server/nginx/conf/proxy.conf` (4096k). Uma planilha no limite de 5.000 linhas ainda pode passar desse buffer.
+
 > Use `proxy_pass http://127.0.0.1:3001/api/;` (com `/api/`) para preservar o prefixo `/api/v1` nas rotas.
 
 ### SSL
@@ -263,6 +266,7 @@ location / {
 | 403 sem departamento AD | Preencha `department` (ou company/office/job) no Azure AD |
 | `Access denied` MySQL | Ajuste `DB_USER`/`DB_PASS` no aaPanel |
 | Upload retorna 413 | Ajuste `client_max_body_size` no Nginx e `MAX_UPLOAD_MB` no `.env` |
+| Publicar formulário bloqueado (WAF "Nginx buffer overflow") | Suba `client_body_buffer_size` para `4096k` em `/www/server/nginx/conf/proxy.conf` e recarregue o Nginx |
 | Erro de permissão no upload | `chown -R www:www backend/storage/` |
 | Tipo de arquivo rejeitado | Apenas pdf, docx, xlsx, pptx, png, jpg, jpeg, zip |
 
