@@ -69,6 +69,7 @@ function mapFormulario(row) {
     id: row.id,
     criadorId: row.criador_id,
     criadorNome: row.criador_nome || null,
+    compartilhadoPapel: row.compartilhado_papel || undefined,
     titulo: row.titulo,
     descricao: row.descricao || '',
     categoria: row.categoria,
@@ -247,6 +248,27 @@ async function listFormulariosCriados(userId) {
   return rows.map(mapFormulario);
 }
 
+async function listFormulariosCompartilhados(userId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT f.*,
+        DATE_FORMAT(f.prazo_inicio, '%Y%m%d%H%i') AS prazo_inicio_key,
+        DATE_FORMAT(f.prazo_fim, '%Y%m%d%H%i') AS prazo_fim_key,
+        u.nome_completo AS criador_nome,
+        (SELECT COUNT(*) FROM pesquisas_respostas r WHERE r.formulario_id = f.id) AS total_respostas,
+        (SELECT COUNT(*) FROM pesquisas_convidados c WHERE c.formulario_id = f.id) AS total_convidados,
+        (SELECT COUNT(*) FROM pesquisas_formulario_destinatarios d WHERE d.formulario_id = f.id) AS total_destinatarios,
+        a.papel AS compartilhado_papel
+       FROM pesquisas_formularios f
+       JOIN usuarios u ON u.id = f.criador_id
+       INNER JOIN pesquisas_formulario_acessos a ON a.formulario_id = f.id
+      WHERE a.usuario_id = ? AND f.criador_id <> ?
+      ORDER BY f.atualizado_em DESC`,
+    [userId, userId]
+  );
+  return rows.map(mapFormulario);
+}
+
 async function listFormulariosAdmin() {
   const pool = getPool();
   const [rows] = await pool.execute(`${FORM_SELECT} ORDER BY f.atualizado_em DESC`);
@@ -344,6 +366,20 @@ async function countUsuariosAtivos(departamento) {
   }
   const [rows] = await pool.execute('SELECT COUNT(*) AS n FROM usuarios WHERE ativo = 1');
   return Number(rows[0]?.n || 0);
+}
+
+async function listUsuariosAtivos(departamento) {
+  const pool = getPool();
+  const sql = departamento
+    ? 'SELECT id, nome_completo AS nome, email FROM usuarios WHERE ativo = 1 AND departamento = ? ORDER BY nome_completo ASC'
+    : 'SELECT id, nome_completo AS nome, email FROM usuarios WHERE ativo = 1 ORDER BY nome_completo ASC';
+  const [rows] = departamento ? await pool.execute(sql, [departamento]) : await pool.execute(sql);
+  return rows.map((row) => ({
+    id: Number(row.id),
+    usuarioId: Number(row.id),
+    nome: row.nome || '',
+    email: row.email || '',
+  }));
 }
 
 async function listRespostaItens(respostaId) {
@@ -625,7 +661,7 @@ async function listRespostasDetalhadas(formularioId) {
   const [respostas] = await pool.execute(
     `SELECT r.id, r.usuario_id, r.convidado_id, r.enviado_em,
        u.nome_completo, u.email, u.departamento,
-       c.nome AS convidado_nome, c.email AS convidado_email, c.cpf_mascara
+       c.nome AS convidado_nome, c.email AS convidado_email, c.cpf_mascara, c.rg_mascara
      FROM pesquisas_respostas r
      LEFT JOIN usuarios u ON u.id = r.usuario_id
      LEFT JOIN pesquisas_convidados c ON c.id = r.convidado_id
@@ -651,6 +687,8 @@ async function listRespostasDetalhadas(formularioId) {
       nome: isGuest ? r.convidado_nome || 'Convidado' : r.nome_completo,
       email: isGuest ? r.convidado_email : r.email,
       departamento: isGuest ? r.cpf_mascara || 'Externo' : r.departamento || '',
+      cpfMascara: isGuest ? r.cpf_mascara || '' : '',
+      rgMascara: isGuest ? r.rg_mascara || '' : '',
       enviadoEm: toIso(r.enviado_em),
       itens: [],
     });
@@ -1502,18 +1540,25 @@ async function replaceFormularioBase(formularioId, rows) {
     await conn.execute('DELETE FROM pesquisas_formulario_base WHERE formulario_id = ?', [
       formularioId,
     ]);
-    for (const row of rows) {
-      await conn.execute(
-        `INSERT INTO pesquisas_formulario_base
-          (formulario_id, chave_doc, chave_email, chave_rg, dados)
-         VALUES (?, ?, ?, ?, CONVERT(? USING utf8mb4))`,
-        [
+    const LOTE = 200;
+    for (let i = 0; i < rows.length; i += LOTE) {
+      const slice = rows.slice(i, i + LOTE);
+      const placeholders = slice.map(() => '(?, ?, ?, ?, CONVERT(? USING utf8mb4))').join(', ');
+      const params = [];
+      for (const row of slice) {
+        params.push(
           formularioId,
           row.chaveDoc || null,
           row.chaveEmail || null,
           row.chaveRg || null,
-          toJsonBind(row.dados ?? {}),
-        ]
+          toJsonBind(row.dados ?? {})
+        );
+      }
+      await conn.execute(
+        `INSERT INTO pesquisas_formulario_base
+          (formulario_id, chave_doc, chave_email, chave_rg, dados)
+         VALUES ${placeholders}`,
+        params
       );
     }
     await conn.commit();
@@ -1614,6 +1659,120 @@ async function findRespostaDoConvidado(formularioId, convidadoId) {
   };
 }
 
+const HISTORICO_ACOES = new Set([
+  'compartilhou',
+  'revogou',
+  'mudou_papel',
+  'salvou',
+  'publicou',
+  'despublicou',
+  'ativou',
+  'desativou',
+  'encerrou',
+  'convidado_add',
+  'convidado_upd',
+  'convidado_del',
+  'convidados_lote',
+  'capa_up',
+  'capa_del',
+]);
+
+async function findFormularioAcesso(formularioId, usuarioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT formulario_id, usuario_id, papel
+       FROM pesquisas_formulario_acessos
+      WHERE formulario_id = ? AND usuario_id = ?
+      LIMIT 1`,
+    [formularioId, usuarioId]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { formularioId: row.formulario_id, usuarioId: row.usuario_id, papel: row.papel };
+}
+
+async function listFormularioAcessos(formularioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT a.usuario_id, a.papel,
+            u.nome_completo AS nome, u.email,
+            c.cargo, COALESCE(c.departamento, u.departamento) AS departamento
+       FROM pesquisas_formulario_acessos a
+       INNER JOIN usuarios u ON u.id = a.usuario_id
+       LEFT JOIN colaboradores c ON c.ad_id = u.microsoft_id
+      WHERE a.formulario_id = ?
+      ORDER BY u.nome_completo ASC`,
+    [formularioId]
+  );
+  return rows.map((row) => ({
+    usuarioId: Number(row.usuario_id),
+    papel: row.papel === 'editar' ? 'editar' : 'ver',
+    nome: row.nome || '',
+    email: row.email || '',
+    cargo: row.cargo || null,
+    departamento: row.departamento || null,
+  }));
+}
+
+async function replaceFormularioAcessos(formularioId, itens) {
+  const list = Array.isArray(itens) ? itens : [];
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute('DELETE FROM pesquisas_formulario_acessos WHERE formulario_id = ?', [
+      formularioId,
+    ]);
+    for (const item of list) {
+      await conn.execute(
+        `INSERT INTO pesquisas_formulario_acessos (formulario_id, usuario_id, papel)
+         VALUES (?, ?, ?)`,
+        [formularioId, item.usuarioId, item.papel === 'editar' ? 'editar' : 'ver']
+      );
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+async function insertFormularioHistorico({ formularioId, usuarioId, acao, detalhe }) {
+  if (!HISTORICO_ACOES.has(acao)) return;
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO pesquisas_formulario_historico (formulario_id, usuario_id, acao, detalhe)
+     VALUES (?, ?, ?, ?)`,
+    [formularioId, usuarioId || null, acao, detalhe ? String(detalhe).slice(0, 255) : null]
+  );
+}
+
+async function listFormularioHistorico(formularioId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT h.id, h.formulario_id, h.usuario_id, h.acao, h.detalhe, h.criado_em,
+            u.nome_completo AS nome
+       FROM pesquisas_formulario_historico h
+       LEFT JOIN usuarios u ON u.id = h.usuario_id
+      WHERE h.formulario_id = ?
+      ORDER BY h.id DESC
+      LIMIT 200`,
+    [formularioId]
+  );
+  return rows.map((row) => ({
+    id: Number(row.id),
+    formularioId: row.formulario_id,
+    usuarioId: row.usuario_id,
+    nome: row.nome || '',
+    acao: row.acao,
+    detalhe: row.detalhe || '',
+    criadoEm: toIso(row.criado_em),
+  }));
+}
+
+
 module.exports = {
   toJsonBind,
   findFormularioById,
@@ -1621,6 +1780,7 @@ module.exports = {
   listFormulariosPendentes,
   listFormulariosRespondidos,
   listFormulariosCriados,
+  listFormulariosCompartilhados,
   listFormulariosAdmin,
   listFormulariosInternosPublicados,
   countFormulariosPendentes,
@@ -1629,6 +1789,7 @@ module.exports = {
   countFormulariosPorStatus,
   countRespostasRecebidas,
   countUsuariosAtivos,
+  listUsuariosAtivos,
   listRespostaItens,
   seriesRespostasDiarias,
   insertFormulario,
@@ -1681,6 +1842,12 @@ module.exports = {
   isDestinatario,
   replaceDestinatarios,
   copyDestinatarios,
+  listFormulariosCompartilhados,
+  findFormularioAcesso,
+  listFormularioAcessos,
+  replaceFormularioAcessos,
+  insertFormularioHistorico,
+  listFormularioHistorico,
   insertPesquisasErro,
   listPesquisasErros,
   replaceFormularioBase,

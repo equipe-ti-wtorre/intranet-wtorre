@@ -8,6 +8,8 @@ const comunicadosRepo = require('../repositories/comunicados.repository');
 const catRepo = require('../repositories/comunicado-categorias.repository');
 const contentVersionService = require('./content-version.service');
 const blobService = require('./blob.service');
+const XLSX = require('xlsx');
+const pesquisasExport = require('./pesquisas-export.util');
 const cryptoService = require('./crypto.service');
 const jwtService = require('./jwt.service');
 const { env } = require('../config/env');
@@ -32,7 +34,7 @@ const APROVADOR_ROTULOS = [
   'Coordenador de TI',
   'Diretoria',
 ];
-const FORM_LISTAS = ['form-pending', 'form-answered', 'form-created'];
+const FORM_LISTAS = ['form-pending', 'form-answered', 'form-created', 'form-shared'];
 const REQ_LISTAS = ['req-pending', 'req-answered', 'req-created'];
 const ORIGEM_FORM = 'pesquisas_formulario';
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -46,6 +48,42 @@ function httpError(status, mensagem) {
 function isAdminPesquisas(req) {
   return req.user?.perfil === 'ADMIN' || (req.userModulos || []).includes('pesquisas');
 }
+
+const NIVEL_PAPEL = { ver: 1, editar: 2, dono: 3 };
+
+async function papelDoUsuario(req, form) {
+  if (!form || !req.user?.id) return null;
+  if (form.criadorId === req.user.id || isAdminPesquisas(req)) return 'dono';
+  const row = await repo.findFormularioAcesso(form.id, req.user.id);
+  if (!row) return null;
+  return row.papel === 'editar' ? 'editar' : 'ver';
+}
+
+async function assertAcessoFormulario(req, form, nivel) {
+  if (!form) throw httpError(404, 'Formulário não encontrado.');
+  const papel = await papelDoUsuario(req, form);
+  const need = NIVEL_PAPEL[nivel] || NIVEL_PAPEL.dono;
+  const have = NIVEL_PAPEL[papel] || 0;
+  if (have >= need) return papel;
+  if (nivel === 'ver') throw httpError(403, 'Você não pode ver os resultados deste formulário.');
+  if (nivel === 'dono') throw httpError(403, 'Somente o dono pode compartilhar ou excluir este formulário.');
+  throw httpError(403, 'Você não pode alterar este formulário.');
+}
+
+async function registrarHistorico(formId, req, acao, detalhe) {
+  if (!formId) return;
+  try {
+    await repo.insertFormularioHistorico({
+      formularioId: formId,
+      usuarioId: req.user?.id || null,
+      acao,
+      detalhe: detalhe || null,
+    });
+  } catch (err) {
+    console.error('[pesquisas] historico', err.message);
+  }
+}
+
 
 const ACOES_ERRO = ['clonar', 'publicar', 'capa', 'salvar', 'responder'];
 
@@ -781,7 +819,7 @@ function dateLabelForm(form, lista) {
 function toFormListItem(form, lista) {
   let status = 'pending';
   if (lista === 'form-answered') status = 'done';
-  else if (lista === 'form-created') status = badgeFormCriado(form);
+  else if (lista === 'form-created' || lista === 'form-shared') status = badgeFormCriado(form);
   return {
     id: form.id,
     kind: 'formulario',
@@ -804,6 +842,7 @@ function toFormListItem(form, lista) {
     prazoInicio: form.prazoInicio || null,
     prazoFim: form.prazoFim || null,
     multiplaResposta: !!form.multiplaResposta,
+    compartilhadoPapel: form.compartilhadoPapel || undefined,
   };
 }
 
@@ -1141,6 +1180,7 @@ async function listFormularios(req) {
   let rows = [];
   if (lista === 'form-pending') rows = await repo.listFormulariosPendentes(req.user);
   else if (lista === 'form-answered') rows = await repo.listFormulariosRespondidos(req.user.id);
+  else if (lista === 'form-shared') rows = await repo.listFormulariosCompartilhados(req.user.id);
   else rows = await repo.listFormulariosCriados(req.user.id);
 
   const items = rows
@@ -1148,7 +1188,7 @@ async function listFormularios(req) {
     .filter((it) => matchQuery(it, q))
     .filter((it) => !statusFilter || statusFilter === 'all' || it.status === statusFilter);
 
-  if (lista === 'form-created' && items.length) {
+  if ((lista === 'form-created' || lista === 'form-shared') && items.length) {
     const all = await repo.countUsuariosAtivos();
     const depts = new Map();
     for (const row of rows) {
@@ -1179,14 +1219,12 @@ async function getFormulario(req) {
   const id = parseId(req.params.id);
   const form = await repo.findFormularioById(id);
   if (!form) throw httpError(404, 'Formulário não encontrado.');
-  const owner = form.criadorId === req.user.id;
-  const admin = isAdminPesquisas(req);
-  if (!owner && !admin) throw httpError(403, 'Você não pode editar este formulário.');
+  const meuPapel = await assertAcessoFormulario(req, form, 'editar');
   const perguntas = await repo.listPerguntas(id);
   const convidados = await repo.listConvidados(id);
   const destinatarios = await repo.listDestinatarios(id);
   const resumoBase = await baseResumo(id);
-  return decorateForm({ ...form, perguntas, convidados, destinatarios, baseResumo: resumoBase });
+  return decorateForm({ ...form, perguntas, convidados, destinatarios, baseResumo: resumoBase, meuPapel });
 }
 
 function tituloCopia(titulo) {
@@ -1212,9 +1250,7 @@ async function clonarFormulario(req) {
   const id = parseId(req.params.id);
   const origem = await repo.findFormularioById(id);
   if (!origem) throw httpError(404, 'Formulário não encontrado.');
-  if (origem.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode clonar este formulário.');
-  }
+  await assertAcessoFormulario(req, origem, 'editar');
   const perguntas = await repo.listPerguntas(id);
   const slug = await uniquePublicToken();
   const novoId = await repo.insertFormulario({
@@ -1293,10 +1329,9 @@ async function salvarFormulario(req, { publicar }) {
   if (idParam) {
     const existing = await repo.findFormularioById(idParam);
     if (!existing) throw httpError(404, 'Formulário não encontrado.');
-    if (existing.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-      throw httpError(403, 'Você não pode alterar este formulário.');
-    }
+    await assertAcessoFormulario(req, existing, 'editar');
     await repo.updateFormularioMeta(idParam, { ...body, status });
+    await registrarHistorico(idParam, req, publicar ? 'publicou' : 'salvou');
     await repo.replacePerguntas(idParam, body.perguntas);
     if (guests) {
       await repo.replaceConvidados(idParam, guests);
@@ -1331,9 +1366,7 @@ async function publicarFormulario(req) {
   if (idParam && !Array.isArray(req.body?.perguntas)) {
     const existing = await repo.findFormularioById(idParam);
     if (!existing) throw httpError(404, 'Formulário não encontrado.');
-    if (existing.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-      throw httpError(403, 'Você não pode alterar este formulário.');
-    }
+    await assertAcessoFormulario(req, existing, 'editar');
     if (!existing.titulo || existing.titulo === 'Sem título') {
       throw httpError(400, 'Dê um título ao formulário antes de publicar.');
     }
@@ -1358,6 +1391,7 @@ async function publicarFormulario(req) {
       await repo.setFormularioSlug(idParam, await uniquePublicToken());
     }
     await repo.setFormularioStatus(idParam, 'publicado');
+    await registrarHistorico(idParam, req, 'publicou');
     form = await getFormularioPorId(idParam, { includeConvidados: true });
   } else {
     form = await salvarFormulario(req, { publicar: true });
@@ -1387,11 +1421,10 @@ async function despublicarFormulario(req) {
   const id = parseId(req.params.id);
   const existing = await repo.findFormularioById(id);
   if (!existing) throw httpError(404, 'Formulário não encontrado.');
-  if (existing.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
+  await assertAcessoFormulario(req, existing, 'editar');
   await repo.setFormularioStatus(id, 'rascunho');
   await desativarComunicadoFormulario(id);
+  await registrarHistorico(id, req, 'despublicou');
   return getFormularioPorId(id);
 }
 
@@ -1403,11 +1436,10 @@ async function encerrarFormulario(req) {
   const id = parseId(req.params.id);
   const form = await repo.findFormularioById(id);
   if (!form) throw httpError(404, 'Formulário não encontrado.');
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode encerrar este formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'editar');
   await repo.setFormularioStatus(id, 'encerrado');
   await desativarComunicadoFormulario(id);
+  await registrarHistorico(id, req, 'encerrou');
   return getFormularioPorId(id);
 }
 
@@ -1415,10 +1447,7 @@ async function excluirFormulario(req) {
   const id = parseId(req.params.id);
   const form = await repo.findFormularioById(id);
   if (!form) throw httpError(404, 'Formulário não encontrado.');
-  const admin = isAdminPesquisas(req);
-  if (form.criadorId !== req.user.id && !admin) {
-    throw httpError(403, 'Você não pode excluir este formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'dono');
   await removerComunicadoFormulario(id);
   const capa = await repo.findFormularioCapa(id);
   await repo.deleteFormulario(id);
@@ -1471,6 +1500,21 @@ async function payloadResponder(req) {
     capaFocoY: form.capaFocoY ?? 50,
     temBase: false,
   };
+}
+
+async function substituirBase(req) {
+  const id = parseId(req.params.id);
+  const form = await repo.findFormularioById(id);
+  await assertAcessoFormulario(req, form, 'editar');
+  if (form.publicoAlvo !== 'externos') {
+    throw httpError(400, 'A planilha só vale para formulário de convidados externos.');
+  }
+  if (!Array.isArray(req.body?.base)) {
+    throw httpError(400, 'Envie as linhas da planilha.');
+  }
+  await repo.replaceFormularioBase(id, normalizeBaseRows(req.body.base));
+  await registrarHistorico(id, req, 'salvou', 'planilha-base');
+  return { baseResumo: await baseResumo(id) };
 }
 
 async function lookupBaseIntranet(req) {
@@ -1698,9 +1742,7 @@ async function findFormularioByRef(raw) {
 
 async function resultados(req) {
   const form = await findFormularioByRef(req.params.id);
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode ver os resultados deste formulário.');
-  }
+  const meuPapel = await assertAcessoFormulario(req, form, 'ver');
   const id = form.id;
   const perguntas = await repo.listPerguntas(id);
   const respostas = await repo.listRespostasDetalhadas(id);
@@ -1781,7 +1823,7 @@ async function resultados(req) {
   const series = await repo.seriesRespostasDiarias(id, 7);
 
   return {
-    formulario: await decorateForm({ ...form, convidados, destinatarios }),
+    formulario: await decorateForm({ ...form, convidados, destinatarios, meuPapel }),
     total: respostas.length,
     perguntas: perguntasOut,
     publicoAlvoTotal,
@@ -1796,6 +1838,36 @@ async function resultados(req) {
           date: formatBrDateTime(r.enviadoEm) || '',
         })),
   };
+}
+
+
+async function exportarResultados(req) {
+  const form = await findFormularioByRef(req.params.id);
+  await assertAcessoFormulario(req, form, 'ver');
+  const id = form.id;
+  const perguntas = await repo.listPerguntas(id);
+  const respostas = await repo.listRespostasDetalhadas(id);
+  const wb = XLSX.utils.book_new();
+  const abaRespostas = pesquisasExport.montarAbaRespostas(form, perguntas, respostas);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(abaRespostas), 'Respostas');
+  if (pesquisasExport.incluirCobertura(form)) {
+    let publico = [];
+    if (form.publicoAlvo === 'externos') {
+      publico = await repo.listConvidados(id);
+    } else if (form.publicoAlvo === 'personalizado') {
+      publico = await repo.listDestinatarios(id);
+    } else if (form.publicoAlvo === 'departamento') {
+      publico = await repo.listUsuariosAtivos(form.publicoDepartamento);
+    } else {
+      publico = await repo.listUsuariosAtivos();
+    }
+    const cobertura = pesquisasExport.montarAbaCobertura(form, publico, respostas);
+    if (cobertura) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cobertura), 'Cobertura');
+    }
+  }
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  return { buffer, filename: pesquisasExport.nomeArquivoExport(form.titulo) };
 }
 
 function nomeEntradaZip(nome, usados) {
@@ -1872,9 +1944,7 @@ function buffersParaZip(entradas) {
 
 async function zipAnexos(req) {
   const form = await findFormularioByRef(req.params.id);
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode ver os resultados deste formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'ver');
   const raw = Array.isArray(req.body?.itens) ? req.body.itens : [];
   const chaves = [];
   const vistas = new Set();
@@ -1940,9 +2010,7 @@ async function zipAnexos(req) {
 
 async function adicionarConvidado(req) {
   const form = await findFormularioByRef(req.params.id);
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'editar');
   if (form.publicoAlvo !== 'externos') {
     throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
   }
@@ -1952,14 +2020,14 @@ async function adicionarConvidado(req) {
   }
   const guest = guests[0];
   await garantirConvidadoUnico(form.id, guest, null);
-  return repo.insertConvidado(form.id, guest);
+  const criado = await repo.insertConvidado(form.id, guest);
+  await registrarHistorico(form.id, req, 'convidado_add', guest.nome || guest.email || '');
+  return criado;
 }
 
 async function atualizarConvidado(req) {
   const form = await findFormularioByRef(req.params.id);
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'editar');
   if (form.publicoAlvo !== 'externos') {
     throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
   }
@@ -1970,20 +2038,21 @@ async function atualizarConvidado(req) {
   const guests = await normalizeConvidados([body], form.id);
   const guest = guests[0];
   await garantirConvidadoUnico(form.id, guest, convidadoId);
-  return repo.updateConvidado(form.id, convidadoId, guest);
+  const atualizado = await repo.updateConvidado(form.id, convidadoId, guest);
+  await registrarHistorico(form.id, req, 'convidado_upd', guest.nome || guest.email || '');
+  return atualizado;
 }
 
 async function removerConvidado(req) {
   const form = await findFormularioByRef(req.params.id);
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'editar');
   if (form.publicoAlvo !== 'externos') {
     throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
   }
   const convidadoId = parseId(req.params.convidadoId);
   const ok = await repo.deleteConvidado(form.id, convidadoId);
   if (!ok) throw httpError(404, 'Convidado não encontrado.');
+  await registrarHistorico(form.id, req, 'convidado_del');
   return { ok: true };
 }
 
@@ -2004,9 +2073,7 @@ async function garantirConvidadoUnico(formularioId, guest, ignoreId) {
 
 async function adicionarConvidadosLote(req) {
   const form = await findFormularioByRef(req.params.id);
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
+  await assertAcessoFormulario(req, form, 'editar');
   if (form.publicoAlvo !== 'externos') {
     throw httpError(400, 'Só formulários para convidados externos aceitam esta lista.');
   }
@@ -2024,7 +2091,9 @@ async function adicionarConvidadosLote(req) {
   if (!guests.length) {
     throw httpError(400, 'Nenhuma linha válida. Use colunas de nome, CPF/CNPJ, RG ou e-mail.');
   }
-  return repo.insertConvidadosAppend(form.id, guests);
+  const out = await repo.insertConvidadosAppend(form.id, guests);
+  await registrarHistorico(form.id, req, 'convidados_lote', String(out?.inseridos ?? guests.length));
+  return out;
 }
 
 function buildDailySeries(byDay, dias) {
@@ -2557,12 +2626,12 @@ async function atualizarEvento(req) {
   const id = parseId(req.params.id);
   const form = await repo.findFormularioById(id);
   if (!form) throw httpError(404, 'Formulário não encontrado.');
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
-  await repo.setEventoAtivo(id, req.body?.eventoAtivo !== false);
+  await assertAcessoFormulario(req, form, 'editar');
+  const ativo = req.body?.eventoAtivo !== false;
+  await repo.setEventoAtivo(id, ativo);
   const atualizado = await getFormularioPorId(id, { includeConvidados: true });
   await atualizarComunicadoDoFormulario(atualizado, req.user.id);
+  await registrarHistorico(id, req, ativo ? 'ativou' : 'desativou');
   return atualizado;
 }
 
@@ -2644,17 +2713,14 @@ async function excluirTemplate(req) {
   return { ok: true };
 }
 
-function assertPodeEditarForm(req, form) {
-  if (!form) throw httpError(404, 'Formulário não encontrado.');
-  if (form.criadorId !== req.user.id && !isAdminPesquisas(req)) {
-    throw httpError(403, 'Você não pode alterar este formulário.');
-  }
+async function assertPodeEditarForm(req, form) {
+  return assertAcessoFormulario(req, form, 'editar');
 }
 
 async function uploadCapa(req) {
   const id = parseId(req.params.id);
   const form = await repo.findFormularioById(id);
-  assertPodeEditarForm(req, form);
+  await assertPodeEditarForm(req, form);
   if (!req.file) throw httpError(400, 'Envie uma imagem de capa.');
   const anterior = await repo.findFormularioCapa(id);
   const container = await blobService.garantirContainer(env.pesquisasContainer);
@@ -2673,6 +2739,7 @@ async function uploadCapa(req) {
     blob: blobName,
     nome: req.file.originalname,
   });
+  await registrarHistorico(id, req, 'capa_up');
   if (anterior) {
     try {
       await blobService.removerBlob(anterior.container, anterior.blob);
@@ -2686,9 +2753,10 @@ async function uploadCapa(req) {
 async function removerCapa(req) {
   const id = parseId(req.params.id);
   const form = await repo.findFormularioById(id);
-  assertPodeEditarForm(req, form);
+  await assertPodeEditarForm(req, form);
   const anterior = await repo.findFormularioCapa(id);
   await repo.setFormularioCapa(id, null);
+  await registrarHistorico(id, req, 'capa_del');
   if (anterior) {
     try {
       await blobService.removerBlob(anterior.container, anterior.blob);
@@ -2861,6 +2929,54 @@ async function moverPortalSlide(req) {
   return toAdminSlide(await repo.findPortalSlideById(id));
 }
 
+async function listAcessos(req) {
+  const form = await findFormularioByRef(req.params.id);
+  await assertAcessoFormulario(req, form, 'dono');
+  return repo.listFormularioAcessos(form.id);
+}
+
+async function salvarAcessos(req) {
+  const form = await findFormularioByRef(req.params.id);
+  await assertAcessoFormulario(req, form, 'dono');
+  const raw = Array.isArray(req.body?.acessos) ? req.body.acessos : null;
+  if (!raw) throw httpError(400, 'Informe a lista de acessos.');
+  const anterior = await repo.listFormularioAcessos(form.id);
+  const prev = new Map(anterior.map((a) => [a.usuarioId, a]));
+  const wanted = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const usuarioId = Number(item?.usuarioId);
+    if (!Number.isInteger(usuarioId) || usuarioId < 1 || seen.has(usuarioId)) continue;
+    if (usuarioId === form.criadorId) continue;
+    const papel = item?.papel === 'editar' ? 'editar' : 'ver';
+    seen.add(usuarioId);
+    wanted.push({ usuarioId, papel });
+  }
+  const ativos = await repo.filterUsuariosAtivos(wanted.map((w) => w.usuarioId));
+  const okSet = new Set(ativos);
+  const final = wanted.filter((w) => okSet.has(w.usuarioId));
+  await repo.replaceFormularioAcessos(form.id, final);
+  const next = new Map(final.map((a) => [a.usuarioId, a]));
+  for (const [id, item] of next) {
+    const old = prev.get(id);
+    if (!old) await registrarHistorico(form.id, req, 'compartilhou', `${item.papel}:${id}`);
+    else if (old.papel !== item.papel) {
+      await registrarHistorico(form.id, req, 'mudou_papel', `${old.papel}->${item.papel}:${id}`);
+    }
+  }
+  for (const [id] of prev) {
+    if (!next.has(id)) await registrarHistorico(form.id, req, 'revogou', String(id));
+  }
+  return repo.listFormularioAcessos(form.id);
+}
+
+async function listHistorico(req) {
+  const form = await findFormularioByRef(req.params.id);
+  await assertAcessoFormulario(req, form, 'ver');
+  return repo.listFormularioHistorico(form.id);
+}
+
+
 module.exports = {
   APROVADOR_ROTULOS,
   resumo,
@@ -2874,8 +2990,13 @@ module.exports = {
   excluirFormulario,
   payloadResponder,
   lookupBaseIntranet,
+  substituirBase,
   enviarResposta,
   resultados,
+  listAcessos,
+  salvarAcessos,
+  listHistorico,
+  exportarResultados,
   zipAnexos,
   adicionarConvidado,
   atualizarConvidado,

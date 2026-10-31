@@ -1,0 +1,30 @@
+<app-admin-modal
+  [open]="open()"
+  title="Histórico"
+  subtitle="Quem mexeu neste formulário."
+  size="wide"
+  [showSave]="false"
+  cancelLabel="Fechar"
+  (cancel)="fechar.emit()"
+>
+  @if (carregando()) {
+    <p class="hist-empty">Carregando…</p>
+  } @else if (!itens().length) {
+    <p class="hist-empty">Nenhuma alteração registrada ainda.</p>
+  } @else {
+    <div class="hist-list">
+      @for (item of itens(); track item.id) {
+        <div class="hist-row">
+          <div class="hist-main">
+            <b>{{ item.nome || 'Alguém' }}</b>
+            <span>{{ rotulo(item.acao) }}</span>
+            @if (item.detalhe) {
+              <span class="hist-detalhe">{{ item.detalhe }}</span>
+            }
+          </div>
+          <time class="hist-when">{{ quando(item.criadoEm) }}</time>
+        </div>
+      }
+    </div>
+  }
+</app-admin-modal>

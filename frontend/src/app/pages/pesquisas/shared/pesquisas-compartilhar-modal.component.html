@@ -1,0 +1,94 @@
+<app-admin-modal
+  [open]="open()"
+  title="Compartilhar gestão"
+  subtitle="Quem entra em Compartilhados comigo. Escolha se a pessoa só vê ou também edita e desativa."
+  size="xlarge"
+  saveLabel="Salvar acessos"
+  (save)="salvar()"
+  (cancel)="fechar()"
+>
+  <div class="dest-picker">
+    <section class="dest-col">
+      <header class="dest-col-head">
+        <div>
+          <p class="dest-col-title">Colaboradores</p>
+          <p class="dest-col-meta">{{ disponiveisFiltrados().length }} de {{ disponiveisTotal() }} disponíveis</p>
+        </div>
+      </header>
+      <input
+        type="search"
+        class="dest-search"
+        placeholder="Buscar por nome, cargo ou departamento..."
+        name="shareBusca"
+        [ngModel]="busca()"
+        (ngModelChange)="busca.set($event)"
+      />
+      <div class="dest-list" role="list">
+        @if (carregando()) {
+          <p class="dest-empty">Carregando colaboradores…</p>
+        } @else if (!disponiveisFiltrados().length) {
+          <p class="dest-empty">
+            {{ busca().trim() ? 'Nenhum colaborador encontrado.' : 'Todos os colaboradores já estão na lista.' }}
+          </p>
+        } @else {
+          @for (p of disponiveisFiltrados(); track p.usuarioId) {
+            <div class="dest-row" role="listitem">
+              <div class="dest-who">
+                <b>{{ p.nome }}</b>
+                <span>{{ subtitulo(p) }}</span>
+              </div>
+              <div class="share-papel-btns">
+                <button type="button" class="dest-btn dest-btn--ghost" (click)="incluir(p, 'ver')">Ver</button>
+                <button type="button" class="dest-btn" (click)="incluir(p, 'editar')">Editar</button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+      <p class="dest-hint">Ver: resultados e exportar. Editar: formulário e desativar.</p>
+    </section>
+
+    <section class="dest-col dest-col--selected">
+      <header class="dest-col-head">
+        <div>
+          <p class="dest-col-title">Compartilhado com</p>
+          <p class="dest-col-meta">{{ rascunho().length }} pessoa(s)</p>
+        </div>
+      </header>
+      <div class="dest-list dest-list--selected" role="list">
+        @if (!rascunho().length) {
+          <p class="dest-empty">Ninguém com acesso compartilhado ainda.</p>
+        } @else {
+          @for (p of rascunho(); track p.usuarioId) {
+            <div class="dest-row" role="listitem">
+              <div class="dest-who">
+                <b>{{ p.nome }}</b>
+                <span>{{ subtitulo(p) }}</span>
+              </div>
+              <div class="share-papel-btns">
+                <button
+                  type="button"
+                  class="dest-btn"
+                  [class.dest-btn--ghost]="p.papel !== 'ver'"
+                  (click)="setPapel(p.usuarioId, 'ver')"
+                >
+                  Ver
+                </button>
+                <button
+                  type="button"
+                  class="dest-btn"
+                  [class.dest-btn--ghost]="p.papel !== 'editar'"
+                  (click)="setPapel(p.usuarioId, 'editar')"
+                >
+                  Editar
+                </button>
+                <button type="button" class="dest-btn dest-btn--ghost" (click)="remover(p.usuarioId)">Remover</button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+      <p class="dest-hint">O dono do formulário não entra nesta lista.</p>
+    </section>
+  </div>
+</app-admin-modal>

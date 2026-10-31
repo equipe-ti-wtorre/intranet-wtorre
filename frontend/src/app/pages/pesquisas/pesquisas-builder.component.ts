@@ -12,9 +12,12 @@ import {
   EventoTipo,
   LogicaCondicao,
   PerguntaTipo,
+  PesquisasAcesso,
   PesquisasConvidado,
   PesquisasDestinatario,
   PesquisasFormulario,
+  PesquisasHistoricoItem,
+  PesquisasMeuPapel,
   PesquisasPergunta,
   PesquisasTemplateVisual,
   PublicoAlvo,
@@ -22,6 +25,8 @@ import {
 } from '../../models/pesquisas.model';
 import { PesquisasDestinatariosModalComponent } from './shared/pesquisas-destinatarios-modal.component';
 import { PesquisasConvidadosListaModalComponent } from './shared/pesquisas-convidados-lista-modal.component';
+import { PesquisasCompartilharModalComponent } from './shared/pesquisas-compartilhar-modal.component';
+import { PesquisasHistoricoModalComponent } from './shared/pesquisas-historico-modal.component';
 import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkInterno, pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
@@ -31,6 +36,7 @@ import {
   PesquisasGuestFormComponent,
 } from './shared/pesquisas-guest-form.component';
 import {
+  enxugarLinhasBase,
   extractGuestsFromRows,
   isChaveHeader,
   isDocHeader,
@@ -126,6 +132,8 @@ function titulosDaPlanilha(XLSX: typeof import('xlsx'), sheet: import('xlsx').Wo
     PesquisasQrCardComponent,
     PesquisasDestinatariosModalComponent,
     PesquisasConvidadosListaModalComponent,
+    PesquisasCompartilharModalComponent,
+    PesquisasHistoricoModalComponent,
   ],
   templateUrl: './pesquisas-builder.component.html',
   host: {
@@ -142,6 +150,14 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly salvando = signal(false);
   readonly carregando = signal(true);
   readonly formId = signal<number | null>(null);
+  readonly meuPapel = signal<PesquisasMeuPapel>('dono');
+  readonly criadorId = signal<number | null>(null);
+  readonly compartilharAberto = signal(false);
+  readonly historicoAberto = signal(false);
+  readonly acessos = signal<PesquisasAcesso[]>([]);
+  readonly historico = signal<PesquisasHistoricoItem[]>([]);
+  readonly historicoLoading = signal(false);
+  readonly compartilhando = signal(false);
   readonly slug = signal<string | null>(null);
   readonly titulo = signal('');
   readonly categoria = signal('');
@@ -190,7 +206,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   readonly previewRespostas = signal<Record<string, string>>({});
   readonly previewTetos = signal<Record<string, number>>({});
   private capaPendente: File | null = null;
-  private baseLinhas: Record<string, unknown>[] | null = null;
+  private baseLinhas: Record<string, string>[] | null = null;
+  private basePendente = false;
   private limparBaseNoSave = false;
   private previewLookupTimer: ReturnType<typeof setTimeout> | null = null;
   private listDragKey: number | null = null;
@@ -240,6 +257,74 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       limiteBase: p.blocoTipo === 'pergunta' && p.tipo === 'texto_curto' && !!p.limiteBase,
     }))
   );
+  podeEditar(): boolean {
+    return this.meuPapel() !== 'ver';
+  }
+
+  podeCompartilhar(): boolean {
+    return this.meuPapel() === 'dono' && !!this.formId();
+  }
+
+  abrirCompartilhar(): void {
+    const id = this.formId();
+    if (!id || this.compartilhando()) return;
+    this.compartilhando.set(true);
+    this.api.listAcessos(id).subscribe({
+      next: (rows) => {
+        this.acessos.set(rows || []);
+        this.compartilharAberto.set(true);
+        this.compartilhando.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.compartilhando.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar os acessos.');
+      },
+    });
+  }
+
+  fecharCompartilhar(): void {
+    this.compartilharAberto.set(false);
+  }
+
+  salvarAcessos(rows: PesquisasAcesso[]): void {
+    const id = this.formId();
+    if (!id) return;
+    this.compartilhando.set(true);
+    this.api.salvarAcessos(id, rows).subscribe({
+      next: (saved) => {
+        this.acessos.set(saved || []);
+        this.compartilharAberto.set(false);
+        this.compartilhando.set(false);
+        this.alertas.sucesso('Compartilhamento atualizado.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.compartilhando.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível salvar os acessos.');
+      },
+    });
+  }
+
+  abrirHistorico(): void {
+    const id = this.formId();
+    if (!id) return;
+    this.historicoAberto.set(true);
+    this.historicoLoading.set(true);
+    this.api.listHistorico(id).subscribe({
+      next: (rows) => {
+        this.historico.set(rows || []);
+        this.historicoLoading.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.historicoLoading.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar o histórico.');
+      },
+    });
+  }
+
+  fecharHistorico(): void {
+    this.historicoAberto.set(false);
+  }
+
   ngOnInit(): void {
     this.menu.getTopbarPublic().subscribe({
       next: (config) => this.marcasOficiais.set(pesquisasMarcasOficiais(config.logos)),
@@ -270,6 +355,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (form) => {
           if (!form) return;
+          this.meuPapel.set(form.meuPapel || 'dono');
+          this.criadorId.set(form.criadorId || null);
           this.titulo.set(form.titulo);
           this.categoria.set(form.categoria === 'Sem categoria' ? '' : form.categoria);
           this.descricao.set(form.descricao || '');
@@ -304,6 +391,9 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
         error: (err: HttpErrorResponse) => {
           this.alertas.erro(err.error?.mensagem || 'Erro ao carregar o formulário.');
           this.carregando.set(false);
+          if (err.status === 403 || err.status === 404) {
+            void this.router.navigate(['/pesquisas']);
+          }
         },
       });
   }
@@ -358,29 +448,43 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
   onPreviewValor(ev: { key: string; valor: string }): void {
     this.previewRespostas.update((r) => ({ ...r, [ev.key]: ev.valor }));
     const q = this.previewPerguntas().find((p) => String(p.id) === ev.key);
-    if (
-      this.publicoAlvo() !== 'externos' ||
-      !q ||
-      !isChaveHeader(q.texto) ||
-      !this.baseLinhas?.length
-    ) {
+    if (this.publicoAlvo() !== 'externos' || !q || !isChaveHeader(q.texto)) {
       return;
     }
     if (this.previewLookupTimer) clearTimeout(this.previewLookupTimer);
     this.previewLookupTimer = setTimeout(() => {
       if (!lookupPronto(ev.valor)) return;
-      const campos = lookupLocal(this.baseLinhas || [], ev.valor);
-      if (!campos) return;
-      const perguntas = this.previewPerguntas();
-      const fill = matchCampos(campos, perguntas, q.id);
-      if (!Object.keys(fill).length) return;
-      this.previewRespostas.update((r) => {
-        const next = { ...r };
-        for (const [id, val] of Object.entries(fill)) next[id] = val;
-        return next;
+      if (this.baseLinhas?.length) {
+        const campos = lookupLocal(this.baseLinhas, ev.valor);
+        if (!campos) return;
+        this.aplicarPreviewBase(campos, q.id);
+        return;
+      }
+      const id = this.formId();
+      if (!id || !this.temBaseSalva()) return;
+      this.api.lookupBase(id, ev.valor).subscribe({
+        next: ({ campos }) => {
+          if (!campos || !Object.keys(campos).length) return;
+          this.aplicarPreviewBase(campos, q.id);
+        },
+        error: () => {},
       });
-      this.previewTetos.update((t) => mesclarTetos(t, fill, perguntas));
     }, 400);
+  }
+
+  private aplicarPreviewBase(
+    campos: Record<string, string>,
+    skipId: number | null | undefined
+  ): void {
+    const perguntas = this.previewPerguntas();
+    const fill = matchCampos(campos, perguntas, skipId);
+    if (!Object.keys(fill).length) return;
+    this.previewRespostas.update((r) => {
+      const next = { ...r };
+      for (const [id, val] of Object.entries(fill)) next[id] = val;
+      return next;
+    });
+    this.previewTetos.update((t) => mesclarTetos(t, fill, perguntas));
   }
 
   onPreviewEnviar(): void {
@@ -657,6 +761,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     }
     if (value !== 'externos') {
       this.baseLinhas = null;
+      this.basePendente = false;
       this.temBaseSalva.set(false);
       this.limparBaseNoSave = true;
     }
@@ -823,6 +928,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     if (!ok) return;
     this.convidados.update((list) => list.filter((g) => g.origem !== 'planilha'));
     this.baseLinhas = null;
+    this.basePendente = false;
     this.temBaseSalva.set(false);
     this.limparBaseNoSave = true;
     this.alertas.sucesso('Planilha importada excluída.');
@@ -886,14 +992,29 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
     const body = this.toBody();
     this.salvando.set(true);
     const id = this.formId();
-    const req$ = publicar
+    const enviarBase = this.basePendente;
+    const gravar$ = publicar
       ? id
         ? this.api.publicar(body, id)
-        : this.api.salvarRascunho(body).pipe(switchMap((f) => this.api.publicar(body, f.id)))
+        : this.api.salvarRascunho(body)
       : this.api.salvarRascunho(body, id ?? undefined);
 
-    req$
+    gravar$
       .pipe(
+        switchMap((form) => {
+          this.formId.set(form.id);
+          if (!enviarBase) return of(form);
+          return this.api.substituirBase(form.id, this.baseLinhas || []).pipe(
+            map((resp) => {
+              this.basePendente = false;
+              return { ...form, baseResumo: resp.baseResumo };
+            })
+          );
+        }),
+        switchMap((form) => {
+          if (!publicar || id) return of(form);
+          return this.api.publicar(body, form.id);
+        }),
         switchMap((form) => {
           this.formId.set(form.id);
           this.slug.set(form.slug || null);
@@ -921,6 +1042,8 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       next: ({ form, capaErro }) => {
         this.formId.set(form.id);
         this.slug.set(form.slug || null);
+        if (form.criadorId) this.criadorId.set(form.criadorId);
+        if (form.meuPapel) this.meuPapel.set(form.meuPapel);
         this.aplicarJanela(form);
         if (form.convidados) {
           this.convidados.set(this.mergeGuestsFromApi(form.convidados));
@@ -935,6 +1058,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
           );
         }
         if (form.baseResumo) this.temBaseSalva.set((form.baseResumo.total || 0) > 0);
+        this.limparBaseNoSave = false;
         if (form.capaUrl) this.capaUrl.set(form.capaUrl);
         if (this.capaPendente && !capaErro) this.clearCapaPendente();
         this.salvando.set(false);
@@ -1073,18 +1197,18 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
 
     if (!externo) {
       this.baseLinhas = null;
+      this.basePendente = false;
       this.temBaseSalva.set(false);
       this.alertas.sucesso(created === 1 ? '1 campo importado.' : `${created} campos importados.`);
       return;
     }
 
-    const headers = Object.keys(rows[0] || {}).slice(0, 40);
-    this.baseLinhas = rows.map((row) => {
-      const out: Record<string, unknown> = {};
-      for (const h of headers) out[h] = row[h];
-      return out;
-    });
-    this.temBaseSalva.set(true);
+    const campos = this.perguntas()
+      .filter((p) => p.blocoTipo === 'pergunta')
+      .map((p) => p.texto);
+    this.baseLinhas = enxugarLinhasBase(rows, campos);
+    this.basePendente = true;
+    this.temBaseSalva.set(this.baseLinhas.length > 0);
     this.limparBaseNoSave = false;
 
     const { guests, ignoradas } = extractGuestsFromRows(rows);
@@ -1248,10 +1372,7 @@ export class PesquisasBuilderComponent implements OnInit, OnDestroy {
       capaFocoX: this.capaFocoX(),
       capaFocoY: this.capaFocoY(),
       convidadosFonte: 'manual',
-      base:
-        this.publicoAlvo() === 'externos'
-          ? this.baseLinhas || (this.limparBaseNoSave ? [] : undefined)
-          : [],
+      ...(this.limparBaseNoSave && !this.basePendente ? { base: [] } : {}),
       convidados: this.convidados().map((g) => ({
         id: g.id,
         nome: g.nome,

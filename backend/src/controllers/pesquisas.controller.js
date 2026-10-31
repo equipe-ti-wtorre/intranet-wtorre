@@ -146,6 +146,14 @@ async function lookupBase(req, res) {
   }
 }
 
+async function substituirBase(req, res) {
+  try {
+    res.json(await service.substituirBase(req));
+  } catch (err) {
+    handleError(res, err, req, { acao: 'salvar', passo: 'substituirBase' });
+  }
+}
+
 async function payloadResponder(req, res) {
   try {
     res.json(await service.payloadResponder(req));
@@ -165,6 +173,46 @@ async function enviarResposta(req, res) {
 async function resultados(req, res) {
   try {
     res.json(await service.resultados(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+
+async function exportarResultados(req, res) {
+  try {
+    const { buffer, filename } = await service.exportarResultados(req);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+
+async function listAcessos(req, res) {
+  try {
+    res.json(await service.listAcessos(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function salvarAcessos(req, res) {
+  try {
+    res.json(await service.salvarAcessos(req));
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+async function listHistorico(req, res) {
+  try {
+    res.json(await service.listHistorico(req));
   } catch (err) {
     handleError(res, err);
   }
@@ -532,8 +580,13 @@ module.exports = {
   excluirFormulario,
   payloadResponder,
   lookupBase,
+  substituirBase,
   enviarResposta,
   resultados,
+  listAcessos,
+  salvarAcessos,
+  listHistorico,
+  exportarResultados,
   zipAnexos,
   adicionarConvidado,
   atualizarConvidado,

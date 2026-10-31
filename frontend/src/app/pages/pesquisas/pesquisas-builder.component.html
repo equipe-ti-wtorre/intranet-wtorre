@@ -62,14 +62,28 @@
       <h1 class="page-title" style="font-size: 20px; margin: 0">Novo formulário</h1>
     </div>
     <div class="builder-actions">
-      <button type="button" class="btn-secondary" [disabled]="salvando()" (click)="salvar(false)">
-        <app-pesq-icon name="edit" [size]="15" />
-        Salvar rascunho
-      </button>
-      <button type="button" class="btn-primary" [disabled]="salvando()" (click)="salvar(true)">
-        <app-pesq-icon name="megaphone" [size]="16" />
-        Publicar
-      </button>
+      @if (podeCompartilhar()) {
+        <button type="button" class="btn-secondary" [disabled]="compartilhando()" (click)="abrirCompartilhar()">
+          <app-pesq-icon name="users" [size]="15" />
+          Compartilhar
+        </button>
+      }
+      @if (formId()) {
+        <button type="button" class="btn-secondary" (click)="abrirHistorico()">
+          <app-pesq-icon name="clock" [size]="15" />
+          Histórico
+        </button>
+      }
+      @if (podeEditar()) {
+        <button type="button" class="btn-secondary" [disabled]="salvando()" (click)="salvar(false)">
+          <app-pesq-icon name="edit" [size]="15" />
+          Salvar rascunho
+        </button>
+        <button type="button" class="btn-primary" [disabled]="salvando()" (click)="salvar(true)">
+          <app-pesq-icon name="megaphone" [size]="16" />
+          Publicar
+        </button>
+      }
     </div>
   </div>
 
@@ -549,6 +563,22 @@
     (abertoChange)="qrAberto.set($event)"
   />
 }
+
+
+<app-pesquisas-compartilhar-modal
+  [open]="compartilharAberto()"
+  [donoUsuarioId]="criadorId()"
+  [selecionados]="acessos()"
+  (confirm)="salvarAcessos($event)"
+  (cancel)="fecharCompartilhar()"
+/>
+
+<app-pesquisas-historico-modal
+  [open]="historicoAberto()"
+  [itens]="historico()"
+  [carregando]="historicoLoading()"
+  (fechar)="fecharHistorico()"
+/>
 
 <app-pesquisas-destinatarios-modal
   [open]="destinatariosModalAberto()"

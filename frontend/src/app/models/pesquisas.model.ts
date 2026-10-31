@@ -24,9 +24,32 @@ export type ListaTipo =
   | 'form-pending'
   | 'form-answered'
   | 'form-created'
+  | 'form-shared'
   | 'req-pending'
   | 'req-answered'
   | 'req-created';
+
+export type PesquisasPapelCompartilhado = 'ver' | 'editar';
+export type PesquisasMeuPapel = 'dono' | 'editar' | 'ver';
+
+export interface PesquisasAcesso {
+  usuarioId: number;
+  papel: PesquisasPapelCompartilhado;
+  nome: string;
+  email?: string;
+  cargo?: string | null;
+  departamento?: string | null;
+}
+
+export interface PesquisasHistoricoItem {
+  id: number;
+  formularioId?: number;
+  usuarioId?: number | null;
+  nome: string;
+  acao: string;
+  detalhe: string;
+  criadoEm: string | null;
+}
 
 export interface PesquisasResumo {
   formPending: number;
@@ -69,6 +92,7 @@ export interface PesquisasListItem {
   prazoInicio?: string | null;
   prazoFim?: string | null;
   multiplaResposta?: boolean;
+  compartilhadoPapel?: PesquisasPapelCompartilhado;
 }
 
 export interface PesquisasLogica {
@@ -155,6 +179,7 @@ export interface PesquisasFormulario {
   capaFocoY?: number;
   temCapa?: boolean;
   baseResumo?: { total: number; temCpf: boolean; temEmail: boolean };
+  meuPapel?: PesquisasMeuPapel;
 }
 
 export interface PesquisasTemplateVisual {
@@ -338,6 +363,12 @@ export const PESQUISAS_LISTA_META: Record<
     child: 'Criados',
     actionLabel: 'Gerenciar',
     actionIcon: 'bar',
+  },
+  'form-shared': {
+    parent: 'Formulários',
+    child: 'Compartilhados comigo',
+    actionLabel: 'Abrir',
+    actionIcon: 'eye',
   },
   'req-pending': {
     parent: 'Requisições',

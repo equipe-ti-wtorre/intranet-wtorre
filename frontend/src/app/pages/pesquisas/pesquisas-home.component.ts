@@ -30,11 +30,12 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
   readonly loading = signal(true);
   readonly loadingLista = signal(true);
   readonly clonandoId = signal<number | null>(null);
-  readonly tab = signal<'created' | 'mine'>('created');
+  readonly tab = signal<'created' | 'shared' | 'mine'>('created');
   readonly filtroLista = signal<'all' | 'publicado' | 'rascunho' | 'desativado'>('all');
   readonly busca = signal('');
   readonly criados = signal<PesquisasListItem[]>([]);
   readonly respondidos = signal<PesquisasListItem[]>([]);
+  readonly compartilhados = signal<PesquisasListItem[]>([]);
   readonly answerModal = signal<{
     title: string;
     sub: string;
@@ -95,7 +96,7 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
     this.busca$.next(value);
   }
 
-  setTab(tab: 'created' | 'mine'): void {
+  setTab(tab: 'created' | 'shared' | 'mine'): void {
     this.tab.set(tab);
   }
 
@@ -140,6 +141,10 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
     const hora = hm ? `${String(Number(hm[1])).padStart(2, '0')}:${hm[2]}` : '';
     if (!y || !m || !d) return '';
     return hora ? `${d}/${m} ${hora}` : `${d}/${m}`;
+  }
+
+  papelBadge(item: PesquisasListItem): string {
+    return item.compartilhadoPapel === 'editar' ? 'Editar' : 'Ver';
   }
 
   abrirDashboard(item: PesquisasListItem): void {
@@ -204,10 +209,12 @@ export class PesquisasHomeComponent implements OnInit, OnDestroy {
     this.loadingLista.set(true);
     forkJoin({
       forms: this.api.listFormularios('form-created'),
+      shared: this.api.listFormularios('form-shared'),
       formsAns: this.api.listFormularios('form-answered'),
     }).subscribe({
-      next: ({ forms, formsAns }) => {
+      next: ({ forms, shared, formsAns }) => {
         this.criados.set([...forms].sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || '')));
+        this.compartilhados.set([...shared].sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || '')));
         this.respondidos.set(
           [...formsAns].sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''))
         );

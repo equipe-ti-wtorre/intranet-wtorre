@@ -1,10 +1,12 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { PesquisasService } from '../../services/pesquisas.service';
 import { AlertasService } from '../../services/alertas.service';
 import {
-  PesquisasConvidado,
+  PesquisasAcesso,
+  PesquisasHistoricoItem,
+  PesquisasMeuPapel,
   PesquisasResultadoPergunta,
   PesquisasResultados,
   PesquisasSerieDia,
@@ -13,20 +15,18 @@ import { PesqIconComponent } from './shared/pesq-icon.component';
 import { pesquisasLinkInterno, pesquisasLinkPublico } from './shared/pesquisas-public-url';
 import { PesquisasQrCardComponent } from './shared/pesquisas-qr-card.component';
 import { pesquisasQrDataLabel } from './shared/pesquisas-qr-export.util';
-import { PesquisasConvidadoModalComponent } from './shared/pesquisas-convidado-modal.component';
+import {
+  ConvidadoListaEdicao,
+  ConvidadoListaItem,
+  PesquisasConvidadosListaModalComponent,
+} from './shared/pesquisas-convidados-lista-modal.component';
+import { PesquisasCompartilharModalComponent } from './shared/pesquisas-compartilhar-modal.component';
+import { PesquisasHistoricoModalComponent } from './shared/pesquisas-historico-modal.component';
 import { extractGuestsFromRows } from './shared/pesquisas-base.util';
+import { digitsDocumento } from './shared/pesquisas-documento.util';
 
 type DestaqueTone = 'avg' | 'ok' | 'warn' | 'pick' | 'notes';
 type DestaqueCard = { k: string; v: string; s: string; icon: string; tone: DestaqueTone };
-
-type LinhaEnvioCsv = {
-  respostaId: number;
-  nome: string;
-  email: string;
-  departamento: string;
-  enviadoEm: string | null;
-  porPergunta: Map<number, string>;
-};
 
 function nomeArquivoContentDisposition(header: string | null): string {
   if (!header) return '';
@@ -34,8 +34,10 @@ function nomeArquivoContentDisposition(header: string | null): string {
   return match?.[1] || '';
 }
 
-async function mensagemErroBlob(err: HttpErrorResponse): Promise<string> {
-  const fallback = 'Não foi possível baixar os anexos.';
+async function mensagemErroBlob(
+  err: HttpErrorResponse,
+  fallback = 'Não foi possível baixar os anexos.'
+): Promise<string> {
   if (!(err.error instanceof Blob)) return err.error?.mensagem || fallback;
   try {
     const json = JSON.parse(await err.error.text()) as { mensagem?: string };
@@ -45,89 +47,10 @@ async function mensagemErroBlob(err: HttpErrorResponse): Promise<string> {
   }
 }
 
-function titulosColunasPerguntas(perguntas: PesquisasResultadoPergunta[]): string[] {
-  const seen = new Map<string, number>();
-  return perguntas.map((q) => {
-    const base = (q.texto || 'Pergunta').trim() || 'Pergunta';
-    const n = (seen.get(base) || 0) + 1;
-    seen.set(base, n);
-    return n === 1 ? base : `${base} (${n})`;
-  });
-}
-
-function formatarDataCsv(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-}
-
-function montarCsvRespostas(d: PesquisasResultados): string[][] {
-  const perguntas = d.perguntas;
-  const titulos = titulosColunasPerguntas(perguntas);
-  const anonimo = d.formulario.anonimo;
-  const envios = new Map<number, LinhaEnvioCsv>();
-
-  for (const q of perguntas) {
-    if (q.id == null) continue;
-    for (const r of q.respostas) {
-      const id = r.respostaId;
-      if (id == null) continue;
-      let row = envios.get(id);
-      if (!row) {
-        row = {
-          respostaId: id,
-          nome: r.respondente?.nome || '',
-          email: r.respondente?.email || '',
-          departamento: r.respondente?.departamento || '',
-          enviadoEm: r.enviadoEm,
-          porPergunta: new Map(),
-        };
-        envios.set(id, row);
-      }
-      const anterior = row.porPergunta.get(q.id);
-      const valor = r.valor ?? '';
-      row.porPergunta.set(q.id, anterior ? `${anterior}; ${valor}` : valor);
-    }
-  }
-
-  const ordenados = [...envios.values()].sort((a, b) => {
-    const ta = a.enviadoEm || '';
-    const tb = b.enviadoEm || '';
-    return ta.localeCompare(tb) || a.respostaId - b.respostaId;
-  });
-
-  const header = anonimo
-    ? ['Resposta', 'Data', ...titulos]
-    : ['Respondente', 'E-mail', 'Departamento', 'Data', ...titulos];
-
-  const lines = [header];
-  ordenados.forEach((row, i) => {
-    const answers = perguntas.map((q) => (q.id != null ? row.porPergunta.get(q.id) || '' : ''));
-    if (anonimo) {
-      lines.push([String(i + 1), formatarDataCsv(row.enviadoEm), ...answers]);
-    } else {
-      lines.push([
-        row.nome,
-        row.email,
-        row.departamento,
-        formatarDataCsv(row.enviadoEm),
-        ...answers,
-      ]);
-    }
-  });
-  return lines;
-}
-
 @Component({
   selector: 'app-pesquisas-resultados',
   standalone: true,
-  imports: [PesqIconComponent, PesquisasQrCardComponent, PesquisasConvidadoModalComponent],
+  imports: [PesqIconComponent, PesquisasQrCardComponent, PesquisasConvidadosListaModalComponent, PesquisasCompartilharModalComponent, PesquisasHistoricoModalComponent],
   templateUrl: './pesquisas-resultados.component.html',
 })
 export class PesquisasResultadosComponent implements OnInit {
@@ -137,14 +60,31 @@ export class PesquisasResultadosComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly qrAberto = signal(false);
-  readonly convidadoModalAberto = signal(false);
-  readonly convidadoEditando = signal<PesquisasConvidado | null>(null);
+  readonly listaConvidadosAberta = signal(false);
   readonly importandoConvidados = signal(false);
   readonly loading = signal(true);
   readonly agindo = signal(false);
   readonly baixandoAnexos = signal(false);
+  readonly exportando = signal(false);
   readonly anexosSelecionados = signal<Set<string>>(new Set());
   readonly data = signal<PesquisasResultados | null>(null);
+  readonly compartilharAberto = signal(false);
+  readonly historicoAberto = signal(false);
+  readonly acessos = signal<PesquisasAcesso[]>([]);
+  readonly historico = signal<PesquisasHistoricoItem[]>([]);
+  readonly historicoLoading = signal(false);
+  readonly compartilhando = signal(false);
+  readonly listaConvidados = computed<ConvidadoListaItem[]>(() =>
+    (this.data()?.formulario.convidados || []).map((g) => ({
+      key: g.id || 0,
+      nome: g.nome || '',
+      cpf: '',
+      cpfMascara: g.cpfMascara || '',
+      rg: '',
+      rgMascara: g.rgMascara || '',
+      email: g.email || '',
+    }))
+  );
   readonly answerModal = signal<{
     title: string;
     sub: string;
@@ -373,36 +313,60 @@ export class PesquisasResultadosComponent implements OnInit {
     return cards;
   }
 
-  abrirConvidadoModal(): void {
-    this.convidadoEditando.set(null);
-    this.convidadoModalAberto.set(true);
+  abrirListaConvidados(): void {
+    this.listaConvidadosAberta.set(true);
   }
 
-  editarConvidado(g: PesquisasConvidado): void {
-    this.convidadoEditando.set(g);
-    this.convidadoModalAberto.set(true);
+  fecharListaConvidados(): void {
+    this.listaConvidadosAberta.set(false);
   }
 
-  fecharConvidadoModal(): void {
-    this.convidadoModalAberto.set(false);
-    this.convidadoEditando.set(null);
-  }
-
-  onConvidadoSalvo(): void {
-    this.convidadoModalAberto.set(false);
-    this.convidadoEditando.set(null);
-    this.carregar();
-  }
-
-  async removerConvidado(g: PesquisasConvidado): Promise<void> {
+  criarConvidadoLista(item: ConvidadoListaEdicao): void {
     const id = this.data()?.formulario?.id;
-    if (!id || !g.id) return;
-    const ok = await this.alertas.confirmarExclusao({
-      titulo: 'Remover convidado',
-      texto: 'Essa pessoa deixa de conseguir entrar por este convite.',
-    });
-    if (!ok) return;
-    this.api.removerConvidado(id, g.id).subscribe({
+    if (!id) return;
+    this.api
+      .adicionarConvidado(id, {
+        nome: item.nome || undefined,
+        cpf: digitsDocumento(item.cpf),
+        rg: item.rg,
+        email: item.email,
+      })
+      .subscribe({
+        next: () => {
+          this.alertas.sucesso('Convidado adicionado à lista.');
+          this.carregar();
+        },
+        error: (err: HttpErrorResponse) => {
+          this.alertas.erro(err.error?.mensagem || 'Não foi possível salvar o convidado.');
+        },
+      });
+  }
+
+  atualizarConvidadoLista(item: ConvidadoListaEdicao): void {
+    const id = this.data()?.formulario?.id;
+    if (!id || !item.key) return;
+    this.api
+      .atualizarConvidado(id, item.key, {
+        nome: item.nome || undefined,
+        cpf: digitsDocumento(item.cpf),
+        rg: item.rg,
+        email: item.email,
+      })
+      .subscribe({
+        next: () => {
+          this.alertas.sucesso('Convidado atualizado.');
+          this.carregar();
+        },
+        error: (err: HttpErrorResponse) => {
+          this.alertas.erro(err.error?.mensagem || 'Não foi possível salvar o convidado.');
+        },
+      });
+  }
+
+  removerConvidadoLista(convidadoId: number): void {
+    const id = this.data()?.formulario?.id;
+    if (!id || !convidadoId) return;
+    this.api.removerConvidado(id, convidadoId).subscribe({
       next: () => {
         this.alertas.sucesso('Convidado removido.');
         this.carregar();
@@ -413,10 +377,7 @@ export class PesquisasResultadosComponent implements OnInit {
     });
   }
 
-  async onExcelConvidados(ev: Event): Promise<void> {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
+  async onExcelConvidados(file: File): Promise<void> {
     if (!file || this.importandoConvidados()) return;
     const id = this.data()?.formulario?.id;
     if (!id) {
@@ -562,8 +523,82 @@ export class PesquisasResultadosComponent implements OnInit {
     return q.respostas.map((r) => r.valor).filter(Boolean).slice(0, 8);
   }
 
+  meuPapel(): PesquisasMeuPapel {
+    const papel = this.data()?.formulario.meuPapel;
+    return papel === 'dono' || papel === 'editar' || papel === 'ver' ? papel : 'ver';
+  }
+
   podeEditar(): boolean {
-    return !!this.data();
+    const papel = this.meuPapel();
+    return papel === 'dono' || papel === 'editar';
+  }
+
+  podeExcluir(): boolean {
+    return this.meuPapel() === 'dono';
+  }
+
+  podeCompartilhar(): boolean {
+    return this.meuPapel() === 'dono';
+  }
+
+  abrirCompartilhar(): void {
+    const id = this.data()?.formulario.id;
+    if (!id || this.compartilhando()) return;
+    this.compartilhando.set(true);
+    this.api.listAcessos(id).subscribe({
+      next: (rows) => {
+        this.acessos.set(rows || []);
+        this.compartilharAberto.set(true);
+        this.compartilhando.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.compartilhando.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar os acessos.');
+      },
+    });
+  }
+
+  fecharCompartilhar(): void {
+    this.compartilharAberto.set(false);
+  }
+
+  salvarAcessos(rows: PesquisasAcesso[]): void {
+    const id = this.data()?.formulario.id;
+    if (!id) return;
+    this.compartilhando.set(true);
+    this.api.salvarAcessos(id, rows).subscribe({
+      next: (saved) => {
+        this.acessos.set(saved || []);
+        this.compartilharAberto.set(false);
+        this.compartilhando.set(false);
+        this.alertas.sucesso('Compartilhamento atualizado.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.compartilhando.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível salvar os acessos.');
+      },
+    });
+  }
+
+  abrirHistorico(): void {
+    const id = this.data()?.formulario.id;
+    if (!id) return;
+    this.historicoAberto.set(true);
+    this.historicoLoading.set(true);
+    this.api.listHistorico(id).subscribe({
+      next: (rows) => {
+        this.historico.set(rows || []);
+        this.historicoLoading.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.historicoLoading.set(false);
+        this.alertas.erro(err.error?.mensagem || 'Não foi possível carregar o histórico.');
+      },
+    });
+  }
+
+  fecharHistorico(): void {
+    this.historicoAberto.set(false);
   }
 
   editar(): void {
@@ -573,19 +608,35 @@ export class PesquisasResultadosComponent implements OnInit {
 
   exportar(): void {
     const d = this.data();
-    if (!d) return;
-    const lines = montarCsvRespostas(d);
-    const csv = lines
-      .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
-      .join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${d.formulario.titulo.replace(/[^\w]+/g, '-').slice(0, 40)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    this.alertas.sucesso('Exportação iniciada.');
+    if (!d || this.exportando()) return;
+    this.exportando.set(true);
+    this.api.exportarResultados(d.formulario.id).subscribe({
+      next: (res) => {
+        const blob = res.body;
+        if (!blob) {
+          this.exportando.set(false);
+          this.alertas.erro('Não foi possível exportar as respostas.');
+          return;
+        }
+        const nome =
+          nomeArquivoContentDisposition(res.headers.get('Content-Disposition')) ||
+          'respostas.xlsx';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nome;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.exportando.set(false);
+        this.alertas.sucesso('Exportação iniciada.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.exportando.set(false);
+        void mensagemErroBlob(err, 'Não foi possível exportar as respostas.').then((mensagem) =>
+          this.alertas.erro(mensagem)
+        );
+      },
+    });
   }
 
   async excluir(): Promise<void> {
