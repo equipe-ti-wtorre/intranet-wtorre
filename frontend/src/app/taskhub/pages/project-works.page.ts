@@ -73,7 +73,7 @@ type KanbanSort = 'manual' | Sort;
             }
             @if (team(); as tm) {
               @if (!locked()) {
-                @if (tm.can_dashboard) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/painel/equipes', tm.id]"><app-icon name="chart" [size]="14" />Painel</a> }
+                @if (tm.can_panel) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/painel/equipes', tm.id]"><app-icon name="chart" [size]="14" />Painel</a> }
               }
               <a class="btn btn-sm" routerLink="/ti/taskhub/equipes" [queryParams]="{ equipe: tm.id }">Configurações da equipe</a>
             } @else if (p.my_role === 'manage') { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/projetos', p.id, 'configuracoes']">Configurações</a> }
@@ -283,6 +283,7 @@ type KanbanSort = 'manual' | Sort;
             @if (!tableRows().length) {
               <div class="wk-table__empty">
                 @if (works().length) { Nenhum {{ t().one }} com esses filtros. }
+                @else if (isBoard() && !seesAll()) { Você ainda não participa de nenhum {{ t().one }} desta equipe. }
                 @else { {{ isBoard() ? 'Esta equipe ainda não tem' : 'Ainda não há' }} {{ t().many }}. }
                 @if (canCreate()) { <button type="button" class="btn btn-sm" (click)="openNew()">+ {{ t().novo }}</button> }
               </div>
@@ -750,6 +751,7 @@ export class ProjectWorksPage implements OnChanges {
   works = signal<Work[]>([]);
   people = signal<Person[]>([]);
   canCreate = signal(false);
+  seesAll = signal(true);
   error = signal('');
   q = signal('');
   queryText = '';
@@ -951,7 +953,7 @@ export class ProjectWorksPage implements OnChanges {
     });
     this.api.works(pid).subscribe({
       next: r => {
-        this.works.set(r.works); this.canCreate.set(r.can_create); this.phases.set(r.phases || []);
+        this.works.set(r.works); this.canCreate.set(r.can_create); this.seesAll.set(r.sees_all !== false); this.phases.set(r.phases || []);
         this.phaseScope.set(r.phases_scope === 'team' ? (r.team_id ? { kind: 'team', id: r.team_id } : null) : { kind: 'project', id: pid });
         this.phasesEditable.set(!!r.phases_editable);
       },

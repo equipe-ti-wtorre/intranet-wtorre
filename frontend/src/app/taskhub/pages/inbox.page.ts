@@ -14,7 +14,7 @@ import { AvatarComponent, EmptyComponent, IconComponent } from '../shared/ui';
   template: `
     <div class="page" style="max-width:860px">
       <div class="page-head">
-        <div><h1>Caixa de entrada</h1><div class="sub">Atribuições, menções e prazos. Arquive o que já tratou.</div></div>
+        <div><h1>Caixa de entrada</h1><div class="sub">Atribuições, menções e prazos. Arquive ou exclua o que já tratou.</div></div>
         <div class="actions">
           <div class="seg">
             <button [class.on]="filter() === 'unread'" (click)="setFilter('unread')">Não lidas</button>
@@ -38,6 +38,7 @@ import { AvatarComponent, EmptyComponent, IconComponent } from '../shared/ui';
             <div class="acts">
               <button class="btn btn-ghost btn-sm btn-icon" (click)="$event.stopPropagation(); snooze(n)" title="Adiar para amanhã 8h" aria-label="Adiar"><app-icon name="snooze" [size]="14" /></button>
               <button class="btn btn-ghost btn-sm btn-icon" (click)="$event.stopPropagation(); archive(n)" title="Arquivar" aria-label="Arquivar"><app-icon name="archive" [size]="14" /></button>
+              <button class="btn btn-ghost btn-sm btn-icon" (click)="$event.stopPropagation(); remove(n)" title="Excluir" aria-label="Excluir"><app-icon name="trash" [size]="14" /></button>
             </div>
           </div>
         }
@@ -77,6 +78,14 @@ export class InboxPage implements OnInit {
   archive(n: Notification) {
     this.items.update(l => l.filter(x => x.id !== n.id));
     this.api.inboxArchive(n.id).subscribe({ next: () => this.data.pollInbox(), error: e => this.toast.error(errorMessage(e)) });
+  }
+  remove(n: Notification) {
+    if (!confirm('Excluir esta notificação? Não dá para desfazer.')) return;
+    this.items.update(l => l.filter(x => x.id !== n.id));
+    this.api.inboxDelete(n.id).subscribe({
+      next: () => this.data.pollInbox(),
+      error: e => { this.toast.error(errorMessage(e)); this.load(); },
+    });
   }
   snooze(n: Notification) {
     const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0);

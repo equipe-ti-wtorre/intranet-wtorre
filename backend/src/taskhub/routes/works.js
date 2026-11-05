@@ -100,7 +100,7 @@ async function workRole(userId, workId) {
 async function requireWork(user, workId, min = 'view') {
   const role = await workRole(user.id, workId);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  if (min === 'manage' && role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem é da equipe ou o desenvolvedor pode alterar.');
+  if (min === 'manage' && role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem altera é a gestão da equipe, quem o criou ou o desenvolvedor.');
   return role;
 }
 
@@ -284,6 +284,7 @@ router.get('/projects/:id/works', ah(async (req, res) => {
   res.json({
     works: rows.map(forViewer),
     can_create: ['manage', 'edit'].includes(role),
+    sees_all: !teamId || ['manage', 'view'].includes(role),
     phases: await projectPhases({ query }, pid),
     team_id: teamId,
     ...(await phaseAccess(req.user, pid, teamId)),
@@ -638,12 +639,9 @@ router.patch('/works/:id', ah(async (req, res) => {
 
 router.delete('/works/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  const { rows: [w] } = await query('SELECT project_id FROM project_sections WHERE id = $1', [id]);
-  if (!w) throw new HttpError(404, 'Projeto não encontrado');
-  if (!['manage', 'edit'].includes(await projectRole(req.user.id, w.project_id))) {
-    throw new HttpError(403, (await teamOfBoard({ query }, w.project_id))
-      ? 'Quem exclui projetos é quem participa da equipe.' : 'Quem exclui projetos é quem coordena este quadro.');
-  }
+  const role = await workRole(req.user.id, id);
+  if (!role) throw new HttpError(404, 'Projeto não encontrado');
+  if (role !== 'manage') throw new HttpError(403, 'Quem exclui o projeto é a gestão da equipe, quem o criou ou o desenvolvedor.');
   await removeWorkBlobs(id);
   await tx(async (c) => {
     await c.query('DELETE FROM tasks WHERE section_id = $1', [id]);
@@ -825,11 +823,17 @@ async function timelineData(userId, pid) {
   };
 }
 
+// O salvamento reenvia todos os projetos do quadro; no quadro da equipe só a gestão vê todos.
+async function canEditTimeline(pid, role) {
+  if (role === 'manage') return true;
+  return role === 'edit' && !(await teamOfBoard({ query }, pid));
+}
+
 router.get('/projects/:id/timeline', ah(async (req, res) => {
   const pid = intParam(req.params.id);
   const role = await projectRole(req.user.id, pid);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  res.json({ ...(await timelineData(req.user.id, pid)), can_edit: ['manage', 'edit'].includes(role) });
+  res.json({ ...(await timelineData(req.user.id, pid)), can_edit: await canEditTimeline(pid, role) });
 }));
 
 const timelineSchema = z.object({
@@ -848,7 +852,10 @@ router.put('/projects/:id/timeline', ah(async (req, res) => {
   const pid = intParam(req.params.id);
   const role = await projectRole(req.user.id, pid);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  if (!['manage', 'edit'].includes(role)) throw new HttpError(403, 'Quem muda a linha do tempo é quem coordena o projeto.');
+  if (!(await canEditTimeline(pid, role))) {
+    throw new HttpError(403, (await teamOfBoard({ query }, pid))
+      ? 'Quem reorganiza a linha do tempo da equipe é o gestor.' : 'Quem muda a linha do tempo é quem coordena o projeto.');
+  }
   const d = parse(timelineSchema, req.body);
 
   for (const it of d.items) {

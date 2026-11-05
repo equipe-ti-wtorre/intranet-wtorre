@@ -34,7 +34,11 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
                 <span class="td-dot" [style.background]="d.team.color"></span>
                 {{ d.team.name }}
               </h1>
-              <p class="muted">Equipe · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</p>
+              @if (d.scope === 'mine') {
+                <p class="muted">Equipe · Mostrando só os seus projetos e tarefas. · atualizado {{ relativeTime(d.generated_at) }}</p>
+              } @else {
+                <p class="muted">Equipe · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</p>
+              }
             } @else {
               <h1>Setor · {{ d.team.name }}</h1>
               <p class="sub">Projetos e trabalho das equipes do setor — atualizado {{ relativeTime(d.generated_at) }}. Clique em um cartão para filtrar os projetos.</p>
@@ -95,7 +99,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
               <span><span class="l">Concluídas na semana</span><small>semana passada: {{ d.kpis.done_prev_week }}</small></span>
             </button>
             <div class="td-kpi" [class.td-kpi--ok]="(onTimePct() ?? -1) >= 80" [class.td-kpi--warn]="(onTimePct() ?? 100) < 80">
-              <b [class.td-kpi-txt]="onTimePct() === null">{{ onTime() }}</b>
+              <b>{{ onTime() }}</b>
               <span><span class="l">Pontualidade</span>
                 <small>{{ onTimePct() === null ? 'ainda sem entregas com prazo' : 'entregas com prazo em 30 dias' }}</small></span>
             </div>
@@ -263,6 +267,15 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
       </div>
     } @else if (loading()) {
       <div class="empty"><p>Carregando o painel…</p></div>
+    } @else if (denied(); as msg) {
+      <div class="page">
+        <div class="vp-empty">
+          <app-icon name="chart" [size]="28" />
+          <b>{{ msg }}</b>
+          <span>O painel aparece para gestores e para quem recebe o acesso de ver o painel da equipe.</span>
+          <a class="btn btn-sm" routerLink="/ti/taskhub/kanban" style="margin-top:8px">Voltar ao Corporativo</a>
+        </div>
+      </div>
     }
 
     @if (choosing()) {
@@ -304,6 +317,7 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
   kind = input<DashKind>('team');
   d = signal<TeamDashboard | null>(null);
   loading = signal(false);
+  denied = signal('');
   choosing = signal(false);
   presenting = signal(false);
   exporting = signal(false);
@@ -324,7 +338,7 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
   });
   onTime = computed(() => {
     const p = this.onTimePct();
-    return p == null ? 'sem dados' : `${p}%`;
+    return p == null ? '—' : `${p}%`;
   });
   donePct = computed(() => {
     const k = this.d()?.project_kpis;
@@ -356,10 +370,14 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
     this.loading.set(true);
     this.api.teamDashboard(id, this.kind()).subscribe({
       next: d => {
-        this.d.set(d); this.projectFilter.set('all'); this.loading.set(false);
+        this.d.set(d); this.denied.set(''); this.projectFilter.set('all'); this.loading.set(false);
         savePainelLast(this.kind() === 'sector' ? 'setor' : 'equipe', id);
       },
-      error: e => { this.loading.set(false); this.toast.error(errorMessage(e, 'Não foi possível carregar o painel.')); },
+      error: e => {
+        this.loading.set(false);
+        if (e?.status === 403) { this.d.set(null); this.denied.set(errorMessage(e, 'Você não acompanha este painel.')); return; }
+        this.toast.error(errorMessage(e, 'Não foi possível carregar o painel.'));
+      },
     });
   }
 

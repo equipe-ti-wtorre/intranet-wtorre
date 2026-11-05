@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { Person, Project, Sector, Team } from './models';
 
@@ -14,6 +14,8 @@ export class DataService {
   readonly people = signal<Person[]>([]);
   readonly unread = signal(0);
   readonly guestWorks = signal<GuestWork[]>([]);
+  // Quem não acompanha nenhum painel não vê o Painel no menu.
+  readonly hasPanel = computed(() => this.teams().some(t => !!t.can_panel) || this.sectors().some(s => !!s.can_panel));
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private api: ApiService) {}

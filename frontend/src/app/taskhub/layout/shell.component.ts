@@ -52,7 +52,7 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
               @if (auth.user()?.is_manager) {
                 <a routerLink="/ti/taskhub/tarefas" [queryParams]="{ v: 'delegadas', space: 'profissional' }" [class.active]="isTasks('delegadas', 'profissional')"><app-icon class="ico" name="send" />Atribuídas por mim</a>
               }
-              @for (v of corpViews; track v.path) {
+              @for (v of corpViews(); track v.path) {
                 <a [routerLink]="['/ti/taskhub', v.path]" routerLinkActive="active"><app-icon class="ico" [name]="v.icon" />{{ v.label }}</a>
               }
               @if (legacyProjects().length) {
@@ -154,7 +154,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   groupOpen = signal<Record<NavGroup, boolean>>({ corporativo: readGroupOpen('corporativo'), individual: readGroupOpen('individual'), organizacao: readGroupOpen('organizacao') });
   private url = signal(this.router.url);
   private gPressed = 0;
-  readonly corpViews = [CORP_VIEWS.kanban, CORP_VIEWS.quadro, CORP_VIEWS.linha, CORP_VIEWS.painel];
+  corpViews = computed(() => [CORP_VIEWS.kanban, CORP_VIEWS.quadro, CORP_VIEWS.linha, ...(this.data.hasPanel() ? [CORP_VIEWS.painel] : [])]);
 
   readonly personalViews = [PERSONAL_VIEWS.kanban, PERSONAL_VIEWS.quadro, PERSONAL_VIEWS.linha];
   // Projetos corporativos de antes das equipes terem quadro próprio.

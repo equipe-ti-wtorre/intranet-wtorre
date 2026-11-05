@@ -116,7 +116,7 @@ router.get('/:id', ah(async (req, res) => {
   let statuses = []; let sections = []; let phases = [];
   if (task.project) {
     ({ rows: statuses } = await query('SELECT * FROM workflow_statuses WHERE project_id = $1 ORDER BY position, id', [task.project.id]));
-    ({ rows: sections } = await query('SELECT * FROM project_sections WHERE project_id = $1 ORDER BY position, id', [task.project.id]));
+    ({ rows: sections } = await query('SELECT * FROM project_sections WHERE project_id = $1 AND th_work_role($2, id) IS NOT NULL ORDER BY position, id', [task.project.id, req.user.id]));
     phases = await projectPhases({ query }, task.project.id);
   }
   const current = subtasks.find(s => !s.done);
@@ -204,7 +204,7 @@ router.post('/', ah(async (req, res) => {
     const { rows: [wk] } = await query('SELECT project_id, th_work_role($1, id) AS role FROM project_sections WHERE id = $2', [me, d.section_id]);
     if (!wk || wk.project_id !== projectId) throw new HttpError(422, 'Esse projeto é de outra equipe.');
     // Cria quem coordena o projeto ou quem é responsável pelo trabalho.
-    if (!['edit', 'manage'].includes(role) && wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é quem é da equipe ou o desenvolvedor.');
+    if (wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é a gestão da equipe, quem criou o projeto ou o desenvolvedor.');
     space = (await query('SELECT space FROM projects WHERE id = $1', [projectId])).rows[0].space;
   } else if (space === 'profissional' && !req.user.is_manager) {
     throw new HttpError(403, 'No espaço Corporativo quem cria tarefas é o gestor. Use o espaço Individual para as suas.');

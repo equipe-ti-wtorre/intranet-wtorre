@@ -24,6 +24,7 @@ const DIRECT: CorpView[] = ['kanban', 'quadro'];
             <div class="sub">{{ meta().hint }}</div>
           </div>
         </div>
+        @if (view() !== 'painel') {
         <div class="actions">
           <label class="vp-search">
             <app-icon name="search" [size]="15" />
@@ -31,15 +32,18 @@ const DIRECT: CorpView[] = ['kanban', 'quadro'];
                    [value]="q()" (input)="q.set($any($event.target).value)" />
           </label>
         </div>
+        }
       </div>
 
+      @if (hasContent()) {
       <nav class="vp-views" aria-label="Trocar visão">
-        @for (v of views; track v) {
+        @for (v of views(); track v) {
           <a [routerLink]="corpViewPath(v)" [class.on]="v === view()" [attr.aria-current]="v === view() ? 'page' : null">
             <app-icon [name]="CORP_VIEWS[v].icon" [size]="14" />{{ CORP_VIEWS[v].label }}
           </a>
         }
       </nav>
+      }
 
       @for (g of groups(); track g.id) {
         <section class="vp-sector">
@@ -71,8 +75,11 @@ const DIRECT: CorpView[] = ['kanban', 'quadro'];
         </section>
       } @empty {
         <div class="vp-empty">
-          <app-icon [name]="q().trim() ? 'search' : 'people'" [size]="28" />
-          @if (q().trim()) {
+          <app-icon [name]="view() === 'painel' ? 'chart' : q().trim() ? 'search' : 'people'" [size]="28" />
+          @if (view() === 'painel') {
+            <b>Você ainda não acompanha o painel de nenhuma equipe</b>
+            <span>O painel aparece para gestores e para quem recebe o acesso de ver o painel da equipe.</span>
+          } @else if (q().trim()) {
             <b>Nenhuma equipe encontrada</b>
             <span>Tente outro nome de equipe ou setor.</span>
           } @else {
@@ -90,7 +97,7 @@ export class ViewPickerPage {
   private data = inject(DataService);
   private auth = inject(AuthService);
   private router = inject(Router);
-  readonly views = VIEW_ORDER;
+  views = computed(() => VIEW_ORDER.filter(v => v !== 'painel' || this.data.hasPanel()));
 
   // Sem tela de escolha: abre a última equipe (ou painel) usada, ou a primeira disponível.
   constructor() {
@@ -103,7 +110,7 @@ export class ViewPickerPage {
     const v = this.view();
     if (v === 'painel') {
       const sectors = this.all().filter(g => g.canDashboard);
-      const teams = this.all().flatMap(g => g.teams).filter(t => t.can_dashboard);
+      const teams = this.all().flatMap(g => g.teams).filter(t => t.can_panel);
       const last = readPainelLast();
       if (last?.kind === 'setor' && sectors.some(s => s.id === last.id)) return ['/ti/taskhub/painel/setores', String(last.id)];
       if (last?.kind === 'equipe' && teams.some(t => t.id === last.id)) return corpTeamLink('painel', last.id);
@@ -122,6 +129,8 @@ export class ViewPickerPage {
   q = signal('');
   meta = computed(() => CORP_VIEWS[this.view()] || CORP_VIEWS.kanban);
   private all = computed(() => buildSectorNav(this.data, this.auth));
+  // No Painel esta tela só aparece quando não há painel nenhum (havendo, ela redireciona).
+  hasContent = computed(() => this.view() !== 'painel' && this.all().length > 0);
   redirecting = computed(() => this.target() !== null);
   groups = computed(() => {
     if (this.view() === 'painel') return [];

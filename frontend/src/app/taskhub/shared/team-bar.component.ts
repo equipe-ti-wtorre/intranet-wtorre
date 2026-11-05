@@ -56,7 +56,7 @@ export class TeamBarComponent {
   sectors = computed(() => (this.isPainel() ? this.groups().filter(g => g.canDashboard) : []));
   teams = computed(() => {
     const all = this.groups().flatMap(g => g.teams);
-    return this.isPainel() ? all.filter(t => t.can_dashboard) : all;
+    return this.isPainel() ? all.filter(t => t.can_panel) : all;
   });
   multiSector = computed(() => new Set(this.teams().map(t => t.sector_id)).size > 1);
   total = computed(() => this.teams().reduce((n, t) => n + (t.projects_count || 0), 0));

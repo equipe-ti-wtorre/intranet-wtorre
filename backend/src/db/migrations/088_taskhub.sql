@@ -379,8 +379,8 @@ CREATE TABLE IF NOT EXISTS th_access_profiles (
 
 INSERT IGNORE INTO th_access_profiles (`key`, label, description, permissions, system, position) VALUES
   ('admin', 'Administrador', 'Cria setores, cadastra pessoas e define perfis. Não vê projetos, tarefas nem o trabalho dos setores.', '["gerenciar_pessoas_todas"]', 1, 1),
-  ('gestor', 'Gestor', 'Vê o próprio trabalho e o das equipes e setores que gerencia, e cria equipes, projetos e tarefas.', '["criar_corporativo","criar_equipes","ver_painel_equipe"]', 1, 2),
-  ('diretoria', 'Diretoria', 'Vê o trabalho dos setores que acompanha e o próprio, e cria projetos e tarefas.', '["criar_corporativo","ver_painel_equipe"]', 1, 3),
+  ('gestor', 'Gestor', 'Vê o próprio trabalho e o das equipes e setores que gerencia, e cria equipes, projetos e tarefas.', '["criar_corporativo","criar_equipes"]', 1, 2),
+  ('diretoria', 'Diretoria', 'Vê o trabalho dos setores que acompanha e o próprio, e cria projetos e tarefas.', '["criar_corporativo"]', 1, 3),
   ('colaborador', 'Colaborador', 'Vê os projetos e tarefas em que foi incluído e organiza os próprios no espaço Individual.', '[]', 1, 4);
 
 INSERT IGNORE INTO modulos_admin (codigo, nome, ordem) VALUES

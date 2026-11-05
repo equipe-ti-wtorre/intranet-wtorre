@@ -880,7 +880,7 @@ div.td-kpi { cursor: default; }
 .td-kpi > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .td-kpi .l { font-size: 13px; font-weight: 600; }
 .td-kpi small { font-size: 12px; color: var(--mu); }
-.td-kpi-txt { font-size: 15px; letter-spacing: 0; }
+.td-kpi .l, .td-kpi small { overflow-wrap: anywhere; }
 .td-kpi--brand::before { background: var(--brand); }
 .td-kpi--ok::before { background: var(--ok); }
 .td-kpi--ok > b { color: var(--ok); }

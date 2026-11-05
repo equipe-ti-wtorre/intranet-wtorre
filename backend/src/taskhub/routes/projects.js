@@ -129,9 +129,7 @@ router.get('/:id', ah(async (req, res) => {
   const partial = role === 'partial';
   const [{ rows: statuses }, { rows: sections }, { rows: members }] = await Promise.all([
     query('SELECT * FROM workflow_statuses WHERE project_id = $1 ORDER BY position, id', [id]),
-    partial
-      ? query('SELECT * FROM project_sections WHERE project_id = $1 AND th_work_role($2, id) IS NOT NULL ORDER BY position, id', [id, req.user.id])
-      : query('SELECT * FROM project_sections WHERE project_id = $1 ORDER BY position, id', [id]),
+    query('SELECT * FROM project_sections WHERE project_id = $1 AND th_work_role($2, id) IS NOT NULL ORDER BY position, id', [id, req.user.id]),
     partial ? { rows: [] } : query(
       `SELECT u.id, u.name, u.username, u.initials, u.color, pm.role, th_is_manager(u.id) AS can_coordinate, ${TEAM_FIELDS('u')}
          FROM project_members pm JOIN users u ON u.id = pm.user_id

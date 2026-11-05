@@ -95,7 +95,7 @@ export interface TimelineEntry {
 }
 
 export interface Team {
-  id: number; name: string; description: string; color: string; can_dashboard?: boolean;
+  id: number; name: string; description: string; color: string; can_dashboard?: boolean; can_panel?: boolean;
   sector_id?: number; sector_name?: string; can_edit?: boolean; is_member?: boolean;
   managers?: { id: number; name: string; initials: string; color: string }[];
   my_role: 'gestor' | 'membro' | null; members_count?: number; projects_count?: number; board_id?: number | null;
@@ -197,7 +197,7 @@ export interface WorkDashboard {
 }
 
 export interface Sector {
-  id: number; name: string; description: string; color: string; can_dashboard: boolean;
+  id: number; name: string; description: string; color: string; can_dashboard: boolean; can_panel?: boolean;
   people_count: number; teams_count: number; managers: { id: number; name: string; initials: string; color: string }[];
 }
 
@@ -248,6 +248,7 @@ export interface Note {
 
 export interface TeamDashboard {
   team: { id: number; name: string; color: string };
+  scope?: 'full' | 'mine';
   generated_at: string;
   kpis: {
     open: number; doing: number; blocked: number; overdue: number; done_week: number; done_prev_week: number;

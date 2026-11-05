@@ -3,12 +3,12 @@ const { query } = require('../db');
 const { ah, intParam, HttpError } = require('../lib/http');
 const { TASK_SELECT, STATUS_CATEGORY_SQL, formatTask, DAY_REF_MIN } = require('../lib/tasks');
 const { isoDate, addDays, weekStart } = require('../lib/dates');
-const { oversees, overseesSector } = require('./teams');
+const { oversees, seesTeamPanel, seesSectorPanel } = require('./teams');
 
 // Painel de uma equipe ou de um setor inteiro: mesma lógica, muda o grupo de pessoas.
 const GROUPS = {
-  team: { people: 'SELECT user_id FROM team_members WHERE team_id = $2', table: 'teams', check: oversees, label: 'equipe' },
-  sector: { people: 'SELECT id FROM users WHERE sector_id = $2 AND active IS DISTINCT FROM false', table: 'sectors', check: overseesSector, label: 'setor' },
+  team: { people: 'SELECT user_id FROM team_members WHERE team_id = $2', table: 'teams', check: seesTeamPanel, label: 'esta equipe' },
+  sector: { people: 'SELECT id FROM users WHERE sector_id = $2 AND active IS DISTINCT FROM false', table: 'sectors', check: seesSectorPanel, label: 'este setor' },
 };
 
 const OPEN = `${STATUS_CATEGORY_SQL} IN ('todo','doing','blocked')`;
@@ -23,7 +23,9 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
   const G = GROUPS[req.params.kind];
   const teamId = intParam(req.params.id);
   const me = req.user.id;
-  if (!(await G.check(req.user, teamId))) throw new HttpError(403, `Você não acompanha este ${G.label}.`);
+  if (!(await G.check(req.user, teamId))) throw new HttpError(403, `Você não acompanha ${G.label}.`);
+  // Quem gerencia vê a equipe inteira; o membro vê só o próprio trabalho (as tarefas já passam por th_task_access).
+  const full = req.params.kind === 'sector' || !!Number(await oversees(req.user, teamId));
 
   const { rows: [team] } = await query(`SELECT id, name, color FROM ${G.table} WHERE id = $1`, [teamId]);
   if (!team) throw new HttpError(404, 'Não encontrado');
@@ -73,9 +75,9 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
        AND COALESCE((SELECT space FROM projects px WHERE px.id = t.project_id), t.space) = 'profissional'
      LEFT JOIN projects p ON p.id = t.project_id
      LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
-     WHERE u.id IN (${G.people}) AND u.active IS DISTINCT FROM false AND $1::int IS NOT NULL AND (p.id IS NULL OR p.archived = false)
+     WHERE u.id IN (${G.people}) AND u.active IS DISTINCT FROM false AND ($5 = 1 OR u.id = $1) AND (p.id IS NULL OR p.archived = false)
      GROUP BY u.id ORDER BY u.name`,
-    [me, teamId, today, in7]
+    [me, teamId, today, in7, full ? 1 : 0]
   );
 
   const list = async (extra, order, limit = 40, params = []) => {
@@ -95,6 +97,7 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
 
   res.json({
     team,
+    scope: full ? 'full' : 'mine',
     generated_at: new Date(),
     kpis: {
       ...numbers(k, KPI_FIELDS),

@@ -50,7 +50,7 @@ export function buildSectorNav(data: DataService, auth: AuthService): SectorNavG
   }
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'pt');
   const ids = new Set<number>([...bySector.keys(), ...creatable]);
-  for (const s of sectors) if (s.can_dashboard && !admin) ids.add(s.id);
+  for (const s of sectors) if (s.can_panel && !admin) ids.add(s.id);
   return [...ids].map(id => {
     const sector = sectors.find(s => s.id === id);
     const teams = (bySector.get(id) ?? []).slice().sort(byName);
@@ -58,7 +58,7 @@ export function buildSectorNav(data: DataService, auth: AuthService): SectorNavG
       id,
       name: sector?.name || teams[0]?.sector_name || 'Setor',
       color: sector?.color || teams[0]?.color || '#94a3b8',
-      canDashboard: !!sector?.can_dashboard,
+      canDashboard: !!sector?.can_panel,
       canCreate: creatable.has(id),
       teams,
     };

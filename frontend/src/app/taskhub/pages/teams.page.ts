@@ -48,7 +48,7 @@ import { PersonPickerComponent } from '../shared/person-picker.component';
               <span class="muted">· {{ t.sector_name }}</span>
               <span class="grow"></span>
               <a class="btn btn-sm" [routerLink]="['/ti/taskhub/kanban/equipes', t.id]"><app-icon name="board" [size]="14" />Projetos</a>
-              @if (t.can_dashboard) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/painel/equipes', t.id]"><app-icon name="chart" [size]="14" />Painel</a> }
+              @if (t.can_panel) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/painel/equipes', t.id]"><app-icon name="chart" [size]="14" />Painel</a> }
               @if (t.can_edit) {
                 <button class="btn btn-sm" (click)="openEdit(t)">Editar</button>
                 <button class="btn btn-sm btn-danger" (click)="deleting.set(t)">Excluir</button>

@@ -80,6 +80,7 @@ export class ApiService {
   inboxRead(id: number) { return this.http.post(`${U}/inbox/${id}/read`, {}); }
   inboxUnread(id: number) { return this.http.post(`${U}/inbox/${id}/unread`, {}); }
   inboxArchive(id: number) { return this.http.post(`${U}/inbox/${id}/archive`, {}); }
+  inboxDelete(id: number) { return this.http.delete(`${U}/inbox/${id}`); }
   inboxSnooze(id: number, until: Date) { return this.http.post(`${U}/inbox/${id}/snooze`, { until }); }
   inboxReadAll() { return this.http.post(`${U}/inbox/read-all`, {}); }
 
@@ -89,7 +90,7 @@ export class ApiService {
   projectPeople(id: number) { return this.http.get<Person[]>(`${U}/projects/${id}/people`); }
   workDashboard(id: number) { return this.http.get<WorkDashboard>(`${U}/works/${id}/dashboard`); }
   works(projectId: number) {
-    return this.http.get<{ works: Work[]; can_create: boolean; phases: Phase[]; team_id: number | null; phases_editable: boolean; phases_scope: 'team' | 'project' }>(`${U}/projects/${projectId}/works`);
+    return this.http.get<{ works: Work[]; can_create: boolean; sees_all?: boolean; phases: Phase[]; team_id: number | null; phases_editable: boolean; phases_scope: 'team' | 'project' }>(`${U}/projects/${projectId}/works`);
   }
   setWorkPhase(id: number, phaseId: number, beforeId?: number | null) {
     return this.http.patch<Work>(`${U}/works/${id}/phase`, { phase_id: phaseId, ...(beforeId !== undefined ? { before_id: beforeId } : {}) });
