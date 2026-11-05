@@ -5,11 +5,14 @@ export interface QuickAddDefaults { space?: 'profissional' | 'pessoal'; project_
 
 export type AppPalette = 'wtorre' | 'nubank-parque';
 
+// Chave nova para que todos comecem na Nubank Parque; quem quiser volta para WTorre no Perfil.
+const PALETTE_KEY = 'taskhub_palette_v2';
+
 function readPalette(): AppPalette {
   try {
-    return localStorage.getItem('taskhub_palette') === 'nubank-parque' ? 'nubank-parque' : 'wtorre';
+    return localStorage.getItem(PALETTE_KEY) === 'wtorre' ? 'wtorre' : 'nubank-parque';
   } catch {
-    return 'wtorre';
+    return 'nubank-parque';
   }
 }
 
@@ -49,7 +52,7 @@ export class UiService {
 
   setPalette(next: AppPalette) {
     this.palette.set(next);
-    try { localStorage.setItem('taskhub_palette', next); } catch {}
+    try { localStorage.setItem(PALETTE_KEY, next); } catch {}
   }
 
   togglePalette() {

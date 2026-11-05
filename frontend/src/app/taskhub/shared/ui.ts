@@ -44,6 +44,8 @@ const ICONS: Record<string, string> = {
   note: '<path d="M4 2.2h5.2L13 6v7.6a1.2 1.2 0 01-1.2 1.2H4.2A1.2 1.2 0 013 13.6V3.4A1.2 1.2 0 014.2 2.2z"/><path d="M9 2.4V6h3.6"/>',
   bell: '<path d="M8 1.8a.7.7 0 01.7.7v.5a4 4 0 013.3 3.9v3.2l.8 1.1H3.2l.8-1.1V6.9A4 4 0 017.3 3v-.5a.7.7 0 01.7-.7z"/><path d="M6.4 12.6a1.6 1.6 0 003.2 0"/>',
   pin: '<path d="M6.2 2.2h3.6l-.5 3.1 1.8 1.4v1.1H5v-1.1l1.7-1.4z"/><path d="M8 7.8V14"/>',
+  paperclip: '<path d="M5.2 8.4l5.1-5.1a2.4 2.4 0 113.4 3.4L7.2 13.2a3.2 3.2 0 11-4.5-4.5l6.2-6.2"/>',
+  download: '<path d="M8 2.5v8M5 8l3 3 3-3"/><path d="M3 13.5h10"/>',
 };
 
 @Component({
@@ -69,7 +71,7 @@ export class IconComponent {
         @if (photo(); as src) { <img [src]="src" [alt]="p.name" /> } @else { {{ p.initials }} }
       </span>
     } @else {
-      <span class="avatar none" [class.lg]="large()" [class.xl]="preview()" title="Sem responsável">?</span>
+      <span class="avatar none" [class.lg]="large()" [class.xl]="preview()" title="Sem desenvolvedor">?</span>
     }`,
   styles: [':host{display:inline-flex}'],
 })

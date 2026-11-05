@@ -1,23 +1,27 @@
 import { signal } from '@angular/core';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
-import { Phase } from '../core/models';
+import { Phase, PhaseScope } from '../core/models';
+import { sumPhaseDays } from '../core/timeline';
 
 export const PHASE_COLORS = ['#8b93a1', '#3b82f6', '#a78bfa', '#14b8a6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#84cc16'];
 
-// Edição das colunas de fase (lista da equipe), usada no Kanban de projetos e no de tarefas.
-// Toda edição envia a lista inteira e vale para todos os projetos da equipe.
+// Edição das colunas de fase (lista da equipe ou do projeto sem equipe), usada no Kanban de projetos e no de tarefas.
+// Toda edição envia a lista inteira e vale para todos os projetos do escopo.
 export class PhaseColumns {
   colMenu = signal<number | null>(null);
   menuPos = signal<{ top: number; left: number } | null>(null);
   renaming = signal<number | null>(null);
+  /** Escopo cujo roteiro mudou de tamanho: abre a revisão das datas dos projetos. */
+  rescheduleScope = signal<PhaseScope | null>(null);
+  private undoList: { id?: number; name: string; color: string; duration_days: number }[] | null = null;
   colors = PHASE_COLORS;
 
   constructor(private o: {
     api: ApiService;
     toast: ToastService;
     phases: () => Phase[];
-    teamId: () => number | null;
+    scope: () => PhaseScope | null;
     saved: (phases: Phase[]) => void;
   }) {}
 
@@ -67,7 +71,8 @@ export class PhaseColumns {
   }
   remove(ph: Phase) {
     this.closeMenu();
-    if (!confirm(`Excluir a fase ${ph.name}?\nEla some do Kanban de todos os projetos da equipe. As tarefas que estavam nela ficam sem fase.`)) return;
+    const where = this.o.scope()?.kind === 'project' ? 'deste projeto' : 'de todos os projetos da equipe';
+    if (!confirm(`Excluir a fase ${ph.name}?\nEla some do Kanban ${where}. As tarefas que estavam nela ficam sem fase.`)) return;
     this.save(this.o.phases().filter(p => p.id !== ph.id));
   }
   add() {
@@ -88,10 +93,38 @@ export class PhaseColumns {
     }));
   }
   private save(list: { id?: number; name: string; color: string; duration_days?: number }[], after?: (saved: Phase[]) => void) {
-    const tid = this.o.teamId(); if (!tid) return;
-    this.o.api.saveTeamPhases(tid, this.payload(list)).subscribe({
-      next: r => { this.o.saved(r.phases); after?.(r.phases); },
+    const scope = this.o.scope(); if (!scope) return;
+    const before = sumPhaseDays(this.o.phases());
+    const prev = this.payload(this.o.phases());
+    this.o.api.savePhases(scope, this.payload(list)).subscribe({
+      next: r => {
+        // A primeira edição troca a lista padrão por uma cópia própria: os ids mudam.
+        // O servidor devolve a lista na ordem enviada, então a posição liga o id antigo ao novo.
+        const ids = new Map<number, number>();
+        list.forEach((l, i) => { if (l.id && r.phases[i]) ids.set(l.id, r.phases[i].id); });
+        this.o.saved(r.phases); after?.(r.phases);
+        if (sumPhaseDays(r.phases) !== before) {
+          this.undoList = prev.map(p => (p.id && ids.has(p.id) ? { ...p, id: ids.get(p.id) } : p));
+          this.rescheduleScope.set(scope);
+        }
+      },
       error: e => this.o.toast.error(errorMessage(e, 'Não foi possível salvar as fases.')),
+    });
+  }
+
+  /** Fecha a revisão de datas; em 'cancelled' volta as fases como estavam antes da edição. */
+  closeReschedule(result: 'applied' | 'kept' | 'cancelled') {
+    const scope = this.rescheduleScope();
+    const prev = this.undoList;
+    this.rescheduleScope.set(null);
+    this.undoList = null;
+    if (result !== 'cancelled' || !scope || !prev) return;
+    // Fase excluída na edição já não existe: volta como fase nova.
+    const alive = new Set(this.o.phases().map(p => p.id));
+    const items = prev.map(({ id, ...rest }) => (id && alive.has(id) ? { id, ...rest } : rest));
+    this.o.api.savePhases(scope, items).subscribe({
+      next: r => { this.o.saved(r.phases); this.o.toast.show('Mudança nas fases desfeita.'); },
+      error: e => this.o.toast.error(errorMessage(e, 'Não foi possível desfazer a mudança nas fases.')),
     });
   }
 }

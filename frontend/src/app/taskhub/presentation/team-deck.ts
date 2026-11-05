@@ -16,7 +16,7 @@ export const TEAM_SLIDES: { key: TeamSlideKey; label: string; hint: string }[] =
   { key: 'aguardando', label: 'Aguardando outros', hint: 'Dependem de gente de fora' },
 ];
 
-const who = (t: Task) => t.assignee?.name || 'sem responsável';
+const who = (t: Task) => t.assignee?.name || 'sem desenvolvedor';
 const where = (t: Task) => (t.project ? `${t.project.name}${t.section ? ' › ' + t.section.name : ''}` : 'Corporativo');
 const row = (t: Task, extra?: string): { main: string; sub: string } => ({
   main: t.title,

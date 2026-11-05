@@ -7,13 +7,14 @@ import { ToastService } from '../core/toast.service';
 import { AccessProfile, Permission, Sector } from '../core/models';
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
 import { UsersPage } from './users.page';
+import { PersonPickerComponent } from '../shared/person-picker.component';
 
 const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6', '#ec4899', '#e5534b'];
 
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [FormsModule, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, UsersPage],
+  imports: [FormsModule, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, UsersPage, PersonPickerComponent],
   template: `
     <div class="page">
       <div class="page-head"><div><h1>Administração</h1><div class="sub">Setores da empresa, pessoas, perfis de acesso e login Microsoft.</div></div></div>
@@ -40,7 +41,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
                 <td class="num">{{ s.teams_count }}</td>
                 <td class="num">{{ s.people_count }}</td>
                 <td class="num" style="white-space:nowrap">
-                  @if (s.can_dashboard) { <a class="btn btn-ghost btn-sm" [routerLink]="['/ti/taskhub/setores', s.id]" (click)="$event.stopPropagation()">Painel</a> }
+                  @if (s.can_panel) { <a class="btn btn-ghost btn-sm" [routerLink]="['/ti/taskhub/painel/setores', s.id]" (click)="$event.stopPropagation()">Painel</a> }
                   <button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); editSector(s)">Editar</button>
                 </td>
               </tr>
@@ -72,7 +73,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
                 <span class="ap-card__count">{{ p.users_count }} {{ p.users_count === 1 ? 'pessoa' : 'pessoas' }}</span>
               </div>
               <div class="ap-card__perms">
-                @if (p.key === 'admin') { <span class="pill">Todos</span> }
+                @if (p.key === 'admin') { <span class="pill">Administrar pessoas, setores e perfis</span><span class="pill">Gerencia todos os quadros</span> }
                 @else if (p.permissions.length) {
                   @for (k of p.permissions; track k) { <span class="pill">{{ permLabel(k) }}</span> }
                 } @else { <span class="pill">Vê o que foi incluído e organiza o Individual</span> }
@@ -130,10 +131,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
                   <span class="pill"><app-avatar [person]="p" />{{ p.name }}<button type="button" (click)="togglePerson(p.id)" [attr.aria-label]="'Remover ' + p.name"><app-icon name="x" [size]="12" /></button></span>
                 }
               </div>
-              <select #pp class="select" (change)="togglePerson(+pp.value); pp.value = ''" aria-label="Adicionar pessoa">
-                <option value="">Adicionar pessoa…</option>
-                @for (p of peopleOptions(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
-              </select>
+              <app-person-picker [people]="peopleOptions()" placeholder="Adicionar pessoa…" (picked)="togglePerson($event ?? 0)" />
               <span class="hint">Cada pessoa fica em um setor. Quem já está em outro não aparece. Ao sair da lista, deixa este setor e as equipes dele.</span>
             </div>
             <div class="field"><label>Gestores do setor</label>
@@ -142,10 +140,7 @@ const COLORS = ['#3b82f6', '#2fbf71', '#c9a84c', '#a78bfa', '#f97316', '#14b8a6'
                   <span class="pill"><app-avatar [person]="m" />{{ m.name }}<button type="button" (click)="toggleManager(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button></span>
                 }
               </div>
-              <select #pk class="select" (change)="toggleManager(+pk.value); pk.value = ''" aria-label="Adicionar gestor">
-                <option value="">Adicionar gestor…</option>
-                @for (p of managerOptions(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
-              </select>
+              <app-person-picker [people]="managerOptions()" placeholder="Adicionar gestor…" (picked)="toggleManager($event ?? 0)" />
               <span class="hint">O gestor é uma das pessoas do setor e precisa ter o perfil Gestor. Ele acompanha as equipes e cria equipes.</span>
             </div>
             <div class="field"><label>Cor</label>

@@ -73,7 +73,7 @@ import { downloadWorkPptx } from './pptx';
                   <tr><td><span class="pd-av" [style.background]="p.color">{{ p.initials }}</span>{{ p.name }}</td><td class="num">{{ p.open }}</td><td class="num" [class.wk-late]="p.overdue">{{ p.overdue }}</td><td class="num">{{ p.done }}</td></tr>
                 }</tbody>
               </table></div>
-            } @else { <p class="muted small">Nenhuma tarefa com responsável.</p> }
+            } @else { <p class="muted small">Nenhuma tarefa com desenvolvedor.</p> }
           </section>
         </div>
 
@@ -82,7 +82,7 @@ import { downloadWorkPptx } from './pptx';
             <section class="card pd-card">
               <h2 [class]="l.tone">{{ l.title }} <span>{{ l.items.length }}</span></h2>
               @for (i of l.items.slice(0, 6); track i.id) {
-                <div class="pd-item"><b>{{ i.title }}</b><span>{{ i.assignee || 'sem responsável' }}{{ l.extra(i) }}</span></div>
+                <div class="pd-item"><b>{{ i.title }}</b><span>{{ i.assignee || 'sem desenvolvedor' }}{{ l.extra(i) }}</span></div>
               } @empty { <p class="muted small">{{ l.empty }}</p> }
             </section>
           }

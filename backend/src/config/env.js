@@ -107,6 +107,17 @@ const env = {
   pesquisasAnexoMaxMb: Number(process.env.PESQUISAS_ANEXO_MAX_MB) || 10,
   pesquisasBlobLocal:
     process.env.PESQUISAS_BLOB_LOCAL === '1' || process.env.PESQUISAS_BLOB_LOCAL === 'true',
+  taskhubContainer: process.env.TASKHUB_BLOB_CONTAINER || 'taskhub-anexos',
+  taskhubTmpDir: process.env.TASKHUB_TMP_DIR || os.tmpdir(),
+  taskhubAnexoMaxMb: Number(process.env.TASKHUB_ANEXO_MAX_MB) || 15,
+  taskhubAnexoMaxFiles: Number(process.env.TASKHUB_ANEXO_MAX_FILES) || 10,
+  /** Só nbpdev: anexos das tarefas em disco. Se omitido, segue PESQUISAS_BLOB_LOCAL. */
+  taskhubBlobLocal: (() => {
+    const v = process.env.TASKHUB_BLOB_LOCAL;
+    if (v === '1' || v === 'true') return true;
+    if (v === '0' || v === 'false') return false;
+    return process.env.PESQUISAS_BLOB_LOCAL === '1' || process.env.PESQUISAS_BLOB_LOCAL === 'true';
+  })(),
   emailProvider: process.env.EMAIL_PROVIDER === 'acs' ? 'acs' : 'smtp',
   emailOcultarPara: process.env.EMAIL_OCULTAR_PARA === '1' || process.env.EMAIL_OCULTAR_PARA === 'true',
   eventGridWebhookSecret: process.env.EVENT_GRID_WEBHOOK_SECRET || '',

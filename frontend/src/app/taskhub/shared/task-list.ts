@@ -125,7 +125,7 @@ export class TaskListComponent {
       const map = new Map<string, Group>();
       for (const t of list) {
         const key = t.assignee ? `a${t.assignee.id}` : 'none';
-        if (!map.has(key)) map.set(key, { key, label: t.assignee?.name || 'Sem responsável', tasks: [] });
+        if (!map.has(key)) map.set(key, { key, label: t.assignee?.name || 'Sem desenvolvedor', tasks: [] });
         map.get(key)!.tasks.push(t);
       }
       return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));

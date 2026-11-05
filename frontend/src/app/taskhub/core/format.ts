@@ -98,9 +98,32 @@ export function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 }
 
-// No quadro da equipe cada cartão é um projeto; nos projetos individuais continua sendo trabalho.
-export function termsFor(board: boolean) {
-  return board
-    ? { one: 'projeto', many: 'projetos', One: 'Projeto', Many: 'Projetos', novo: 'Novo projeto' }
-    : { one: 'trabalho', many: 'trabalhos', One: 'Trabalho', Many: 'Trabalhos', novo: 'Novo trabalho' };
+export const TASK_FILE_MAX = 10;
+export const TASK_FILE_MAX_MB = 15;
+export const TASK_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip';
+const TASK_FILE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip']);
+
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function isTaskImage(mime: string): boolean {
+  return /^image\/(jpeg|png|webp|gif)$/i.test(mime || '');
+}
+
+export function taskFileError(file: File, already: number): string | null {
+  if (already >= TASK_FILE_MAX) return `A tarefa pode ter no máximo ${TASK_FILE_MAX} arquivos.`;
+  if (file.size > TASK_FILE_MAX_MB * 1024 * 1024) return `${file.name} passa de ${TASK_FILE_MAX_MB} MB.`;
+  const ext = `.${(file.name.split('.').pop() || '').toLowerCase()}`;
+  const mime = (file.type || '').toLowerCase();
+  const mimeOk = mime.startsWith('image/') || mime === 'application/pdf' || mime === 'text/plain' || mime.includes('word') || mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('powerpoint') || mime.includes('presentation') || mime === 'application/zip' || mime === 'application/x-zip-compressed';
+  if (!TASK_FILE_EXTS.has(ext) && !mimeOk) return `${file.name} não é um tipo permitido.`;
+  return null;
+}
+
+// Cada cartão do quadro (da equipe ou de um projeto individual) é um projeto.
+export function termsFor() {
+  return { one: 'projeto', many: 'projetos', One: 'Projeto', Many: 'Projetos', novo: 'Novo projeto' };
 }

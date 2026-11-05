@@ -28,12 +28,19 @@ const TABLES = [
   'work_phase_log',
   'work_visits',
   'work_schedule',
+  'work_info',
+  'work_files',
+  'work_pauses',
+  'work_baseline',
+  'work_date_log',
   'work_phase',
   'task_phase',
   'task_contacts',
   'task_alignment',
+  'task_files',
   'subtask_quiet',
   'team_phases',
+  'project_phases',
   'job_runs',
   'notifications',
   'categories',
@@ -47,7 +54,8 @@ const TABLES = [
 ];
 
 const DATE_COLUMNS = new Set([
-  'deadline', 'start_date', 'end_date', 'plan_date', 'due_date', 'away_until',
+  'deadline', 'start_date', 'end_date', 'plan_date', 'due_date', 'away_until', 'pause_start', 'pause_end',
+  'old_start', 'new_start', 'old_due', 'new_due', 'planned_start', 'planned_due',
   'reminder_date', 'check_date', 'visited_at', 'aligned_on',
 ]);
 

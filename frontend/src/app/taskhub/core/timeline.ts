@@ -102,7 +102,8 @@ export function computeTimeline(items: TimelineInput[], projectStart: string | n
       end = endAfter(start, duration);
       if (end < today) { late = true; end = afterBusiness(today); }
     } else {
-      start = planned && nextBusiness(planned) > ownerCursor ? nextBusiness(planned) : ownerCursor;
+      // Data salva vale como está ("ficam juntos" = em paralelo); a fila só posiciona quem não tem data.
+      start = planned ? nextBusiness(planned) : ownerCursor;
       end = endAfter(start, duration);
       if (end < today) { late = true; end = afterBusiness(today); }
     }

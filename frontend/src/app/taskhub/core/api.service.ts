@@ -2,11 +2,12 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../environments/environment';
 import {
-  AccessProfile, DayData, Note, Notification, Permission, Person, Project, Sector, Reminder, ReminderRepeat, RoutineBlock, Section, Status, Task, TaskDetail, Work, WorkDashboard, WorkDetail, WorkPhaseLog,
-  Team, TeamDashboard, TimelineEntry, User, Subtask, TaskContact, CreatableWork, ProjectTimeline, Phase, SearchResult, SchedulePreview,
+  AccessProfile, DayData, Note, Notification, Permission, Person, Project, Sector, Reminder, ReminderRepeat, RoutineBlock, Section, Status, Task, TaskDetail, TaskFile, Work, WorkDashboard, WorkDetail, WorkPhaseLog,
+  Team, TeamDashboard, TimelineEntry, User, Subtask, TaskContact, CreatableWork, ProjectTimeline, Phase, SearchResult, SchedulePreview, PhaseReschedule, PhaseScope, WorkDateLog,
 } from './models';
 
 const U = environment.apiUrl;
+const phaseBase = (s: PhaseScope) => (s.kind === 'team' ? `teams/${s.id}` : `projects/${s.id}`);
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -33,6 +34,26 @@ export class ApiService {
   reorderSubtasks(id: number, ids: number[]) { return this.http.put<{ ok: boolean }>(`${U}/tasks/${id}/subtasks/order`, { ids }); }
   timeline(id: number) { return this.http.get<TimelineEntry[]>(`${U}/tasks/${id}/timeline`); }
   comment(id: number, body: string) { return this.http.post<TimelineEntry>(`${U}/tasks/${id}/comments`, { body }); }
+  taskFiles(id: number) { return this.http.get<TaskFile[]>(`${U}/tasks/${id}/files`); }
+  uploadTaskFiles(id: number, files: File[]) {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f, f.name);
+    return this.http.post<TaskFile[]>(`${U}/tasks/${id}/files`, fd);
+  }
+  downloadTaskFile(id: number, fileId: number) {
+    return this.http.get(`${U}/tasks/${id}/files/${fileId}`, { responseType: 'blob' });
+  }
+  deleteTaskFile(id: number, fileId: number) { return this.http.delete(`${U}/tasks/${id}/files/${fileId}`); }
+  workFiles(id: number) { return this.http.get<TaskFile[]>(`${U}/works/${id}/files`); }
+  uploadWorkFiles(id: number, files: File[]) {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f, f.name);
+    return this.http.post<TaskFile[]>(`${U}/works/${id}/files`, fd);
+  }
+  downloadWorkFile(id: number, fileId: number) {
+    return this.http.get(`${U}/works/${id}/files/${fileId}`, { responseType: 'blob' });
+  }
+  deleteWorkFile(id: number, fileId: number) { return this.http.delete(`${U}/works/${id}/files/${fileId}`); }
 
   // Meu Dia
   day(date: string) { return this.http.get<DayData>(`${U}/me/day`, { params: this.params({ date }) }); }
@@ -59,6 +80,7 @@ export class ApiService {
   inboxRead(id: number) { return this.http.post(`${U}/inbox/${id}/read`, {}); }
   inboxUnread(id: number) { return this.http.post(`${U}/inbox/${id}/unread`, {}); }
   inboxArchive(id: number) { return this.http.post(`${U}/inbox/${id}/archive`, {}); }
+  inboxDelete(id: number) { return this.http.delete(`${U}/inbox/${id}`); }
   inboxSnooze(id: number, until: Date) { return this.http.post(`${U}/inbox/${id}/snooze`, { until }); }
   inboxReadAll() { return this.http.post(`${U}/inbox/read-all`, {}); }
 
@@ -67,26 +89,33 @@ export class ApiService {
   project(id: number) { return this.http.get<Project>(`${U}/projects/${id}`); }
   projectPeople(id: number) { return this.http.get<Person[]>(`${U}/projects/${id}/people`); }
   workDashboard(id: number) { return this.http.get<WorkDashboard>(`${U}/works/${id}/dashboard`); }
-  works(projectId: number) { return this.http.get<{ works: Work[]; can_create: boolean; phases: Phase[]; team_id: number | null; phases_editable: boolean }>(`${U}/projects/${projectId}/works`); }
+  works(projectId: number) {
+    return this.http.get<{ works: Work[]; can_create: boolean; sees_all?: boolean; phases: Phase[]; team_id: number | null; phases_editable: boolean; phases_scope: 'team' | 'project' }>(`${U}/projects/${projectId}/works`);
+  }
   setWorkPhase(id: number, phaseId: number, beforeId?: number | null) {
     return this.http.patch<Work>(`${U}/works/${id}/phase`, { phase_id: phaseId, ...(beforeId !== undefined ? { before_id: beforeId } : {}) });
   }
   teamPhases(teamId: number) { return this.http.get<{ phases: Phase[]; is_default: boolean; can_edit: boolean }>(`${U}/teams/${teamId}/phases`); }
-  saveTeamPhases(teamId: number, items: { id?: number; name: string; color: string; duration_days?: number }[]) {
-    return this.http.put<{ phases: Phase[]; can_edit: boolean }>(`${U}/teams/${teamId}/phases`, { items });
+  savePhases(scope: PhaseScope, items: { id?: number; name: string; color: string; duration_days?: number }[]) {
+    return this.http.put<{ phases: Phase[]; can_edit: boolean }>(`${U}/${phaseBase(scope)}/phases`, { items });
   }
-  schedulePreview(projectId: number, body: { start_date: string; due_date: string; owner_ids: number[]; exclude_id?: number }) {
+  reschedulePhases(scope: PhaseScope, body: { work_ids?: number[]; push: boolean; dry_run: boolean }) {
+    return this.http.post<PhaseReschedule>(`${U}/${phaseBase(scope)}/phases/reschedule`, body);
+  }
+  schedulePreview(projectId: number, body: { start_date: string; due_date: string; owner_ids: number[]; exclude_id?: number; skip_ids?: number[] }) {
     return this.http.post<SchedulePreview>(`${U}/projects/${projectId}/works/schedule-preview`, body);
   }
   work(id: number) { return this.http.get<WorkDetail>(`${U}/works/${id}`); }
+  departments() { return this.http.get<string[]>(`${U}/departments`); }
   workPhasesLog(id: number) { return this.http.get<WorkPhaseLog[]>(`${U}/works/${id}/phases-log`); }
   createWork(projectId: number, body: Record<string, unknown>) { return this.http.post<Work>(`${U}/projects/${projectId}/works`, body); }
   updateWork(id: number, body: Record<string, unknown>) { return this.http.patch<Work>(`${U}/works/${id}`, body); }
   deleteWork(id: number) { return this.http.delete(`${U}/works/${id}`); }
   projectTimeline(projectId: number) { return this.http.get<ProjectTimeline>(`${U}/projects/${projectId}/timeline`); }
-  saveTimeline(projectId: number, body: { items: { id?: number; name?: string; color?: string; duration_days: number; start_date?: string | null }[]; remove: number[] }) {
+  saveTimeline(projectId: number, body: { items: { id?: number; name?: string; color?: string; duration_days: number; start_date?: string | null }[]; remove: number[]; reason?: string }) {
     return this.http.put<ProjectTimeline>(`${U}/projects/${projectId}/timeline`, body);
   }
+  workDateLog(id: number) { return this.http.get<WorkDateLog[]>(`${U}/works/${id}/date-log`); }
   visitWork(id: number) { return this.http.post(`${U}/works/${id}/visit`, {}); }
   createProject(body: Record<string, unknown>) { return this.http.post<Project>(`${U}/projects`, body); }
   updateProject(id: number, body: Record<string, unknown>) { return this.http.patch<Project>(`${U}/projects/${id}`, body); }

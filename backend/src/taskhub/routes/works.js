@@ -4,9 +4,14 @@ const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
 const { notify } = require('../lib/notify');
 const { DEFAULT_DURATION, computeTimeline, estimateDuration, businessDaysBetween, dayOf, ownerIdsOf: laneOwners, scheduleImpact } = require('../lib/timeline');
-const { teamPhases, projectTeam, projectPhases, assertProjectPhase, workPhase } = require('../lib/phases');
-const { canEdit: canEditPhases } = require('./phases');
-const { workNoun } = require('../lib/boards');
+const { projectTeam, projectPhases, assertProjectPhase, workPhase } = require('../lib/phases');
+const { readDates, logDates, setBaseline, notifyDates, datesChanged } = require('../lib/work-dates');
+const { canEdit: canEditPhases, canEditProject: canEditProjectPhases } = require('./phases');
+const { teamOfBoard } = require('../lib/boards');
+const { env } = require('../../config/env');
+const blobService = require('../../services/blob.service');
+const { uploadTaskFiles, handleTaskFilesMulterError, blobNameFor } = require('../../config/taskhub-files-upload');
+const { formatFile, safeOriginalName, unlinkQuiet } = require('../lib/attachments');
 
 // Trabalhos: Projeto → Trabalhos → Tarefas. Ficam na tabela project_sections.
 // No quadro da equipe (Setor → Equipe → Projeto → Tarefa) cada trabalho aparece como "projeto".
@@ -20,6 +25,9 @@ const WORK_SELECT = `
   SELECT s.id, s.project_id, s.name, s.description, s.color, s.position, s.due_date, s.completed_at, s.created_at,
          (SELECT wsch.duration_days FROM work_schedule wsch WHERE wsch.work_id = s.id) AS duration_days,
          (SELECT wsch.start_date FROM work_schedule wsch WHERE wsch.work_id = s.id) AS start_date,
+         (SELECT wi.department FROM work_info wi WHERE wi.work_id = s.id) AS department,
+         (SELECT pz.start_date FROM work_pauses pz WHERE pz.work_id = s.id AND pz.end_date >= CURRENT_DATE ORDER BY pz.start_date, pz.id LIMIT 1) AS pause_start,
+         (SELECT pz.end_date FROM work_pauses pz WHERE pz.work_id = s.id AND pz.end_date >= CURRENT_DATE ORDER BY pz.start_date, pz.id LIMIT 1) AS pause_end,
          s.owner_id, o.name AS owner_name, o.initials AS owner_initials, o.color AS owner_color,
          wp.phase_id, sph.name AS phase_name, sph.color AS phase_color, wp.changed_at AS phase_changed_at, wp.board_position,
          th_work_role($1, s.id) AS my_role,
@@ -31,9 +39,9 @@ const WORK_SELECT = `
            WHERE t.section_id = s.id AND ${OPEN} AND t.deadline < CURRENT_DATE)::int AS tasks_overdue,
          (SELECT COUNT(*) FROM tasks t LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
            WHERE t.section_id = s.id AND ws.category = 'blocked')::int AS tasks_blocked,
-         COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color) ORDER BY u.name)
+         COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color, 'department', u.department) ORDER BY u.name)
                      FROM work_members wm JOIN users u ON u.id = wm.user_id WHERE wm.work_id = s.id), '[]') AS members,
-         COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color) ORDER BY u.id = s.owner_id DESC, u.name)
+         COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color, 'department', u.department) ORDER BY u.id = s.owner_id DESC, u.name)
                      FROM work_owners wo JOIN users u ON u.id = wo.user_id WHERE wo.work_id = s.id), '[]') AS owners,
          COALESCE((SELECT json_agg(json_build_object('id', r.id, 'name', r.name) ORDER BY r.name)
                      FROM work_links lk JOIN project_sections r ON r.id = lk.related_id WHERE lk.work_id = s.id), '[]') AS continues,
@@ -79,6 +87,12 @@ async function projectRole(userId, projectId) {
   const { rows } = await query('SELECT th_project_role($1, $2) AS r', [userId, projectId]);
   return rows[0]?.r || null;
 }
+// Quadro de equipe: a gestão monta as fases da equipe. Projeto sem equipe: o dono monta as dele.
+async function phaseAccess(user, projectId, teamId) {
+  return teamId
+    ? { phases_scope: 'team', phases_editable: await canEditPhases(user, teamId) }
+    : { phases_scope: 'project', phases_editable: await canEditProjectPhases(user, projectId) };
+}
 async function workRole(userId, workId) {
   const { rows } = await query('SELECT th_work_role($1, $2) AS r', [userId, workId]);
   return rows[0]?.r || null;
@@ -86,7 +100,7 @@ async function workRole(userId, workId) {
 async function requireWork(user, workId, min = 'view') {
   const role = await workRole(user.id, workId);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  if (min === 'manage' && role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem é da equipe ou o responsável pode alterar.');
+  if (min === 'manage' && role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem altera é a gestão da equipe, quem o criou ou o desenvolvedor.');
   return role;
 }
 
@@ -94,15 +108,86 @@ const schema = z.object({
   name: z.string().trim().min(2, 'informe um nome').max(100),
   description: z.string().max(5000).default(''),
   owner_id: z.coerce.number().int().positive().nullable().optional(),
-  owner_ids: z.array(z.coerce.number().int().positive()).min(1, 'escolha pelo menos um responsável').max(20).optional(),
+  owner_ids: z.array(z.coerce.number().int().positive()).min(1, 'escolha pelo menos um desenvolvedor').max(20).optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#4c8dff'),
   members: z.array(z.coerce.number().int().positive()).max(200).default([]),
   duration_days: z.coerce.number().int().min(1).max(365).nullable().optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   continues_ids: z.array(z.coerce.number().int().positive()).max(30).optional(),
+  department: z.string().trim().max(200).nullable().optional(),
   push: z.boolean().optional(),
+  adjust_ids: z.array(z.coerce.number().int().positive()).max(200).optional(),
+  skip_ids: z.array(z.coerce.number().int().positive()).max(200).optional(),
+  date_reason: z.string().trim().max(500).optional(),
 });
+
+const REASON_MIN = 10;
+function requireReason(reason) {
+  const r = (reason || '').trim();
+  if (r.length < REASON_MIN) throw new HttpError(400, 'Informe o motivo da alteração das datas (pelo menos 10 letras).');
+  return r;
+}
+
+// Com conflito, só grava se a pessoa decidiu o que reajustar (push = todos).
+const decided = (d) => !!d.push || d.adjust_ids !== undefined || d.skip_ids !== undefined;
+const adjustChoice = (d) => (d.push ? {} : { adjust_ids: d.adjust_ids, skip_ids: d.skip_ids });
+
+const dm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const dmy = (iso) => `${dm(iso)}/${iso.slice(0, 4)}`;
+
+// Grava as pausas dos projetos já iniciados e avisa: solicitante sem a previsão, desenvolvedor com ela.
+async function savePauses(c, req, pauses, causeId, causeName, projectId) {
+  for (const p of pauses) {
+    await c.query(
+      'INSERT INTO work_pauses (work_id, start_date, end_date, cause_work_id, created_by) VALUES ($1, $2, $3, $4, $5)',
+      [p.work_id, p.start, p.end, causeId, req.user.id]
+    );
+    const text = `O projeto "${p.name}" fica em pausa de ${dm(p.start)} a ${dm(p.end)} enquanto a equipe atende "${causeName}".`;
+    const { rows: devs } = await c.query(
+      `SELECT user_id FROM work_owners WHERE work_id = $1
+       UNION SELECT owner_id FROM project_sections WHERE id = $1 AND owner_id IS NOT NULL`, [p.work_id]
+    );
+    const devIds = new Set(devs.map(r => r.user_id));
+    for (const uid of devIds) {
+      await notify(c, { userId: uid, actorId: req.user.id, type: 'work_pause', projectId,
+        title: text, body: `Nova previsão de entrega: ${dmy(p.new_end)}.` });
+    }
+    const { rows: reqs } = await c.query('SELECT user_id FROM work_members WHERE work_id = $1', [p.work_id]);
+    for (const r of reqs) {
+      if (devIds.has(r.user_id)) continue;
+      await notify(c, { userId: r.user_id, actorId: req.user.id, type: 'work_pause', projectId, title: text, body: p.name });
+    }
+  }
+}
+
+async function applyAdjust(c, req, impact, workId, name, projectId) {
+  if (!impact?.conflicts.length) return;
+  const before = new Map();
+  for (const u of impact.updates) before.set(u.id, await readDates(c, u.id));
+  await applyScheduleUpdates(c, impact.updates);
+  await placeBeforeConflicts(c, projectId, workId, impact.updates.map((u) => u.id));
+  const paused = new Map(impact.pauses.map(p => [p.work_id, p]));
+  for (const u of impact.updates) {
+    const p = paused.get(u.id);
+    const after = await readDates(c, u.id);
+    await logDates(c, {
+      workId: u.id, kind: p ? 'pausa' : 'reajuste', before: before.get(u.id), after,
+      reason: p ? `Pausa de ${dm(p.start)} a ${dm(p.end)} para o projeto ${name}` : `Reajuste: entrada do projeto ${name}`,
+      causeId: workId, userId: req.user.id,
+    });
+    if (!p) await notifyDates(c, { workId: u.id, kind: 'reajuste', before: before.get(u.id), after, causeName: name, actor: req.user });
+  }
+  await savePauses(c, req, impact.pauses, workId, name, projectId);
+}
+
+async function saveDepartment(c, workId, department) {
+  const value = (department || '').trim() || null;
+  await c.query(
+    `INSERT INTO work_info (work_id, department) VALUES ($1, $2)
+     ON CONFLICT (work_id) DO UPDATE SET department = EXCLUDED.department`, [workId, value]
+  );
+}
 
 // No zod 4, partial() mantém os defaults: sem tirar, um PATCH só com done apagaria descrição, cor e solicitantes.
 const patchSchema = schema.extend({
@@ -119,7 +204,7 @@ async function saveSchedule(c, workId, d) {
   );
   const start = d.start_date !== undefined ? d.start_date : (cur?.start_date || null);
   const due = d.due_date !== undefined ? d.due_date : (cur?.due_date || null);
-  if (start && due && due < start) throw new HttpError(400, 'A data final deve ser igual ou depois da inicial.');
+  if (start && due && due < start) throw new HttpError(400, 'A previsão de entrega deve ser igual ou depois da data inicial.');
   let days = d.duration_days !== undefined ? d.duration_days : (cur?.duration_days ?? null);
   if (start && due) days = Math.min(365, Math.max(1, businessDaysBetween(start, due)));
   if (!start && days == null) {
@@ -131,6 +216,14 @@ async function saveSchedule(c, workId, d) {
      ON CONFLICT (work_id) DO UPDATE SET start_date = EXCLUDED.start_date, duration_days = EXCLUDED.duration_days`,
     [workId, start || null, days ?? DEFAULT_DURATION]
   );
+}
+
+// Solicitante acompanha a fase; a previsão de entrega é só da equipe.
+function forViewer(w) {
+  if (!w || w.my_role !== 'follow') return w;
+  const out = { ...w, due_date: null, duration_days: null, ...('planned_due' in w ? { planned_due: null } : {}) };
+  if ('tl_end' in w) Object.assign(out, { tl_end: null, tl_late: false });
+  return out;
 }
 
 function timelineItem(w) {
@@ -147,7 +240,7 @@ async function boardImpact(run, userId, pid, incoming) {
 }
 
 function conflictError(impact) {
-  throw new HttpError(409, 'As datas cruzam projetos dos mesmos responsáveis.', {
+  throw new HttpError(409, 'As datas cruzam projetos dos mesmos desenvolvedores.', {
     conflicts: impact.conflicts,
     suggestion: impact.suggestion,
     duration_days: impact.duration_days,
@@ -189,11 +282,12 @@ router.get('/projects/:id/works', ah(async (req, res) => {
   );
   const teamId = await projectTeam({ query }, pid);
   res.json({
-    works: rows,
+    works: rows.map(forViewer),
     can_create: ['manage', 'edit'].includes(role),
-    phases: await teamPhases({ query }, teamId),
+    sees_all: !teamId || ['manage', 'view'].includes(role),
+    phases: await projectPhases({ query }, pid),
     team_id: teamId,
-    phases_editable: await canEditPhases(req.user, teamId),
+    ...(await phaseAccess(req.user, pid, teamId)),
   });
 }));
 
@@ -225,14 +319,13 @@ router.patch('/works/:id/phase', ah(async (req, res) => {
     if (shown === d.phase_id) return;
     await c.query('INSERT INTO work_phase_log (work_id, phase_id, changed_by) VALUES ($1, $2, $3)', [id, d.phase_id, req.user.id]);
     const { rows: [ph] } = await c.query('SELECT name FROM team_phases WHERE id = $1', [d.phase_id]);
-    const noun = await workNoun(c, w.project_id);
     for (const uid of await followersOf(c, id)) {
       await notify(c, { userId: uid, actorId: req.user.id, type: 'work_phase', projectId: w.project_id,
-        title: `${req.user.name} passou o ${noun} "${w.name}" para ${ph.name}`, body: w.name });
+        title: `${req.user.name} passou o projeto "${w.name}" para ${ph.name}`, body: w.name });
     }
   });
   const { rows } = await query(`${WORK_SELECT} WHERE s.id = $2`, [req.user.id, id]);
-  res.json(rows[0]);
+  res.json(forViewer(rows[0]));
 }));
 
 const previewSchema = z.object({
@@ -240,18 +333,20 @@ const previewSchema = z.object({
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   owner_ids: z.array(z.coerce.number().int().positive()).min(1).max(20),
   exclude_id: z.coerce.number().int().positive().optional(),
+  adjust_ids: z.array(z.coerce.number().int().positive()).max(200).optional(),
+  skip_ids: z.array(z.coerce.number().int().positive()).max(200).optional(),
 });
 
 router.post('/projects/:id/works/schedule-preview', ah(async (req, res) => {
   const pid = intParam(req.params.id);
   if (!['manage', 'edit'].includes(await projectRole(req.user.id, pid))) {
-    throw new HttpError(403, (await workNoun({ query }, pid)) === 'projeto'
-      ? 'Quem cria projetos é quem participa da equipe.' : 'Quem cria trabalhos é quem coordena o projeto.');
+    throw new HttpError(403, (await teamOfBoard({ query }, pid))
+      ? 'Quem cria projetos é quem participa da equipe.' : 'Quem cria projetos é quem coordena este quadro.');
   }
   const d = parse(previewSchema, req.body);
-  if (d.due_date < d.start_date) throw new HttpError(400, 'A data final deve ser igual ou depois da inicial.');
+  if (d.due_date < d.start_date) throw new HttpError(400, 'A previsão de entrega deve ser igual ou depois da data inicial.');
   const impact = await boardImpact({ query }, req.user.id, pid, {
-    start: d.start_date, due: d.due_date, owner_ids: d.owner_ids, exclude_id: d.exclude_id || null,
+    start: d.start_date, due: d.due_date, owner_ids: d.owner_ids, exclude_id: d.exclude_id || null, ...adjustChoice(d),
   });
   res.json({ conflicts: impact.conflicts, suggestion: impact.suggestion, duration_days: impact.duration_days });
 }));
@@ -259,20 +354,20 @@ router.post('/projects/:id/works/schedule-preview', ah(async (req, res) => {
 router.post('/projects/:id/works', ah(async (req, res) => {
   const pid = intParam(req.params.id);
   if (!['manage', 'edit'].includes(await projectRole(req.user.id, pid))) {
-    throw new HttpError(403, (await workNoun({ query }, pid)) === 'projeto'
-      ? 'Quem cria projetos é quem participa da equipe.' : 'Quem cria trabalhos é quem coordena o projeto.');
+    throw new HttpError(403, (await teamOfBoard({ query }, pid))
+      ? 'Quem cria projetos é quem participa da equipe.' : 'Quem cria projetos é quem coordena este quadro.');
   }
   const d = parse(schema.extend({ phase_id: z.coerce.number().int().positive().optional() }), req.body);
-  if (d.start_date && d.due_date && d.due_date < d.start_date) throw new HttpError(400, 'A data final deve ser igual ou depois da inicial.');
+  if (d.start_date && d.due_date && d.due_date < d.start_date) throw new HttpError(400, 'A previsão de entrega deve ser igual ou depois da data inicial.');
   if (d.phase_id) await assertProjectPhase({ query }, pid, d.phase_id);
-  const noun = await workNoun({ query }, pid);
+  const board = !!(await teamOfBoard({ query }, pid));
   const ownersList = ownerIdsOf(d) || [req.user.id];
   let impact = null;
   if (d.start_date && d.due_date) {
     impact = await boardImpact({ query }, req.user.id, pid, {
-      start: d.start_date, due: d.due_date, owner_ids: ownersList, exclude_id: null,
+      start: d.start_date, due: d.due_date, owner_ids: ownersList, exclude_id: null, ...adjustChoice(d),
     });
-    if (impact.conflicts.length && !d.push) throw conflictError(impact);
+    if (impact.conflicts.length && !decided(d)) throw conflictError(impact);
   }
   const id = await tx(async (c) => {
     const { rows: [pos] } = await c.query(
@@ -284,19 +379,22 @@ router.post('/projects/:id/works', ah(async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [pid, d.name, d.description, d.owner_id ?? req.user.id, d.due_date || null, d.color, req.user.id, pos.n]
     );
-    const owners = await setOwners(c, req, w.id, pid, ownerIdsOf(d) || [req.user.id], d.name, noun);
-    await setMembers(c, req, w.id, pid, d.members, d.name, noun, owners);
+    const owners = await setOwners(c, req, w.id, pid, ownerIdsOf(d) || [req.user.id], d.name, board);
+    await setMembers(c, req, w.id, pid, d.members, d.name, owners);
     if (d.continues_ids !== undefined) await setLinks(c, w.id, pid, d.continues_ids);
     if (d.start_date || d.duration_days) await saveSchedule(c, w.id, d);
+    if (d.department !== undefined) await saveDepartment(c, w.id, d.department);
     await startWorkPhase(c, req, pid, w.id, d.phase_id);
-    if (impact?.conflicts.length && d.push) {
-      await applyScheduleUpdates(c, impact.updates);
-      await placeBeforeConflicts(c, pid, w.id, impact.conflicts.map((x) => x.work_id));
+    const dates = await readDates(c, w.id);
+    if (dates.start || dates.due) {
+      await setBaseline(c, w.id, dates.start, dates.due, req.user.id);
+      await logDates(c, { workId: w.id, kind: 'criacao', before: null, after: dates, reason: 'Projeto criado', userId: req.user.id });
     }
+    await applyAdjust(c, req, impact, w.id, d.name, pid);
     return w.id;
   });
   const { rows } = await query(`${WORK_SELECT} WHERE s.id = $2`, [req.user.id, id]);
-  res.status(201).json(rows[0]);
+  res.status(201).json(forViewer(rows[0]));
 }));
 
 const ownerIdsOf = (d) => d.owner_ids || (d.owner_id ? [d.owner_id] : undefined);
@@ -309,15 +407,15 @@ async function activeIds(c, ids) {
 
 // Responsáveis: gravados em work_owners; owner_id fica com o primeiro (linha do tempo, painéis e filtros usam ele).
 // No quadro da equipe, só quem é da equipe pode ser responsável.
-async function setOwners(c, req, workId, projectId, ids, name, noun = 'trabalho') {
+async function setOwners(c, req, workId, projectId, ids, name, board = false) {
   const list = [...new Set(ids)];
-  if (!list.length) throw new HttpError(400, 'Escolha pelo menos um responsável.');
+  if (!list.length) throw new HttpError(400, 'Escolha pelo menos um desenvolvedor.');
   const active = await activeIds(c, list);
-  if (list.some(id => !active.has(id))) throw new HttpError(400, 'Responsável não encontrado ou inativo.');
-  if (noun === 'projeto') {
+  if (list.some(id => !active.has(id))) throw new HttpError(400, 'Desenvolvedor não encontrado ou inativo.');
+  if (board) {
     for (const uid of list) {
       const { rows: [r] } = await c.query('SELECT th_project_role($1, $2) AS r', [uid, projectId]);
-      if (!['manage', 'edit'].includes(r?.r)) throw new HttpError(400, 'Responsáveis precisam ser da equipe.');
+      if (!['manage', 'edit'].includes(r?.r)) throw new HttpError(400, 'Desenvolvedores precisam ser da equipe.');
     }
   }
   const { rows: cur } = await c.query('SELECT user_id FROM work_owners WHERE work_id = $1', [workId]);
@@ -327,18 +425,18 @@ async function setOwners(c, req, workId, projectId, ids, name, noun = 'trabalho'
     await c.query('INSERT INTO work_owners (work_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [workId, uid]);
     if (!before.has(uid)) {
       await notify(c, { userId: uid, actorId: req.user.id, type: 'work_owner', projectId,
-        title: `${req.user.name} colocou você como responsável por um ${noun}`, body: name });
+        title: `${req.user.name} colocou você como desenvolvedor de um projeto`, body: name });
     }
   }
   await c.query('UPDATE project_sections SET owner_id = $1 WHERE id = $2', [list[0], workId]);
   return list;
 }
 
-// No quadro da equipe, work_members são os solicitantes: gente de fora da equipe que só acompanha.
-// Quem é da equipe ou responsável já vê o projeto e fica de fora da lista.
-async function setMembers(c, req, workId, projectId, ids, name, noun = 'trabalho', owners = null) {
+// work_members são os solicitantes: quem pediu o projeto e só acompanha.
+// Quem já edita o quadro (equipe, dono) ou desenvolve fica de fora da lista.
+async function setMembers(c, req, workId, projectId, ids, name, owners = null) {
   let list = [...new Set(ids)];
-  if (noun === 'projeto' && list.length) {
+  if (list.length) {
     const active = await activeIds(c, list);
     if (list.some(id => !active.has(id))) throw new HttpError(400, 'Solicitante não encontrado ou inativo.');
     if (!owners) {
@@ -358,11 +456,9 @@ async function setMembers(c, req, workId, projectId, ids, name, noun = 'trabalho
   await c.query('DELETE FROM work_members WHERE work_id = $1', [workId]);
   for (const uid of list) {
     await c.query('INSERT INTO work_members (work_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [workId, uid]);
-    if (!before.has(uid) && uid !== req.user.id) {
+    if (!before.has(uid)) {
       await notify(c, { userId: uid, actorId: req.user.id, type: 'work_added', projectId,
-        title: noun === 'projeto'
-          ? `${req.user.name} colocou você como solicitante de um projeto: você acompanha as fases dele`
-          : `${req.user.name} incluiu você em um ${noun}`, body: name });
+        title: `${req.user.name} colocou você como solicitante de um projeto: você acompanha as fases dele`, body: name });
     }
   }
 }
@@ -390,6 +486,17 @@ router.get('/me/guest-works', ah(async (req, res) => {
       ORDER BY s.name`, [req.user.id]
   );
   res.json(rows.filter(r => r.role === 'partial').map(({ role, ...r }) => r));
+}));
+
+// Sugestões do campo Departamento do projeto: departamentos das pessoas e os já usados em projetos.
+router.get('/departments', ah(async (req, res) => {
+  const { rows } = await query(
+    `SELECT DISTINCT TRIM(department) AS name FROM users WHERE department IS NOT NULL AND TRIM(department) <> ''
+     UNION
+     SELECT DISTINCT TRIM(department) AS name FROM work_info WHERE department IS NOT NULL AND TRIM(department) <> ''
+     ORDER BY name`, []
+  );
+  res.json(rows.map(r => r.name));
 }));
 
 // Onde a pessoa pode criar tarefa (seletor único da Nova tarefa): projetos abertos, agrupados por equipe.
@@ -422,9 +529,11 @@ router.get('/works/:id', ah(async (req, res) => {
   const { rows: statuses } = role === 'follow' ? { rows: [] } : await query(
     'SELECT * FROM workflow_statuses WHERE project_id = $1 ORDER BY position, id', [w.project_id]
   );
-  const phases = await teamPhases({ query }, p.team_id);
-  const phasesEditable = await canEditPhases(req.user, p.team_id);
-  res.json({ ...w, my_role: role, project: p, statuses, phases, team_id: p.team_id || null, phases_editable: phasesEditable });
+  const phases = await projectPhases({ query }, p.id);
+  res.json({
+    ...forViewer({ ...w, my_role: role }), project: p, statuses, phases, team_id: p.team_id || null,
+    ...(await phaseAccess(req.user, p.id, p.team_id)),
+  });
 }));
 
 // Histórico de fases do projeto: o que o solicitante acompanha.
@@ -440,6 +549,24 @@ router.get('/works/:id/phases-log', ah(async (req, res) => {
       WHERE l.work_id = $1 ORDER BY l.changed_at DESC, l.id DESC`, [id]
   );
   res.json(rows);
+}));
+
+// Histórico de datas. O solicitante vê só mudanças de início e pausas, sem as datas de entrega.
+router.get('/works/:id/date-log', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  const role = await requireWork(req.user, id);
+  const { rows } = await query(
+    `SELECT l.id, l.kind, l.old_start, l.new_start, l.old_due, l.new_due, l.reason, l.created_at,
+            u.id AS created_by, u.name AS created_by_name, c.name AS cause_name
+       FROM work_date_log l
+       LEFT JOIN users u ON u.id = l.created_by
+       LEFT JOIN project_sections c ON c.id = l.cause_work_id
+      WHERE l.work_id = $1 ORDER BY l.created_at DESC, l.id DESC`, [id]
+  );
+  if (role !== 'follow') { res.json(rows); return; }
+  res.json(rows
+    .filter(r => r.kind === 'pausa' || r.kind === 'criacao' || (r.old_start || null) !== (r.new_start || null))
+    .map(r => ({ ...r, old_due: null, new_due: null })));
 }));
 
 router.post('/works/:id/visit', ah(async (req, res) => {
@@ -462,18 +589,22 @@ router.patch('/works/:id', ah(async (req, res) => {
   const nextStart = d.start_date !== undefined ? d.start_date : (cur.start_date || null);
   const nextDue = d.due_date !== undefined ? d.due_date : (cur.due_date || null);
   const nextOwners = ownerIdsOf(d) || laneOwners(cur);
+  const prevDates = { start: dayOf(cur.start_date) || null, due: dayOf(cur.due_date) || null };
+  const firstDates = !prevDates.start && !prevDates.due;
+  const manualDates = datesChanged(prevDates, { start: nextStart || null, due: nextDue || null });
+  const reason = manualDates && !firstDates ? requireReason(d.date_reason) : null;
   const datesChange = d.start_date !== undefined || d.due_date !== undefined || d.owner_ids !== undefined || d.owner_id !== undefined;
   let impact = null;
   if (datesChange && nextStart && nextDue && nextOwners.length && !d.done) {
-    if (nextDue < nextStart) throw new HttpError(400, 'A data final deve ser igual ou depois da inicial.');
+    if (nextDue < nextStart) throw new HttpError(400, 'A previsão de entrega deve ser igual ou depois da data inicial.');
     impact = await boardImpact({ query }, req.user.id, cur.project_id, {
-      start: nextStart, due: nextDue, owner_ids: nextOwners, exclude_id: id,
+      start: nextStart, due: nextDue, owner_ids: nextOwners, exclude_id: id, ...adjustChoice(d),
     });
-    if (impact.conflicts.length && !d.push) throw conflictError(impact);
+    if (impact.conflicts.length && !decided(d)) throw conflictError(impact);
   }
   await tx(async (c) => {
     const { rows: [w] } = await c.query('SELECT name, project_id, completed_at FROM project_sections WHERE id = $1', [id]);
-    const noun = await workNoun(c, w.project_id);
+    const board = !!(await teamOfBoard(c, w.project_id));
     const sets = []; const params = [];
     for (const k of ['name', 'description', 'due_date', 'color', 'position']) {
       if (d[k] !== undefined) { params.push(d[k]); sets.push(`${k} = $${params.length}`); }
@@ -483,36 +614,135 @@ router.patch('/works/:id', ah(async (req, res) => {
     if (d.start_date !== undefined || d.duration_days !== undefined || d.due_date !== undefined) await saveSchedule(c, id, d);
     const name = d.name || w.name;
     const ownerIds = ownerIdsOf(d);
-    const owners = ownerIds ? await setOwners(c, req, id, w.project_id, ownerIds, name, noun) : null;
-    if (d.members) await setMembers(c, req, id, w.project_id, d.members, name, noun, owners);
+    const owners = ownerIds ? await setOwners(c, req, id, w.project_id, ownerIds, name, board) : null;
+    if (d.members) await setMembers(c, req, id, w.project_id, d.members, name, owners);
     if (d.continues_ids !== undefined) await setLinks(c, id, w.project_id, d.continues_ids);
-    if (impact?.conflicts.length && d.push) {
-      await applyScheduleUpdates(c, impact.updates);
-      await placeBeforeConflicts(c, w.project_id, id, impact.conflicts.map((x) => x.work_id));
+    if (d.department !== undefined) await saveDepartment(c, id, d.department);
+    if (manualDates) {
+      const after = await readDates(c, id);
+      await setBaseline(c, id, after.start, after.due, req.user.id);
+      await logDates(c, { workId: id, kind: firstDates ? 'criacao' : 'manual', before: prevDates, after,
+        reason: reason || 'Datas definidas', userId: req.user.id });
+      if (!firstDates) await notifyDates(c, { workId: id, kind: 'manual', before: prevDates, after, reason, actor: req.user });
     }
+    await applyAdjust(c, req, impact, id, name, w.project_id);
     if (d.done && !w.completed_at) {
       for (const uid of await followersOf(c, id)) {
         await notify(c, { userId: uid, actorId: req.user.id, type: 'work_done', projectId: w.project_id,
-          title: `${req.user.name} concluiu o ${noun} "${name}"`, body: name });
+          title: `${req.user.name} concluiu o projeto "${name}"`, body: name });
       }
     }
   });
   const { rows } = await query(`${WORK_SELECT} WHERE s.id = $2`, [req.user.id, id]);
-  res.json(rows[0]);
+  res.json(forViewer(rows[0]));
 }));
 
 router.delete('/works/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  const { rows: [w] } = await query('SELECT project_id FROM project_sections WHERE id = $1', [id]);
-  if (!w) throw new HttpError(404, 'Projeto não encontrado');
-  if (!['manage', 'edit'].includes(await projectRole(req.user.id, w.project_id))) {
-    throw new HttpError(403, (await workNoun({ query }, w.project_id)) === 'projeto'
-      ? 'Quem exclui projetos é quem participa da equipe.' : 'Quem exclui trabalhos é quem coordena o projeto.');
-  }
+  const role = await workRole(req.user.id, id);
+  if (!role) throw new HttpError(404, 'Projeto não encontrado');
+  if (role !== 'manage') throw new HttpError(403, 'Quem exclui o projeto é a gestão da equipe, quem o criou ou o desenvolvedor.');
+  await removeWorkBlobs(id);
   await tx(async (c) => {
     await c.query('DELETE FROM tasks WHERE section_id = $1', [id]);
     await c.query('DELETE FROM project_sections WHERE id = $1', [id]);
   });
+  res.json({ ok: true });
+}));
+
+// ---- Anexos do projeto --------------------------------------------------------
+// Removem também os anexos das tarefas do projeto, que saem junto com ele.
+async function removeWorkBlobs(workId) {
+  const { rows } = await query(
+    `SELECT container, \`blob\` FROM work_files WHERE work_id = $1
+     UNION ALL
+     SELECT f.container, f.\`blob\` FROM task_files f JOIN tasks t ON t.id = f.task_id WHERE t.section_id = $1`,
+    [workId]
+  );
+  for (const f of rows) {
+    try {
+      await blobService.removerBlob(f.container, f.blob);
+    } catch {
+      /* blob ausente não impede excluir o projeto */
+    }
+  }
+}
+
+router.get('/works/:id/files', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  await requireWork(req.user, id);
+  const { rows } = await query(
+    `SELECT f.id, f.name, f.mime, f.size_bytes, f.created_at, f.uploaded_by, u.name AS uploader_name
+       FROM work_files f LEFT JOIN users u ON u.id = f.uploaded_by
+      WHERE f.work_id = $1 ORDER BY f.id`,
+    [id]
+  );
+  res.json(rows.map(formatFile));
+}));
+
+router.post(
+  '/works/:id/files',
+  uploadTaskFiles.array('files', env.taskhubAnexoMaxFiles),
+  handleTaskFilesMulterError,
+  ah(async (req, res) => {
+    const incoming = Array.isArray(req.files) ? req.files : [];
+    try {
+      const id = intParam(req.params.id);
+      await requireWork(req.user, id, 'manage');
+      if (!incoming.length) throw new HttpError(400, 'Envie pelo menos um arquivo.');
+      const { rows: [{ n }] } = await query('SELECT COUNT(*)::int AS n FROM work_files WHERE work_id = $1', [id]);
+      if (Number(n) + incoming.length > env.taskhubAnexoMaxFiles) {
+        throw new HttpError(400, `O projeto pode ter no máximo ${env.taskhubAnexoMaxFiles} arquivos.`);
+      }
+      const container = await blobService.garantirContainer(env.taskhubContainer);
+      const created = [];
+      for (const file of incoming) {
+        const blob = blobNameFor(file);
+        await blobService.enviarArquivo(container, file.path, blob, file.mimetype);
+        unlinkQuiet(file.path);
+        const { rows: [row] } = await query(
+          `INSERT INTO work_files (work_id, uploaded_by, name, mime, size_bytes, container, \`blob\`)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, name, mime, size_bytes, created_at, uploaded_by`,
+          [id, req.user.id, safeOriginalName(file.originalname), file.mimetype || 'application/octet-stream', file.size, container, blob]
+        );
+        row.uploader_name = req.user.name;
+        created.push(formatFile(row));
+      }
+      res.status(201).json(created);
+    } catch (err) {
+      incoming.forEach((f) => unlinkQuiet(f.path));
+      throw err;
+    }
+  })
+);
+
+router.get('/works/:id/files/:fileId', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  const fileId = intParam(req.params.fileId, 'fileId');
+  await requireWork(req.user, id);
+  const { rows: [row] } = await query(
+    'SELECT name, mime, container, `blob` FROM work_files WHERE id = $1 AND work_id = $2',
+    [fileId, id]
+  );
+  if (!row) throw new HttpError(404, 'Arquivo não encontrado.');
+  const downloaded = await blobService.baixarBuffer(row.container, row.blob);
+  res.setHeader('Content-Type', downloaded.contentType || row.mime || 'application/octet-stream');
+  res.setHeader('Content-Disposition', blobService.contentDispositionAttachment(row.name));
+  res.send(downloaded.buffer);
+}));
+
+router.delete('/works/:id/files/:fileId', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  const fileId = intParam(req.params.fileId, 'fileId');
+  await requireWork(req.user, id, 'manage');
+  const { rows: [row] } = await query(
+    'SELECT container, `blob` FROM work_files WHERE id = $1 AND work_id = $2',
+    [fileId, id]
+  );
+  if (!row) throw new HttpError(404, 'Arquivo não encontrado.');
+  await blobService.removerBlob(row.container, row.blob);
+  await query('DELETE FROM work_files WHERE id = $1', [fileId]);
   res.json({ ok: true });
 }));
 
@@ -549,7 +779,17 @@ async function timelineData(userId, pid) {
   const plan = computeTimeline(items.map(timelineItem), start);
   const ids = items.map(w => w.id);
   const logsByWork = {};
+  const baseBy = new Map();
+  const pausesBy = {};
   if (ids.length) {
+    const { rows: bases } = await query('SELECT work_id, start_date, due_date FROM work_baseline WHERE work_id = ANY($1)', [ids]);
+    for (const b of bases) baseBy.set(b.work_id, b);
+    const { rows: pz } = await query(
+      `SELECT pz.work_id, pz.start_date, pz.end_date, c.name AS cause_name
+         FROM work_pauses pz LEFT JOIN project_sections c ON c.id = pz.cause_work_id
+        WHERE pz.work_id = ANY($1) ORDER BY pz.work_id, pz.start_date, pz.id`, [ids]
+    );
+    for (const r of pz) (pausesBy[r.work_id] ||= []).push({ start: r.start_date, end: r.end_date, cause_name: r.cause_name });
     const { rows: logs } = await query(
       `SELECT l.work_id, l.phase_id, ph.name AS phase_name, ph.color AS phase_color, l.changed_at
          FROM work_phase_log l
@@ -564,27 +804,36 @@ async function timelineData(userId, pid) {
       });
     }
   }
-  const teamId = await projectTeam({ query }, pid);
   return {
     project_start: start,
     end_date: p.end_date,
     forecast_end: plan.forecast_end,
-    phases: await teamPhases({ query }, teamId),
+    phases: await projectPhases({ query }, pid),
     works: items
       .map((w, i) => ({
         ...w,
         tl_start: plan.rows[i].start, tl_end: plan.rows[i].end, tl_late: plan.rows[i].late,
         phase_log: logsByWork[w.id] || [],
+        planned_start: baseBy.has(w.id) ? baseBy.get(w.id).start_date : (w.start_date || null),
+        planned_due: baseBy.has(w.id) ? baseBy.get(w.id).due_date : (w.due_date || null),
+        pauses: pausesBy[w.id] || [],
       }))
-      .filter(w => w.my_role),
+      .filter(w => w.my_role)
+      .map(forViewer),
   };
+}
+
+// O salvamento reenvia todos os projetos do quadro; no quadro da equipe só a gestão vê todos.
+async function canEditTimeline(pid, role) {
+  if (role === 'manage') return true;
+  return role === 'edit' && !(await teamOfBoard({ query }, pid));
 }
 
 router.get('/projects/:id/timeline', ah(async (req, res) => {
   const pid = intParam(req.params.id);
   const role = await projectRole(req.user.id, pid);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  res.json({ ...(await timelineData(req.user.id, pid)), can_edit: ['manage', 'edit'].includes(role) });
+  res.json({ ...(await timelineData(req.user.id, pid)), can_edit: await canEditTimeline(pid, role) });
 }));
 
 const timelineSchema = z.object({
@@ -596,13 +845,17 @@ const timelineSchema = z.object({
     start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   })).max(300),
   remove: z.array(z.number().int().positive()).max(300).default([]),
+  reason: z.string().trim().max(500).optional(),
 });
 
 router.put('/projects/:id/timeline', ah(async (req, res) => {
   const pid = intParam(req.params.id);
   const role = await projectRole(req.user.id, pid);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  if (!['manage', 'edit'].includes(role)) throw new HttpError(403, 'Quem muda a linha do tempo é quem coordena o projeto.');
+  if (!(await canEditTimeline(pid, role))) {
+    throw new HttpError(403, (await teamOfBoard({ query }, pid))
+      ? 'Quem reorganiza a linha do tempo da equipe é o gestor.' : 'Quem muda a linha do tempo é quem coordena o projeto.');
+  }
   const d = parse(timelineSchema, req.body);
 
   for (const it of d.items) {
@@ -625,6 +878,8 @@ router.put('/projects/:id/timeline', ah(async (req, res) => {
       await c.query('DELETE FROM project_sections WHERE id = $1', [id]);
     }
 
+    const before = new Map();
+    for (const it of d.items) if (it.id) before.set(it.id, await readDates(c, it.id));
     const ids = [];
     for (const [i, it] of d.items.entries()) {
       if (it.id) {
@@ -667,6 +922,19 @@ router.put('/projects/:id/timeline', ah(async (req, res) => {
         [ids[i], done ? (d.items[i].start_date || null) : row.start, d.items[i].duration_days]
       );
       if (!done) await c.query('UPDATE project_sections SET due_date = $1 WHERE id = $2', [row.end, ids[i]]);
+    }
+    // Mudança de data pelo editor é manual: exige motivo e vira o novo planejado.
+    let reason = null;
+    for (const id of ids) {
+      const prev = before.get(id) || null;
+      const after = await readDates(c, id);
+      const first = !prev || (!prev.start && !prev.due);
+      if (prev && !datesChanged(prev, after)) continue;
+      if (!first && !reason) reason = requireReason(d.reason);
+      await setBaseline(c, id, after.start, after.due, req.user.id);
+      await logDates(c, { workId: id, kind: first ? 'criacao' : 'manual', before: prev, after,
+        reason: first ? (prev ? 'Datas definidas' : 'Projeto criado') : reason, userId: req.user.id });
+      if (!first) await notifyDates(c, { workId: id, kind: 'manual', before: prev, after, reason, actor: req.user });
     }
   });
 

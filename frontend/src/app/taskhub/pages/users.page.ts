@@ -108,7 +108,7 @@ function tempPassword() {
                     <label class="check-label"><input type="checkbox" [checked]="form.directed_sectors.includes(t.id)" (change)="toggleTeam(t.id)" /> {{ t.name }}</label>
                   }
                 </div>
-                <span class="muted small">Para acompanhar a empresa inteira, marque "Ver todos os setores e equipes" nos acessos abaixo.</span>
+                <span class="muted small">Vê, sem editar, os projetos e as tarefas das equipes dos setores marcados, e abre o painel deles.</span>
               }
 
               <div class="section-label">Acessos <span class="muted small" style="font-weight:400">os do perfil já vêm marcados; marque extras se precisar</span></div>

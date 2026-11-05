@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
 const { has } = require('../lib/permissions');
+const { sectorPanelSql } = require('./teams');
 
 const requireAdmin = (user) => {
   if (!has(user, 'gerenciar_pessoas_todas')) throw new HttpError(403, 'Apenas o administrador gerencia setores.');
@@ -11,6 +12,7 @@ const requireAdmin = (user) => {
 const SECTOR_SELECT = `
   SELECT s.*,
     th_oversees_sector($1, s.id) AS can_dashboard,
+    ${sectorPanelSql('$1', 's.id')} AS can_panel,
     (SELECT COUNT(*) FROM users u WHERE u.sector_id = s.id AND u.active IS DISTINCT FROM false) AS people_count,
     (SELECT COUNT(*) FROM teams t WHERE t.sector_id = s.id AND t.archived = false) AS teams_count,
     COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color) ORDER BY u.name)

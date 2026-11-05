@@ -10,9 +10,29 @@ async function oversees(user, teamId) {
   return rows[0].ok;
 }
 
+// Painel da equipe: todo membro abre; quem não gerencia a equipe vê só o próprio trabalho.
+async function seesTeamPanel(user, teamId) {
+  const { rows } = await query(
+    `SELECT (th_oversees_team($1, $2) = 1
+             OR EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = $2 AND m.user_id = $1)) AS ok`, [user.id, teamId]
+  );
+  return !!Number(rows[0].ok);
+}
+
 async function overseesSector(user, sectorId) {
   const { rows } = await query('SELECT th_oversees_sector($1, $2) AS ok', [user.id, sectorId]);
   return rows[0].ok;
+}
+
+// Painel do setor: quem gere o setor ou já vê o painel de todas as equipes ativas dele. Não dá outro poder.
+const sectorPanelSql = (u, s) => `(th_oversees_sector(${u}, ${s}) = 1
+  OR (EXISTS (SELECT 1 FROM teams t WHERE t.sector_id = ${s} AND t.archived = false)
+      AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.sector_id = ${s} AND t.archived = false
+                      AND th_oversees_team(${u}, t.id) = 0)))`;
+
+async function seesSectorPanel(user, sectorId) {
+  const { rows } = await query(`SELECT ${sectorPanelSql('$1', '$2')} AS ok`, [user.id, sectorId]);
+  return !!Number(rows[0].ok);
 }
 
 // Quem edita uma equipe (nome, membros, gestores, excluir): gestores do setor ou da própria equipe.
@@ -41,9 +61,10 @@ async function creatableSectors(user) {
 const TEAM_SELECT = `
   SELECT t.id, t.name, t.description, t.color, t.sector_id, s.name AS sector_name, t.created_by,
     th_oversees_team($1, t.id) AS can_dashboard,
+    (th_oversees_team($1, t.id) = 1 OR EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1)) AS can_panel,
     (SELECT COUNT(*) FROM team_members m WHERE m.team_id = t.id) AS members_count,
     (SELECT COUNT(*) FROM project_sections s JOIN team_boards b ON b.project_id = s.project_id
-      WHERE b.team_id = t.id AND s.completed_at IS NULL) AS projects_count,
+      WHERE b.team_id = t.id AND s.completed_at IS NULL AND th_work_role($1, s.id) IS NOT NULL) AS projects_count,
     (SELECT b.project_id FROM team_boards b WHERE b.team_id = t.id) AS board_id,
     EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1) AS is_member,
     COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'initials', u.initials, 'color', u.color) ORDER BY u.name)
@@ -201,3 +222,6 @@ router.delete('/:id/managers/:userId', ah(async (req, res) => {
 module.exports = router;
 module.exports.oversees = oversees;
 module.exports.overseesSector = overseesSector;
+module.exports.seesTeamPanel = seesTeamPanel;
+module.exports.seesSectorPanel = seesSectorPanel;
+module.exports.sectorPanelSql = sectorPanelSql;

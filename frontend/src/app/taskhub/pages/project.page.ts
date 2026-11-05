@@ -6,7 +6,7 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { DataService } from '../core/data.service';
-import { Person, Phase, Project, SchedulePreview, Status, StatusCategory, Task, WorkDetail, WorkPhaseLog } from '../core/models';
+import { Person, Phase, PhaseScope, Project, SchedulePreview, Status, StatusCategory, Task, WorkDetail, WorkPhaseLog } from '../core/models';
 import { CATEGORY_LABEL, dueLabel, dueTone, todayIso } from '../core/format';
 import { businessSpan, DEFAULT_DURATION, endAfter, sumPhaseDays } from '../core/timeline';
 import { GroupBy, SortBy, TaskListComponent } from '../shared/task-list';
@@ -14,7 +14,12 @@ import { AvatarComponent, IconComponent, PrioComponent, AutofocusDirective } fro
 import { WorkDashboardComponent } from '../presentation/work-dashboard.component';
 import { PhaseColumns } from '../shared/phase-columns';
 import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
+import { PersonPickerComponent } from '../shared/person-picker.component';
+import { PhaseRescheduleComponent } from '../shared/phase-reschedule.component';
+import { ScheduleImpactComponent, noneAccepted } from '../shared/schedule-impact.component';
 import { termsFor } from '../core/format';
+import { personalProjectLink } from '../core/corp-views';
+import { DateLogComponent } from '../shared/date-log.component';
 
 type Tab = 'kanban' | 'lista' | 'dashboard' | 'config';
 const VIEW_KEY = 'taskhub_project_view';
@@ -27,7 +32,7 @@ function savedView(): Tab {
 @Component({
   selector: 'app-project',
   standalone: true,
-  imports: [RouterLink, WorkDashboardComponent, AutofocusDirective, FormsModule, TaskListComponent, AvatarComponent, IconComponent, PrioComponent, ConfirmDeleteComponent],
+  imports: [RouterLink, WorkDashboardComponent, AutofocusDirective, FormsModule, TaskListComponent, AvatarComponent, IconComponent, PrioComponent, ConfirmDeleteComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent, DateLogComponent],
   template: `
     <div class="page">
       @if (project(); as p) {
@@ -42,8 +47,8 @@ function savedView(): Tab {
               </div>
               <div class="sub">
                 {{ p.name }}
-                @if (w.owners.length) { · {{ w.owners.length === 1 ? 'Responsável' : 'Responsáveis' }}: {{ ownerNames(w) }} }
-                @else if (w.owner_name) { · Responsável: {{ w.owner_name }} }
+                @if (w.owners.length) { · {{ w.owners.length === 1 ? 'Desenvolvedor' : 'Desenvolvedores' }}: {{ ownerNames(w) }} }
+                @else if (w.owner_name) { · Desenvolvedor: {{ w.owner_name }} }
                 @if (p.is_board) {
                   @if (w.members.length) { · {{ w.members.length }} {{ w.members.length === 1 ? 'solicitante' : 'solicitantes' }} }
                 } @else {
@@ -86,7 +91,7 @@ function savedView(): Tab {
                 <span style="width:12px;height:12px;border-radius:4px" [style.background]="p.color"></span>
                 <h1>{{ p.is_board ? 'Status das tarefas da equipe' : 'Configurações do projeto' }}</h1>
               </div>
-              <div class="sub">{{ p.name }} · {{ p.is_board ? 'os status valem para as tarefas de todos os projetos da equipe' : 'status do Kanban, participantes e detalhes valem para todos os trabalhos' }}</div>
+              <div class="sub">{{ p.name }} · {{ p.is_board ? 'os status valem para as tarefas de todos os projetos da equipe' : 'status do Kanban, participantes e detalhes valem para todos os projetos do quadro' }}</div>
             </div>
           </div>
         }
@@ -105,10 +110,13 @@ function savedView(): Tab {
                   }
                 </div>
                 @if (w.phase_changed_at) { <span class="hint">Desde {{ shortDate(w.phase_changed_at) }}.</span> }
+                @if (!w.completed_at && w.pause_start && w.pause_end) {
+                  <span class="wk-pause" style="align-self: flex-start">Em pausa de {{ w.pause_start.slice(8, 10) }}/{{ w.pause_start.slice(5, 7) }} a {{ w.pause_end.slice(8, 10) }}/{{ w.pause_end.slice(5, 7) }}</span>
+                }
               </div>
             </div>
             <div class="settings-section">
-              <div><h2>Responsáveis</h2><p class="desc">Quem está tocando o projeto.</p></div>
+              <div><h2>Desenvolvedores</h2><p class="desc">Quem está desenvolvendo o projeto.</p></div>
               <div>
                 @for (o of w.owners; track o.id) { <div class="status-row"><app-avatar [person]="o" /><span class="grow">{{ o.name }}</span></div> }
               </div>
@@ -121,6 +129,10 @@ function savedView(): Tab {
                     <span class="grow muted small">{{ fullDate(l.changed_at) }}@if (l.changed_by_name) { · por {{ l.changed_by_name }} }</span></div>
                 } @empty { <div class="muted small">Ainda sem mudanças de fase.</div> }
               </div>
+            </div>
+            <div class="settings-section">
+              <div><h2>Histórico de datas</h2><p class="desc">Mudanças na data de início e pausas do projeto, com o motivo.</p></div>
+              <div><app-date-log [workId]="w.id" [version]="dateLogVersion()" /></div>
             </div>
           </div>
         }
@@ -139,16 +151,14 @@ function savedView(): Tab {
         @if (work() && !following() && (tab() === 'kanban' || tab() === 'lista')) {
           <div class="toolbar">
             <input class="input" style="width:220px;height:30px" placeholder="Filtrar por título" [ngModel]="text()" (ngModelChange)="text.set($event)" aria-label="Filtrar" />
-            <select class="select" style="width:210px;height:30px" [ngModel]="who()" (ngModelChange)="who.set($event)" aria-label="Responsável">
-              <option [ngValue]="0">Todos os responsáveis</option>
-              <option [ngValue]="-1">Sem responsável</option>
-              @for (m of people(); track m.id) { <option [ngValue]="m.id">{{ m.name }}</option> }
-            </select>
+            <app-person-picker class="pp-toolbar" mode="single" [people]="people()" [value]="who()" ariaLabel="Desenvolvedor"
+                               [specials]="[{ value: 0, label: 'Todos os desenvolvedores' }, { value: -1, label: 'Sem desenvolvedor' }]"
+                               (picked)="who.set($event ?? 0)" />
             @if (tab() === 'lista') {
               <select class="select" style="width:150px;height:30px" [ngModel]="groupBy()" (ngModelChange)="groupBy.set($event)" aria-label="Agrupar">
                 @if (work()?.phases?.length) { <option value="phase">Por fase</option> }
                 <option value="status">Por status</option>
-                <option value="due">Por prazo</option><option value="assignee">Por responsável</option><option value="none">Sem grupo</option>
+                <option value="due">Por prazo</option><option value="assignee">Por desenvolvedor</option><option value="none">Sem grupo</option>
               </select>
               <select class="select" style="width:140px;height:30px" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)" aria-label="Ordenar">
                 <option value="manual">Ordem manual</option><option value="due">Por prazo</option><option value="priority">Por prioridade</option>
@@ -242,59 +252,44 @@ function savedView(): Tab {
 
         @if (tab() === 'config' && !following() && work(); as w) {
           <div class="settings-section">
-            <div><h2>{{ t().One }}</h2><p class="desc">Nome, escopo, responsáveis e período deste {{ t().one }}. As datas montam a linha do tempo {{ p.is_board ? 'da equipe' : 'do projeto' }}.</p></div>
+            <div><h2>{{ t().One }}</h2><p class="desc">Nome, escopo, desenvolvedores e período deste {{ t().one }}. As datas montam a linha do tempo {{ p.is_board ? 'da equipe' : 'do projeto' }}.</p></div>
             <div class="stack">
               <div class="fields">
                 <div class="field"><label for="wn">Nome</label><input id="wn" class="input" [disabled]="w.my_role !== 'manage'" [(ngModel)]="wform.name" /></div>
                 <div class="field"><label for="ws">Data inicial</label><input id="ws" type="date" class="input" [disabled]="w.my_role !== 'manage'" [ngModel]="wform.start_date" (ngModelChange)="onWStart($event)" /></div>
-                <div class="field"><label for="wp">Data final</label><input id="wp" type="date" class="input" [disabled]="w.my_role !== 'manage'" [min]="wform.start_date || ''" [ngModel]="wform.due_date" (ngModelChange)="onWDue($event)" /></div>
+                <div class="field"><label for="wp">Previsão de entrega</label><input id="wp" type="date" class="input" [disabled]="w.my_role !== 'manage'" [min]="wform.start_date || ''" [ngModel]="wform.due_date" (ngModelChange)="onWDue($event)" /></div>
               </div>
-              @if (wformSpanError()) { <span class="hint" style="color: var(--danger)">A data final deve ser igual ou depois da inicial.</span> }
-              @else if (wform.start_date && wform.due_date) { <span class="hint">{{ wformSpan() }} {{ wformSpan() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo responsável empurra a fila.</span> }
-              @if (wImpact(); as imp) {
-                @if (imp.conflicts.length) {
-                  <div class="wk-impact">
-                    <p>Estas datas coincidem com outros {{ t().many }} do mesmo responsável. Se continuar, a fila dele é empurrada.</p>
-                    <ul>
-                      @for (c of imp.conflicts; track c.work_id) {
-                        <li>
-                          <span><b>{{ c.name }}</b>@if (c.owner_names.length) { <span class="muted"> · {{ c.owner_names.join(', ') }}</span> }</span>
-                          <span>{{ fmtYear(c.start) }} – {{ fmtYear(c.end) }}
-                            @if (c.in_progress) { <span class="muted"> · já começou — o início fica</span> }
-                            @else if (c.new_start !== c.start) { <span> · passa para {{ fmtYear(c.new_start) }} – {{ fmtYear(c.new_end) }}</span> }
-                          </span>
-                        </li>
-                      }
-                    </ul>
-                    @if (imp.suggestion) {
-                      <p class="muted small">Para não empurrar ninguém: {{ fmtYear(imp.suggestion.start) }} a {{ fmtYear(imp.suggestion.due) }}.</p>
-                    }
-                  </div>
-                }
+              @if (wformSpanError()) { <span class="hint" style="color: var(--danger)">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
+              @else if (wform.start_date && wform.due_date) { <span class="hint">{{ wformSpan() }} {{ wformSpan() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo desenvolvedor faz um por vez e a fila dele é reajustada.</span> }
+              @if (wNeedsReason()) {
+                <div class="field">
+                  <label for="w-reason">Motivo da alteração das datas <span class="wk-late">*</span></label>
+                  <textarea id="w-reason" class="textarea" rows="2" maxlength="500" [(ngModel)]="wDateReason" placeholder="Ex.: cliente pediu para adiar a entrega"></textarea>
+                  @if (wDateReason.trim().length < 10) { <span class="hint" style="color: var(--danger)">Informe o motivo (pelo menos 10 letras). Ele fica no histórico de datas e as novas datas viram o planejado.</span> }
+                  @else { <span class="hint">Fica no histórico de datas. As novas datas viram o planejado.</span> }
+                </div>
               }
+              <app-schedule-impact [impact]="wImpact()" [many]="t().many" (toggle)="toggleWAdjust($event)" (useSuggested)="applyWSuggested()" />
               <div class="field"><label for="wd">Descrição/Escopo</label><textarea id="wd" class="textarea" [disabled]="w.my_role !== 'manage'" [(ngModel)]="wform.description"></textarea></div>
               <div class="field">
-                <label>Responsáveis</label>
+                <label>Desenvolvedores</label>
                 <div class="row" style="flex-wrap: wrap; gap: 6px">
                   @for (m of chosenWorkOwners(); track m.id) {
                     <span class="pill"><app-avatar [person]="m" />{{ m.name }}@if (w.my_role === 'manage') {<button type="button" (click)="toggleWorkOwner(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button>}</span>
                   }
                 </div>
                 @if (w.my_role === 'manage') {
-                  <select #wo class="select" (change)="toggleWorkOwner(+wo.value); wo.value = ''" aria-label="Adicionar responsável">
-                    <option value="">Adicionar responsável…</option>
-                    @for (u of workOwnerCandidates(); track u.id) { <option [value]="u.id">{{ u.name }}</option> }
-                  </select>
+                  <app-person-picker [people]="workOwnerCandidates()" placeholder="Adicionar desenvolvedor…" (picked)="toggleWorkOwner($event ?? 0)" />
                 }
-                @if (!wOwnerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um responsável.</span> }
+                @if (!wOwnerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um desenvolvedor.</span> }
               </div>
               @if (w.my_role === 'manage') {
                 <div class="row">
                   @if (wImpact()?.conflicts?.length) {
                     <button class="btn btn-sm" (click)="applyWSuggested()">Usar data sugerida</button>
-                    <button class="btn btn-primary btn-sm" [disabled]="wformSpanError() || !wOwnerIds().length" (click)="saveWork(true)">Salvar e empurrar</button>
+                    <button class="btn btn-primary btn-sm" [disabled]="wformSpanError() || !wOwnerIds().length || wReasonMissing()" (click)="saveWork(true)">{{ noneAccepted(wImpact()) ? 'Salvar (ficam juntos)' : 'Salvar e reajustar' }}</button>
                   } @else {
-                    <button class="btn btn-primary btn-sm" [disabled]="wformSpanError() || !wOwnerIds().length" (click)="saveWork()">Salvar</button>
+                    <button class="btn btn-primary btn-sm" [disabled]="wformSpanError() || !wOwnerIds().length || wReasonMissing()" (click)="saveWork()">Salvar</button>
                   }
                   <button class="btn btn-sm" (click)="toggleWorkDone()">{{ w.completed_at ? 'Reabrir ' + t().one : 'Marcar como concluído' }}</button>
                 </div>
@@ -302,21 +297,18 @@ function savedView(): Tab {
             </div>
           </div>
           <div class="settings-section">
-            @if (p.is_board) {
-              <div><h2>Solicitantes</h2><p class="desc">Quem pediu o projeto, de qualquer área. Só acompanha: vê a fase e o histórico e é avisado a cada mudança de fase, sem ver as tarefas.</p></div>
-            } @else {
-              <div><h2>Participantes do trabalho</h2><p class="desc">Veem este trabalho e as tarefas dele. Quem participa do projeto inteiro vê todos os trabalhos.</p></div>
-            }
+            <div><h2>Histórico de datas</h2><p class="desc">Toda mudança de início ou entrega: as manuais com o motivo, os reajustes e as pausas automáticas.</p></div>
+            <div><app-date-log [workId]="w.id" [version]="dateLogVersion()" /></div>
+          </div>
+          <div class="settings-section">
+            <div><h2>Solicitantes</h2><p class="desc">Quem pediu o projeto, de qualquer área. Só acompanha: vê a fase e o histórico e é avisado a cada mudança de fase, sem ver as tarefas.</p></div>
             <div>
               @for (m of w.members; track m.id) {
                 <div class="status-row"><app-avatar [person]="m" /><span class="grow">{{ m.name }}</span>
                   @if (w.my_role === 'manage') { <button class="btn btn-ghost btn-sm btn-icon" (click)="removeWorkMember(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="14" /></button> }</div>
-              } @empty { <div class="muted small">{{ p.is_board ? 'Nenhum solicitante.' : 'Ninguém além dos participantes do projeto.' }}</div> }
+              } @empty { <div class="muted small">Nenhum solicitante.</div> }
               @if (w.my_role === 'manage') {
-                <div class="mini-form"><select #wm class="select" (change)="addWorkMember(+wm.value); wm.value = ''" [attr.aria-label]="p.is_board ? 'Adicionar solicitante' : 'Adicionar participante'">
-                  <option value="">Adicionar pessoa…</option>
-                  @for (u of workCandidates(); track u.id) { <option [value]="u.id">{{ u.name }}</option> }
-                </select></div>
+                <div class="mini-form"><app-person-picker class="grow" [people]="workCandidates()" placeholder="Adicionar solicitante…" (picked)="addWorkMember($event ?? 0)" /></div>
               }
             </div>
           </div>
@@ -330,9 +322,9 @@ function savedView(): Tab {
             </div>
           } @else if (canManage()) {
             <div class="settings-section">
-              <div><h2>Projeto</h2><p class="desc">Status do Kanban, participantes e detalhes valem para todos os trabalhos.</p></div>
+              <div><h2>Projeto</h2><p class="desc">Status do Kanban, participantes e detalhes valem para todos os projetos do quadro.</p></div>
               <div class="row"><a class="btn btn-sm" [routerLink]="['/ti/taskhub/projetos', p.id, 'configuracoes']">Abrir configurações do projeto</a>
-                <button class="btn btn-sm btn-danger" (click)="deleting.set('work')">Excluir trabalho</button></div>
+                <button class="btn btn-sm btn-danger" (click)="deleting.set('work')">Excluir projeto</button></div>
             </div>
           }
         }
@@ -409,7 +401,7 @@ function savedView(): Tab {
 
           @if (p.space === 'profissional' && !p.is_board) {
           <div class="settings-section">
-            <div><h2>Participantes</h2><p class="desc"><b>Colaborador</b>: vê o projeto e atualiza as tarefas que estão com ele. <b>Coordena</b>: cria, edita, distribui e exclui tarefas deste projeto. O responsável de um trabalho também cria tarefas naquele trabalho.</p></div>
+            <div><h2>Participantes</h2><p class="desc"><b>Colaborador</b>: vê o projeto e atualiza as tarefas que estão com ele. <b>Coordena</b>: cria, edita, distribui e exclui tarefas deste projeto. O desenvolvedor de um projeto também cria tarefas naquele projeto.</p></div>
             <div>
               @for (m of p.members || []; track m.id) {
                 <div class="status-row">
@@ -426,11 +418,7 @@ function savedView(): Tab {
               }
               @if (canManage()) {
                 <div class="mini-form">
-                  <select class="select" [(ngModel)]="newMember">
-                    <option [ngValue]="null">Escolha uma pessoa</option>
-                    @for (u of nonMembers(); track u.id) { <option [ngValue]="u.id">{{ u.name }}{{ u.team_name ? ' · ' + u.team_name : '' }}</option> }
-                  </select>
-                  <button class="btn btn-sm" [disabled]="!newMember" (click)="setMember(newMember!, 'leitor'); newMember = null">Adicionar</button>
+                  <app-person-picker class="grow" [people]="nonMembers()" placeholder="Adicionar participante…" (picked)="$event && setMember($event, 'leitor')" />
                 </div>
               }
             </div>
@@ -454,7 +442,7 @@ function savedView(): Tab {
         }
         @if (deleting() === 'project') {
           <app-confirm-delete title="Excluir projeto" [name]="p.name" [busy]="removing()"
-                              [message]="'O projeto ' + p.name + ' e todos os trabalhos e tarefas dele serão apagados.'"
+                              [message]="'O quadro ' + p.name + ' e todos os projetos e tarefas dele serão apagados.'"
                               (cancel)="deleting.set(null)" (confirm)="remove()" />
         }
       } @else if (error()) {
@@ -462,6 +450,9 @@ function savedView(): Tab {
       } @else { <div class="muted">Carregando…</div> }
     </div>
 
+    @if (cols.rescheduleScope(); as sc) {
+      <app-phase-reschedule [scope]="sc" (closed)="afterReschedule($event)" />
+    }
   `,
 })
 export class ProjectPage implements OnInit, OnChanges, OnDestroy {
@@ -470,12 +461,13 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   workId = input<string>();
   mode = input<string>();
   private resolvedId = signal(0);
-  t = computed(() => termsFor(!!this.project()?.is_board));
+  t = computed(() => termsFor());
   deleting = signal<'work' | 'project' | null>(null);
   removing = signal(false);
   backLink = computed(() => {
     const p = this.project();
-    return p?.is_board && p.team_id ? ['/ti/taskhub/equipes', p.team_id] : ['/ti/taskhub/projetos', p?.id];
+    if (p?.is_board && p.team_id) return ['/ti/taskhub/kanban/equipes', p.team_id];
+    return p?.space === 'pessoal' ? personalProjectLink('kanban', p.id) : ['/ti/taskhub/projetos', p?.id];
   });
   work = signal<WorkDetail | null>(null);
   wform: { name: string; description: string; start_date: string | null; due_date: string | null } = { name: '', description: '', start_date: null, due_date: null };
@@ -497,6 +489,15 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     const d = new Date(iso.replace(' ', 'T'));
     return isNaN(d.getTime()) ? iso : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
+  private wSavedDates: { start: string | null; due: string | null } | null = null;
+  wDateReason = '';
+  dateLogVersion = signal(0);
+  wNeedsReason() {
+    const s = this.wSavedDates;
+    if (!s || (!s.start && !s.due)) return false;
+    return (this.wform.start_date || null) !== s.start || (this.wform.due_date || null) !== s.due;
+  }
+  wReasonMissing() { return this.wNeedsReason() && this.wDateReason.trim().length < 10; }
   wformSpanError() { return !!(this.wform.start_date && this.wform.due_date && this.wform.due_date < this.wform.start_date); }
   wformSpan() { return this.wform.start_date && this.wform.due_date ? businessSpan(this.wform.start_date, this.wform.due_date) : 0; }
   onWStart(v: string) {
@@ -522,7 +523,14 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   }
   private wImpactTimer: ReturnType<typeof setTimeout> | null = null;
   private wImpactReq = 0;
-  private checkWImpact() {
+  /** Projetos implicados que não aceitam reajuste (ficam junto com este). */
+  private wSkipIds = signal<number[]>([]);
+  noneAccepted = noneAccepted;
+  toggleWAdjust(id: number) {
+    this.wSkipIds.update(l => (l.includes(id) ? l.filter(x => x !== id) : [...l, id]));
+    this.checkWImpact(0);
+  }
+  private checkWImpact(wait = 400) {
     if (this.wImpactTimer) clearTimeout(this.wImpactTimer);
     this.wImpactReq++;
     const w = this.work();
@@ -536,14 +544,14 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     const owners = this.wOwnerIds();
     this.wImpactTimer = setTimeout(() => {
       if (req !== this.wImpactReq) return;
-      this.api.schedulePreview(w.project_id, { start_date: start, due_date: due, owner_ids: owners, exclude_id: w.id }).subscribe({
+      this.api.schedulePreview(w.project_id, { start_date: start, due_date: due, owner_ids: owners, exclude_id: w.id, skip_ids: this.wSkipIds() }).subscribe({
         next: preview => {
           if (req !== this.wImpactReq) return;
           this.wImpact.set(preview.conflicts?.length ? preview : null);
         },
         error: () => {},
       });
-    }, 400);
+    }, wait);
   }
   shortDate(iso: string) { const [, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}`; }
   fmtYear(iso: string) { const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y}`; }
@@ -565,8 +573,13 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   showClosed = signal(false);
   dropCol = signal<number | null>(null);
   dragId = signal<number | null>(null);
+  private phaseScope = computed<PhaseScope | null>(() => {
+    const w = this.work(); if (!w) return null;
+    if (w.phases_scope === 'project') return { kind: 'project', id: w.project.id };
+    return w.team_id ? { kind: 'team', id: w.team_id } : null;
+  });
   cols = new PhaseColumns({
-    api: this.api, toast: this.toast, phases: () => this.work()?.phases || [], teamId: () => this.work()?.team_id ?? null,
+    api: this.api, toast: this.toast, phases: () => this.work()?.phases || [], scope: () => this.phaseScope(),
     saved: phases => { this.work.update(w => (w ? { ...w, phases } : w)); this.reloadWork(); this.loadTasks(); },
   });
 
@@ -574,7 +587,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   categoryLabel = CATEGORY_LABEL;
   healthLabel = { no_prazo: 'No prazo', em_risco: 'Em risco', atrasado: 'Atrasado' } as const;
   form: any = {};
-  newStatus = ''; newStatusCat: StatusCategory = 'doing'; newMember: number | null = null;
+  newStatus = ''; newStatusCat: StatusCategory = 'doing';
   private sub?: Subscription;
   private loadedId = '';
 
@@ -678,10 +691,12 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
       next: p => {
         // Projeto da equipe abre pelo endereço da equipe; o quadro em si não tem tela própria fora da configuração de status.
         if (p.is_board && p.team_id && !this.teamId() && (wid || this.mode() !== 'config')) {
-          this.router.navigate(['/ti/taskhub/equipes', p.team_id, ...(wid ? ['projetos', wid] : [])], { replaceUrl: true });
+          this.router.navigate(wid
+            ? ['/ti/taskhub/equipes', p.team_id, 'projetos', wid]
+            : ['/ti/taskhub/kanban/equipes', p.team_id], { replaceUrl: true });
           return;
         }
-        if (p.my_role === 'partial' && !wid) { this.router.navigate(p.is_board && p.team_id ? ['/ti/taskhub/equipes', p.team_id] : ['/ti/taskhub/projetos', pid]); return; }
+        if (p.my_role === 'partial' && !wid) { this.router.navigate(p.is_board && p.team_id ? ['/ti/taskhub/kanban/equipes', p.team_id] : ['/ti/taskhub/projetos', pid]); return; }
         const summary = this.data.projects().find(x => x.id === pid);
         this.project.set({ ...p, ...(summary ? { done_count: summary.done_count, total_count: summary.total_count } : {}) });
         this.form = { name: p.name, health: p.health, owner_id: p.owner_id, sector_id: p.sector_id ?? null, team_id: p.team_id ?? null, start_date: p.start_date, end_date: p.end_date, description: p.description };
@@ -698,7 +713,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
           if (w.my_role === 'follow') this.api.workPhasesLog(wid).subscribe({ next: l => this.phasesLog.set(l), error: () => {} });
           else this.loadTasks();
         },
-        error: e => this.error.set(errorMessage(e, this.teamId() ? 'Projeto não encontrado ou sem acesso.' : 'Trabalho não encontrado ou sem acesso.')),
+        error: e => this.error.set(errorMessage(e, 'Projeto não encontrado ou sem acesso.')),
       });
       this.api.visitWork(wid).subscribe({ error: () => {} });
     } else {
@@ -709,10 +724,16 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   private setWork(w: WorkDetail) {
     this.work.set(w);
     this.wform = { name: w.name, description: w.description, start_date: w.start_date ?? null, due_date: w.due_date };
+    this.wSavedDates = { start: w.start_date ?? null, due: w.due_date ?? null };
+    this.wDateReason = '';
     this.wOwnerIds.set(w.owners?.length ? w.owners.map(o => o.id) : w.owner_id ? [w.owner_id] : []);
-    this.wImpact.set(null);
+    this.wImpact.set(null); this.wSkipIds.set([]);
     this.wAutoDue = false;
     this.checkWImpact();
+  }
+  afterReschedule(result: 'applied' | 'kept' | 'cancelled') {
+    this.cols.closeReschedule(result);
+    if (result === 'applied') { this.reloadWork(); this.loadTasks(); this.dateLogVersion.update(v => v + 1); }
   }
   private reloadWork() {
     const wid = Number(this.workId()); if (!wid) return;
@@ -728,14 +749,15 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   }
   saveWork(push = false) {
     const w = this.work(); if (!w) return;
-    if (this.wformSpanError() || !this.wOwnerIds().length) return;
+    if (this.wformSpanError() || !this.wOwnerIds().length || this.wReasonMissing()) return;
     if (!push && this.wImpact()?.conflicts?.length) return;
-    const body: Record<string, unknown> = { ...this.wform, owner_ids: this.wOwnerIds(), start_date: this.wform.start_date || null, due_date: this.wform.due_date || null, ...(push ? { push: true } : {}) };
+    const body: Record<string, unknown> = { ...this.wform, owner_ids: this.wOwnerIds(), start_date: this.wform.start_date || null, due_date: this.wform.due_date || null, ...(push ? { skip_ids: this.wSkipIds() } : {}),
+      ...(this.wNeedsReason() ? { date_reason: this.wDateReason.trim() } : {}) };
     this.commitWork(w.id, body);
   }
   private commitWork(id: number, body: Record<string, unknown>) {
     this.api.updateWork(id, body).subscribe({
-      next: () => { this.wImpact.set(null); this.reloadWork(); this.toast.show(`${this.t().One} atualizado.`); },
+      next: () => { this.wImpact.set(null); this.reloadWork(); this.dateLogVersion.update(v => v + 1); this.toast.show(`${this.t().One} atualizado.`); },
       error: e => {
         if (e?.status === 409 && e?.error?.conflicts) { this.wImpact.set(e.error); return; }
         this.toast.error(errorMessage(e, `Não foi possível salvar o ${this.t().one}.`));

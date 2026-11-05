@@ -1,20 +1,39 @@
 const { HttpError } = require('./http');
 
-// Fases dos projetos do quadro. Cada equipe tem a lista dela; sem lista própria, vale a padrão (team_id NULL).
+// Fases dos projetos. Cada equipe tem a lista dela; o projeto sem equipe pode ter a própria
+// (ligada em project_phases); sem lista própria, vale a padrão (team_id NULL e fora de project_phases).
+
+const COLS = 'id, team_id, name, color, position, duration_days';
 
 function withDays(rows) {
   return rows.map((r) => ({ ...r, duration_days: Math.min(365, Math.max(0, Number(r.duration_days) || 0)) }));
 }
 
+async function defaultPhases(run) {
+  const { rows } = await run.query(
+    `SELECT ${COLS} FROM team_phases
+      WHERE team_id IS NULL AND id NOT IN (SELECT phase_id FROM project_phases)
+      ORDER BY position, id`
+  );
+  return withDays(rows);
+}
+
 async function teamPhases(run, teamId) {
   if (teamId) {
     const { rows } = await run.query(
-      'SELECT id, team_id, name, color, position, duration_days FROM team_phases WHERE team_id = $1 ORDER BY position, id', [teamId]
+      `SELECT ${COLS} FROM team_phases WHERE team_id = $1 ORDER BY position, id`, [teamId]
     );
     if (rows.length) return withDays(rows);
   }
+  return defaultPhases(run);
+}
+
+// Só as fases próprias do projeto (vazio quando ele usa a padrão).
+async function ownPhases(run, projectId) {
   const { rows } = await run.query(
-    'SELECT id, team_id, name, color, position, duration_days FROM team_phases WHERE team_id IS NULL ORDER BY position, id'
+    `SELECT tp.id, tp.team_id, tp.name, tp.color, tp.position, tp.duration_days
+       FROM team_phases tp JOIN project_phases pp ON pp.phase_id = tp.id
+      WHERE pp.project_id = $1 ORDER BY tp.position, tp.id`, [projectId]
   );
   return withDays(rows);
 }
@@ -25,7 +44,10 @@ async function projectTeam(run, projectId) {
 }
 
 async function projectPhases(run, projectId) {
-  return teamPhases(run, await projectTeam(run, projectId));
+  const teamId = await projectTeam(run, projectId);
+  if (teamId) return teamPhases(run, teamId);
+  const own = await ownPhases(run, projectId);
+  return own.length ? own : defaultPhases(run);
 }
 
 async function assertProjectPhase(run, projectId, phaseId) {
@@ -49,4 +71,4 @@ async function setTaskPhase(run, taskId, phaseId) {
   );
 }
 
-module.exports = { teamPhases, projectTeam, projectPhases, assertProjectPhase, workPhase, setTaskPhase };
+module.exports = { teamPhases, defaultPhases, ownPhases, projectTeam, projectPhases, assertProjectPhase, workPhase, setTaskPhase };

@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<string, string> = { blocked: 'bloqueadas', doing: 'em
           <label class="label" for="g">Agrupar</label>
           <select id="g" class="select" style="width:150px;height:30px" [value]="groupBy()" (change)="groupBy.set($any($event.target).value)">
             <option value="due">Prazo</option><option value="project">Projeto</option>
-            <option value="status">Status</option><option value="assignee">Responsável</option><option value="none">Sem grupo</option>
+            <option value="status">Status</option><option value="assignee">Desenvolvedor</option><option value="none">Sem grupo</option>
           </select>
           <select class="select" style="width:140px;height:30px" [value]="sortBy()" (change)="sortBy.set($any($event.target).value)" aria-label="Ordenar">
             <option value="manual">Ordem padrão</option><option value="due">Por prazo</option>
@@ -68,7 +68,7 @@ export class TasksPage implements OnInit, OnDestroy {
     const parts = ['Tarefas'];
     if (this.q()['status']) parts.push(STATUS_LABEL[this.q()['status']] || '');
     if (this.q()['due']) parts.push(DUE_LABEL[this.q()['due']] || '');
-    if (this.q()['assignee'] === 'none') parts.push('sem responsável');
+    if (this.q()['assignee'] === 'none') parts.push('sem desenvolvedor');
     return parts.join(' ');
   });
   subtitle = computed(() => {

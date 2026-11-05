@@ -31,3 +31,4 @@ export const adminGuard: CanActivateFn = () => {
     ? router.createUrlTree(['/ti/taskhub/administracao'], { queryParams: { aba: 'pessoas' } })
     : router.createUrlTree(['/ti/taskhub/meu-dia']);
 };
+

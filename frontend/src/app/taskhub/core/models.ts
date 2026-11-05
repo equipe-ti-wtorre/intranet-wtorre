@@ -19,7 +19,7 @@ export interface User {
 
 export interface Person {
   id: number; name: string; username: string; initials: string; color: string; avatar_url?: string | null;
-  job_title?: string; away_until?: string | null; role?: string;
+  job_title?: string; department?: string | null; away_until?: string | null; role?: string;
   team_id?: number | null; team_name?: string | null; in_team?: boolean;
   sector_id?: number | null; sector_name?: string | null;
   profiles?: string[]; can_coordinate?: boolean; from_directory?: boolean;
@@ -67,6 +67,15 @@ export interface Subtask {
 
 export interface TaskContact { id: number; name: string; initials: string; color: string }
 
+export interface TaskFile {
+  id: number;
+  name: string;
+  mime: string;
+  size_bytes: number;
+  created_at: string;
+  uploaded_by: { id: number; name: string } | null;
+}
+
 export interface TaskDetail extends Task {
   subtasks: Subtask[]; statuses: Status[]; sections: Section[]; phases?: Phase[]; current_step_id?: number | null;
   // Registro da reunião: com quem foi alinhado (sem aviso nem acesso) e a data.
@@ -86,7 +95,7 @@ export interface TimelineEntry {
 }
 
 export interface Team {
-  id: number; name: string; description: string; color: string; can_dashboard?: boolean;
+  id: number; name: string; description: string; color: string; can_dashboard?: boolean; can_panel?: boolean;
   sector_id?: number; sector_name?: string; can_edit?: boolean; is_member?: boolean;
   managers?: { id: number; name: string; initials: string; color: string }[];
   my_role: 'gestor' | 'membro' | null; members_count?: number; projects_count?: number; board_id?: number | null;
@@ -101,10 +110,12 @@ export interface Work {
   my_role: 'manage' | 'view' | 'follow'; last_visit: string | null;
   tasks_total: number; tasks_done: number; tasks_overdue: number; tasks_blocked: number;
   // No quadro da equipe, members são os solicitantes.
-  members: { id: number; name: string; initials: string; color: string }[];
-  owners: { id: number; name: string; initials: string; color: string }[];
+  members: { id: number; name: string; initials: string; color: string; department?: string | null }[];
+  owners: { id: number; name: string; initials: string; color: string; department?: string | null }[];
   duration_days?: number | null;
   start_date?: string | null;
+  department?: string | null;
+  pause_start?: string | null; pause_end?: string | null;
   phase_id?: number | null; phase_name?: string | null; phase_color?: string | null; phase_changed_at?: string | null; board_position?: number | null;
   continues?: { id: number; name: string }[];
   continued_by?: { id: number; name: string }[];
@@ -120,6 +131,15 @@ export interface TimelineWork extends Work {
   duration_days: number; duration_saved: boolean;
   tl_start: string; tl_end: string; tl_late: boolean;
   phase_log?: WorkPhaseStay[];
+  planned_start: string | null; planned_due: string | null;
+  pauses: WorkPause[];
+}
+export interface WorkPause { start: string; end: string; cause_name: string | null }
+/** Histórico de datas: criação, mudança manual (com motivo), reajuste, pausa ou fases. */
+export interface WorkDateLog {
+  id: number; kind: 'criacao' | 'manual' | 'reajuste' | 'pausa' | 'fases';
+  old_start: string | null; new_start: string | null; old_due: string | null; new_due: string | null;
+  reason: string | null; created_at: string; created_by: number | null; created_by_name: string | null; cause_name: string | null;
 }
 export interface ProjectTimeline {
   project_start: string; end_date: string | null; forecast_end: string | null;
@@ -129,7 +149,19 @@ export interface ProjectTimeline {
 export interface ScheduleConflict {
   work_id: number; name: string; owner_ids: number[]; owner_names: string[];
   start: string; end: string; new_start: string; new_end: string; in_progress: boolean;
+  requester_names: string[]; overlaps: boolean; accepted: boolean;
+  pause: { start: string; end: string } | null;
 }
+export interface PhaseReschedule {
+  total: number;
+  candidates: { work_id: number; name: string; owners: string[]; start: string; old_due: string; new_due: string; new_start?: string; selected: boolean }[];
+  pushes: { work_id: number; name: string; owners: string[]; old_start: string; old_end: string; new_start: string; new_end: string }[];
+  overlaps: { a: { id: number; name: string }; b: { id: number; name: string }; owners: string[] }[];
+  applied: boolean;
+}
+/** Dono da lista de fases: a equipe (quadro) ou o projeto sem equipe. */
+export interface PhaseScope { kind: 'team' | 'project'; id: number }
+
 export interface SchedulePreview {
   conflicts: ScheduleConflict[];
   suggestion: { start: string; due: string };
@@ -141,6 +173,7 @@ export interface WorkDetail extends Work {
   phases: Phase[];
   team_id: number | null;
   phases_editable: boolean;
+  phases_scope: 'team' | 'project';
 }
 
 // Dashboard do trabalho (alimenta a aba Dashboard do trabalho, a apresentação e o PowerPoint).
@@ -164,7 +197,7 @@ export interface WorkDashboard {
 }
 
 export interface Sector {
-  id: number; name: string; description: string; color: string; can_dashboard: boolean;
+  id: number; name: string; description: string; color: string; can_dashboard: boolean; can_panel?: boolean;
   people_count: number; teams_count: number; managers: { id: number; name: string; initials: string; color: string }[];
 }
 
@@ -215,6 +248,7 @@ export interface Note {
 
 export interface TeamDashboard {
   team: { id: number; name: string; color: string };
+  scope?: 'full' | 'mine';
   generated_at: string;
   kpis: {
     open: number; doing: number; blocked: number; overdue: number; done_week: number; done_prev_week: number;
@@ -225,7 +259,12 @@ export interface TeamDashboard {
   blocked: (Task & { blocked_since: string })[];
   due_soon: Task[]; overdue: Task[]; triage: Task[];
   waiting_other: (Task & { waiting_on: { name: string; team: string; step: string | null }[] })[];
-  teams?: { id: number; name: string; color: string; members_count: number; open: number; overdue: number }[];
+  teams?: { id: number; name: string; color: string; members_count: number; open: number; overdue: number; projects?: number }[];
+  project_kpis?: { total: number; done: number; doing: number; paused: number; attention: number };
+  team_projects?: {
+    id: number; name: string; color: string;
+    projects: { id: number; name: string; color: string; team_id: number; status: 'done' | 'paused' | 'attention' | 'doing'; pct: number; due_date: string | null; owner_name: string | null }[];
+  }[];
 }
 
 export interface SearchResult {

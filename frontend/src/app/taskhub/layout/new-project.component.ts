@@ -1,19 +1,21 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { personalProjectLink, savePersonalProject } from '../core/corp-views';
 import { ApiService, errorMessage } from '../core/api.service';
 import { DataService } from '../core/data.service';
 import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { AuthService } from '../core/auth.service';
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { PersonPickerComponent } from '../shared/person-picker.component';
 
 const COLORS = ['#c9a84c', '#4c8dff', '#2fbf71', '#a78bfa', '#f97316', '#14b8a6', '#ec4899', '#e5534b'];
 
 @Component({
   selector: 'app-new-project',
   standalone: true,
-  imports: [FormsModule, AutofocusDirective, AvatarComponent, IconComponent],
+  imports: [FormsModule, AutofocusDirective, AvatarComponent, IconComponent, PersonPickerComponent],
   template: `
     <div class="modal-scrim" (click)="close()">
       <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Novo projeto">
@@ -61,10 +63,7 @@ const COLORS = ['#c9a84c', '#4c8dff', '#2fbf71', '#a78bfa', '#f97316', '#14b8a6'
                   <button type="button" (click)="remove(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button></span>
               }
             </div>
-            <select #pick class="select" (change)="add(+pick.value); pick.value = ''" aria-label="Incluir pessoa">
-              <option value="" selected>Incluir pessoa…</option>
-              @for (p of available(); track p.id) { <option [value]="p.id">{{ p.name }}{{ p.team_name ? ' · ' + p.team_name : '' }}</option> }
-            </select>
+            <app-person-picker [people]="available()" placeholder="Incluir pessoa…" (picked)="add($event)" />
             <span class="hint"><b>Colaborador</b> vê o projeto e atualiza as tarefas que estão com ele. <b>Coordena</b> (outro gestor) também cria e edita tarefas. Para alguém participar só de uma tarefa, basta atribuí-la a ele.</span>
           </div>
           }
@@ -92,8 +91,8 @@ export class NewProjectComponent {
   private api = inject(ApiService);
   private data = inject(DataService);
   private ui = inject(UiService);
-  private router = inject(Router);
   private toast = inject(ToastService);
+  private router = inject(Router);
   auth = inject(AuthService);
 
   colors = COLORS;
@@ -147,7 +146,11 @@ export class NewProjectComponent {
         return { user_id, role };
       }),
     }).subscribe({
-      next: p => { this.data.reloadProjects(); this.close(); this.toast.show('Projeto criado.'); this.router.navigate(['/ti/taskhub/projetos', p.id]); },
+      next: (p) => {
+        const personal = this.space === 'pessoal';
+        this.data.reloadProjects(); this.close(); this.toast.show('Projeto criado.');
+        if (personal && p?.id) { savePersonalProject(p.id); void this.router.navigate(personalProjectLink('kanban', p.id)); }
+      },
       error: e => { this.saving.set(false); this.error.set(errorMessage(e)); },
     });
   }

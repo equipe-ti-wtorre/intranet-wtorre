@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnChanges, ViewChild, computed, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, OnChanges, OnDestroy, ViewChild, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService, errorMessage } from '../core/api.service';
@@ -6,16 +6,17 @@ import { DataService } from '../core/data.service';
 import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { AuthService } from '../core/auth.service';
-import { Person, Phase, Status, Subtask, TaskDetail, TimelineEntry } from '../core/models';
-import { PRIORITIES, SIZES, activityValue, dueLabel, stamp, termsFor, todayIso } from '../core/format';
+import { Person, Phase, Status, Subtask, TaskDetail, TaskFile, TimelineEntry } from '../core/models';
+import { PRIORITIES, SIZES, TASK_FILE_ACCEPT, TASK_FILE_MAX, TASK_FILE_MAX_MB, activityValue, dueLabel, fileSize, isTaskImage, stamp, taskFileError, termsFor, todayIso } from '../core/format';
 import { AvatarComponent, IconComponent, RichTextComponent, AutofocusDirective } from '../shared/ui';
+import { PersonGroup, PersonPickerComponent } from '../shared/person-picker.component';
 import { takeBulletLine } from '../core/steps-text';
 import { concat, toArray } from 'rxjs';
 
 const ACTIVITY_TEXT: Record<string, string> = {
   created: 'criou a tarefa',
   status_changed: 'mudou o status para',
-  assignee_changed: 'mudou o responsável para',
+  assignee_changed: 'mudou o desenvolvedor para',
   due_changed: 'mudou o prazo para',
   priority_changed: 'mudou a prioridade para',
   title_changed: 'renomeou para',
@@ -27,7 +28,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
 @Component({
   selector: 'app-task-drawer',
   standalone: true,
-  imports: [AutofocusDirective, FormsModule, RouterLink, AvatarComponent, IconComponent, RichTextComponent],
+  imports: [AutofocusDirective, FormsModule, RouterLink, AvatarComponent, IconComponent, RichTextComponent, PersonPickerComponent],
   template: `
     <div class="task-modal-scrim" (click)="ui.closeTask()">
     <aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalhes da tarefa" (click)="$event.stopPropagation()">
@@ -95,21 +96,12 @@ const ACTIVITY_TEXT: Record<string, string> = {
               }
             </div>
 
-            <div class="k">Responsável</div>
+            <div class="k">Desenvolvedor</div>
             @if (t.space === 'pessoal') { <div class="v"><app-avatar [person]="t.assignee" /> Você</div> } @else {
             <div class="v">
-              <app-avatar [person]="t.assignee" />
-              <select class="inline grow" [disabled]="!editable()" [ngModel]="t.assignee?.id ?? null" (ngModelChange)="patch({ assignee_id: $event })" aria-label="Responsável">
-                <option [ngValue]="null">Sem responsável</option>
-                <optgroup [label]="t.project ? 'Participantes do projeto' : 'Pessoas'">
-                  @for (p of teamPeople(); track p.id) { <option [ngValue]="p.id">{{ p.name }}{{ p.team_name ? ' · ' + p.team_name : '' }}{{ away(p) }}</option> }
-                </optgroup>
-                @if (otherPeople().length) {
-                  <optgroup label="Outras pessoas (veem só esta tarefa)">
-                    @for (p of otherPeople(); track p.id) { <option [ngValue]="p.id">{{ p.name }} · {{ p.team_name || 'sem equipe' }}{{ away(p) }}</option> }
-                  </optgroup>
-                }
-              </select>
+              <app-person-picker class="grow" mode="single" variant="inline" [groups]="assigneeGroups()" [value]="t.assignee?.id ?? null"
+                                 [specials]="[{ value: null, label: 'Sem desenvolvedor' }]" [placeholder]="t.assignee?.name || 'Sem desenvolvedor'"
+                                 ariaLabel="Desenvolvedor" [disabled]="!editable()" (picked)="patch({ assignee_id: $event })" />
             </div>
             }
             @if (assigneeAway(); as away) {
@@ -124,10 +116,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
                 </span>
               }
               @if (editable()) {
-                <select #ct class="inline" (change)="toggleContact(+ct.value); ct.value = ''" aria-label="Adicionar pessoa com quem foi alinhado">
-                  <option value="">{{ t.contacts?.length ? '+ pessoa' : 'Adicionar pessoa…' }}</option>
-                  @for (p of contactCandidates(); track p.id) { <option [value]="p.id">{{ p.name }}{{ p.sector_name ? ' · ' + p.sector_name : '' }}</option> }
-                </select>
+                <app-person-picker variant="inline" [people]="contactCandidates()" [placeholder]="t.contacts?.length ? '+ pessoa' : 'Adicionar pessoa…'"
+                                   ariaLabel="Adicionar pessoa com quem foi alinhado" (picked)="toggleContact($event ?? 0)" />
               } @else if (!t.contacts?.length) { <span class="muted">—</span> }
             </div>
 
@@ -228,11 +218,9 @@ const ACTIVITY_TEXT: Record<string, string> = {
                   <button class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveSub(i, 1)" aria-label="Descer etapa" title="Descer"><app-icon name="chevron" [size]="12" class="rot-down" /></button>
                 </span>
                 @if (t.space === 'profissional') {
-                <select class="inline step-who" [ngModel]="s.assignee_id" (ngModelChange)="setSub(s.id, { assignee_id: $event })" aria-label="Responsável pela etapa" [title]="s.assignee_name ? s.assignee_name + (s.assignee_team ? ' · ' + s.assignee_team : '') : 'Responsável'">
-                  <option [ngValue]="null">Responsável</option>
-                  <optgroup [label]="t.project ? 'Participantes do projeto' : 'Pessoas'">@for (p of teamPeople(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }</optgroup>
-                  @if (otherPeople().length) { <optgroup label="Outras pessoas">@for (p of otherPeople(); track p.id) { <option [ngValue]="p.id">{{ p.name }} · {{ p.team_name || 'sem equipe' }}</option> }</optgroup> }
-                </select>
+                <app-person-picker class="step-who" mode="single" variant="inline" [groups]="assigneeGroups()" [value]="s.assignee_id ?? null"
+                                   [specials]="[{ value: null, label: 'Sem desenvolvedor' }]" [placeholder]="s.assignee_name || 'Desenvolvedor'"
+                                   ariaLabel="Desenvolvedor da etapa" (picked)="setSub(s.id, { assignee_id: $event })" />
                 @if (s.assignee_id && s.assignee_id !== me) {
                   <label class="check-label step-notify" title="Avisar a pessoa quando for a vez dela"><input type="checkbox" class="switch" role="switch" [checked]="s.notify !== false" (change)="setSub(s.id, { notify: s.notify === false })" /> avisar</label>
                 }
@@ -253,6 +241,47 @@ const ACTIVITY_TEXT: Record<string, string> = {
               <input class="inline grow" placeholder="Adicionar etapa e Enter" [(ngModel)]="newSub" (keydown.enter)="addSub()" />
             </div>
             @if (t.space === 'profissional') { <div class="muted small" style="margin-top:4px">As etapas andam em ordem: cada pessoa é avisada quando chega a vez dela, e a gestão do projeto acompanha cada conclusão.</div> }
+          }
+
+          <div class="section-label step-head">
+            <span>Anexos</span>
+            @if (files().length) { <span class="muted small">{{ files().length }}</span> }
+            <span class="grow"></span>
+            @if (editable() && files().length < fileMax) {
+              <label class="btn btn-ghost btn-sm qa-file-add">
+                <app-icon name="paperclip" [size]="14" />
+                Incluir
+                <input type="file" multiple hidden [accept]="fileAccept" [disabled]="uploadingFiles()" (change)="addFiles($event)" />
+              </label>
+            }
+          </div>
+          @if (filesLoading()) { <div class="muted small">Carregando anexos…</div> }
+          @if (!filesLoading() && !files().length) {
+            <div class="muted small">Nenhum anexo.</div>
+          }
+          <div class="th-files">
+            @for (f of files(); track f.id) {
+              <div class="th-file">
+                @if (previewOf(f.id); as src) {
+                  <button type="button" class="th-file-thumb" (click)="openPreview(f)" [attr.aria-label]="'Ver ' + f.name">
+                    <img [src]="src" [alt]="f.name" />
+                  </button>
+                } @else {
+                  <span class="th-file-ico"><app-icon name="paperclip" [size]="14" /></span>
+                }
+                <div class="th-file-meta">
+                  <button type="button" class="th-file-name" (click)="downloadFile(f)" [title]="'Baixar ' + f.name">{{ f.name }}</button>
+                  <span class="muted small">{{ fileSize(f.size_bytes) }}@if (f.uploaded_by) { · {{ f.uploaded_by.name }} }</span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="downloadFile(f)" [attr.aria-label]="'Baixar ' + f.name" title="Baixar"><app-icon name="download" [size]="14" /></button>
+                @if (editable()) {
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removeFile(f)" [attr.aria-label]="'Remover ' + f.name" title="Remover"><app-icon name="trash" [size]="14" /></button>
+                }
+              </div>
+            }
+          </div>
+          @if (editable()) {
+            <div class="muted small" style="margin-top:4px">Imagem, PDF, Word, Excel, PowerPoint, texto ou zip. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</div>
           }
 
           <div class="section-label">Atividade</div>
@@ -353,7 +382,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
           <div class="modal-body">
             <div class="field"><label for="mv-reason">Motivo da mudança</label>
               <textarea id="mv-reason" class="textarea" [(ngModel)]="moveReason" placeholder="Por que a tarefa está mudando de etapa?" maxlength="1000" appAutofocus></textarea>
-              <span class="muted small">Visível para você, o responsável e a gestão do projeto.</span>
+              <span class="muted small">Visível para você, o desenvolvedor e a gestão do projeto.</span>
             </div>
             @if (s.category === 'blocked') {
               <div class="field"><label for="mv-block">O que está bloqueando</label>
@@ -371,7 +400,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
     }
   `,
 })
-export class TaskDrawerComponent implements OnChanges {
+export class TaskDrawerComponent implements OnChanges, OnDestroy {
   taskId = input.required<number>();
   @ViewChild('titleEl') titleEl?: ElementRef<HTMLTextAreaElement>;
 
@@ -397,6 +426,14 @@ export class TaskDrawerComponent implements OnChanges {
 
   priorities = PRIORITIES;
   sizes = SIZES;
+  fileAccept = TASK_FILE_ACCEPT;
+  fileMax = TASK_FILE_MAX;
+  fileMaxMb = TASK_FILE_MAX_MB;
+  fileSize = fileSize;
+  files = signal<TaskFile[]>([]);
+  filesLoading = signal(false);
+  uploadingFiles = signal(false);
+  private previews = signal<Record<number, string>>({});
   today = todayIso();
   draftTitle = '';
   draftDescription: string | null = null;
@@ -409,7 +446,7 @@ export class TaskDrawerComponent implements OnChanges {
   // Colaborador ("work") atualiza status, tamanho, bloqueio e etapas.
   working = computed(() => ['edit', 'work'].includes(this.task()?.access || ''));
   me = this.auth.user()?.id ?? 0;
-  terms = computed(() => termsFor(!!this.data.projects().find(x => x.id === this.task()?.project?.id)?.is_board));
+  terms = computed(() => termsFor());
   seesProject = computed(() => { const p = this.task()?.project; return !p || this.data.projects().some(x => x.id === p.id); });
   myOpenSteps = computed(() => (this.task()?.subtasks || []).filter(s => s.assignee_id === this.me && !s.done));
   isBoard = computed(() => !!this.data.projects().find(x => x.id === this.task()?.project?.id)?.is_board);
@@ -419,6 +456,10 @@ export class TaskDrawerComponent implements OnChanges {
   });
   teamPeople = computed(() => this.people().filter(p => p.in_team !== false));
   otherPeople = computed(() => this.people().filter(p => p.in_team === false));
+  assigneeGroups = computed<PersonGroup[]>(() => [
+    { label: this.task()?.project ? 'Participantes do projeto' : 'Pessoas', people: this.teamPeople() },
+    { label: 'Outras pessoas (veem só esta tarefa)', people: this.otherPeople() },
+  ]);
   doneSubtasks = computed(() => this.task()?.subtasks.filter(s => s.done).length || 0);
   // Etapas em sequência: a da vez é a primeira não concluída.
   currentId = computed(() => this.task()?.subtasks.find(s => !s.done)?.id ?? null);
@@ -431,7 +472,7 @@ export class TaskDrawerComponent implements OnChanges {
     const cur = list.find(s => s.id === this.currentId());
     if (!list.length) return '';
     if (!cur) return 'Todas concluídas';
-    return `Na vez: ${cur.assignee_id === this.me ? 'você' : cur.assignee_name || 'sem responsável'}`;
+    return `Na vez: ${cur.assignee_id === this.me ? 'você' : cur.assignee_name || 'sem desenvolvedor'}`;
   });
   phaseMenu = signal(false);
   otherPhases = computed(() => {
@@ -483,6 +524,83 @@ export class TaskDrawerComponent implements OnChanges {
       error: e => { this.loading.set(false); this.error.set(errorMessage(e, 'Tarefa não encontrada ou sem acesso.')); },
     });
     this.api.timeline(this.taskId()).subscribe({ next: tl => this.timeline.set(tl), error: () => {} });
+    this.loadFiles();
+  }
+
+  ngOnDestroy() { this.revokePreviews(); }
+
+  previewOf(id: number) { return this.previews()[id] || ''; }
+
+  private revokePreviews() {
+    for (const url of Object.values(this.previews())) URL.revokeObjectURL(url);
+    this.previews.set({});
+  }
+
+  private loadFiles() {
+    this.filesLoading.set(true);
+    this.api.taskFiles(this.taskId()).subscribe({
+      next: list => {
+        this.filesLoading.set(false);
+        this.revokePreviews();
+        this.files.set(list);
+        for (const f of list) {
+          if (!isTaskImage(f.mime)) continue;
+          this.api.downloadTaskFile(this.taskId(), f.id).subscribe({
+            next: blob => this.previews.update(m => ({ ...m, [f.id]: URL.createObjectURL(blob) })),
+            error: () => {},
+          });
+        }
+      },
+      error: () => { this.filesLoading.set(false); this.files.set([]); },
+    });
+  }
+
+  addFiles(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const picked = [...(input.files || [])];
+    input.value = '';
+    if (!picked.length || this.uploadingFiles()) return;
+    const keep: File[] = [];
+    let count = this.files().length;
+    for (const f of picked) {
+      const err = taskFileError(f, count);
+      if (err) { this.toast.error(err); continue; }
+      keep.push(f);
+      count += 1;
+    }
+    if (!keep.length) return;
+    this.uploadingFiles.set(true);
+    this.api.uploadTaskFiles(this.taskId(), keep).subscribe({
+      next: () => { this.uploadingFiles.set(false); this.toast.show(keep.length === 1 ? 'Anexo incluído.' : 'Anexos incluídos.'); this.loadFiles(); },
+      error: e => { this.uploadingFiles.set(false); this.toast.error(errorMessage(e)); },
+    });
+  }
+
+  downloadFile(f: TaskFile) {
+    this.api.downloadTaskFile(this.taskId(), f.id).subscribe({
+      next: blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = f.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: e => this.toast.error(errorMessage(e, 'Não foi possível baixar o arquivo.')),
+    });
+  }
+
+  openPreview(f: TaskFile) {
+    const src = this.previewOf(f.id);
+    if (src) window.open(src, '_blank', 'noopener');
+    else this.downloadFile(f);
+  }
+
+  removeFile(f: TaskFile) {
+    this.api.deleteTaskFile(this.taskId(), f.id).subscribe({
+      next: () => { this.toast.show('Anexo removido.'); this.loadFiles(); },
+      error: e => this.toast.error(errorMessage(e)),
+    });
   }
 
   autosize() {
@@ -553,7 +671,7 @@ export class TaskDrawerComponent implements OnChanges {
       next: r => {
         const list = r.works.filter(w => !w.completed_at && (r.can_create || w.my_role === 'manage'));
         if (list.length !== 1) {
-          const T = termsFor(!!this.data.projects().find(x => x.id === projectId)?.is_board);
+          const T = termsFor();
           this.toast.show(list.length ? `Aí há mais de um ${T.one}. Abra o ${T.one} e mova a tarefa para lá.` : `Ainda não há nenhum ${T.one} aí.`);
           this.load();
           return;

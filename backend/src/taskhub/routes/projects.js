@@ -9,6 +9,7 @@ const { teamOfBoard } = require('../lib/boards');
 
 // partial = participa só de algum trabalho do projeto (vê o projeto e só esses trabalhos).
 const ROLE_RANK = { partial: 0.5, guest: 1, view: 2, edit: 3, manage: 4 };
+const PROJECT_COUNTS = ['members_count', 'open_count', 'overdue_count', 'done_count', 'total_count'];
 
 async function projectRole(userId, projectId) {
   const { rows } = await query('SELECT th_project_role($1, $2) AS role', [userId, projectId]);
@@ -68,7 +69,8 @@ router.get('/', ah(async (req, res) => {
       ORDER BY p.name`,
     params
   );
-  res.json(rows);
+  // No MariaDB as contagens com FILTER viram SUM(...) e chegam como texto ("0" aparece como badge).
+  res.json(rows.map(r => ({ ...r, ...Object.fromEntries(PROJECT_COUNTS.map(k => [k, Number(r[k]) || 0])) })));
 }));
 
 // Qualquer pessoa cria projetos (exceto contas de convidado) e inclui quem quiser.
@@ -127,9 +129,7 @@ router.get('/:id', ah(async (req, res) => {
   const partial = role === 'partial';
   const [{ rows: statuses }, { rows: sections }, { rows: members }] = await Promise.all([
     query('SELECT * FROM workflow_statuses WHERE project_id = $1 ORDER BY position, id', [id]),
-    partial
-      ? query('SELECT * FROM project_sections WHERE project_id = $1 AND th_work_role($2, id) IS NOT NULL ORDER BY position, id', [id, req.user.id])
-      : query('SELECT * FROM project_sections WHERE project_id = $1 ORDER BY position, id', [id]),
+    query('SELECT * FROM project_sections WHERE project_id = $1 AND th_work_role($2, id) IS NOT NULL ORDER BY position, id', [id, req.user.id]),
     partial ? { rows: [] } : query(
       `SELECT u.id, u.name, u.username, u.initials, u.color, pm.role, th_is_manager(u.id) AS can_coordinate, ${TEAM_FIELDS('u')}
          FROM project_members pm JOIN users u ON u.id = pm.user_id
@@ -145,7 +145,7 @@ router.get('/:id/people', ah(async (req, res) => {
   const id = intParam(req.params.id);
   await requireProject(req.user, id, 'partial');
   const { rows } = await query(
-    `SELECT u.id, u.name, u.username, u.initials, u.color, u.job_title, u.away_until,
+    `SELECT u.id, u.name, u.username, u.initials, u.color, u.job_title, u.department, u.away_until,
             ${TEAM_FIELDS('u')},
             (EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = u.id)
               OR EXISTS (SELECT 1 FROM team_boards b JOIN team_members m ON m.team_id = b.team_id
@@ -197,7 +197,12 @@ router.delete('/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
   await requireProject(req.user, id, 'manage');
   if (await teamOfBoard({ query }, id)) throw new HttpError(400, 'O quadro da equipe só sai junto com a equipe.');
-  await query('DELETE FROM projects WHERE id = $1', [id]);
+  // As fases próprias do projeto ficam com team_id NULL: sem o vínculo virariam parte da lista padrão.
+  await tx(async (c) => {
+    const { rows: own } = await c.query('SELECT phase_id FROM project_phases WHERE project_id = $1', [id]);
+    await c.query('DELETE FROM projects WHERE id = $1', [id]);
+    if (own.length) await c.query('DELETE FROM team_phases WHERE id = ANY($1)', [own.map(r => r.phase_id)]);
+  });
   res.json({ ok: true });
 }));
 

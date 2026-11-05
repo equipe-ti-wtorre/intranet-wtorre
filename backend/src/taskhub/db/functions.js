@@ -43,10 +43,6 @@ const FUNCTIONS = [
      IF EXISTS (SELECT 1 FROM th_team_managers tm WHERE tm.team_id = p_team AND tm.user_id = p_user) THEN
        RETURN 1;
      END IF;
-     IF th_has(p_user, 'ver_painel_equipe') = 1
-        AND EXISTS (SELECT 1 FROM th_team_members m WHERE m.user_id = p_user AND m.team_id = p_team) THEN
-       RETURN 1;
-     END IF;
      RETURN 0;
    END`,
 
@@ -125,17 +121,18 @@ const FUNCTIONS = [
      DECLARE result VARCHAR(10) DEFAULT NULL;
      DECLARE v_project INT;
      DECLARE v_owner INT;
+     DECLARE v_creator INT;
      DECLARE v_role VARCHAR(10);
      DECLARE CONTINUE HANDLER FOR NOT FOUND SET result = NULL;
-     SELECT project_id, owner_id INTO v_project, v_owner FROM th_project_sections WHERE id = p_work;
+     SELECT project_id, owner_id, created_by INTO v_project, v_owner, v_creator FROM th_project_sections WHERE id = p_work;
      SET v_role = th_project_role(p_user, v_project);
-     IF v_role IN ('manage', 'edit') OR v_owner = p_user
+     IF v_role = 'manage' OR v_owner = p_user OR v_creator = p_user
         OR EXISTS (SELECT 1 FROM th_work_owners wo WHERE wo.work_id = p_work AND wo.user_id = p_user) THEN RETURN 'manage'; END IF;
+     -- No quadro da equipe, ser membro não abre os projetos dos outros: só a gestão vê todos.
+     IF v_role = 'edit' AND NOT EXISTS (SELECT 1 FROM th_team_boards tb WHERE tb.project_id = v_project) THEN RETURN 'manage'; END IF;
      IF v_role IN ('view', 'guest') THEN RETURN 'view'; END IF;
-     -- No quadro da equipe, quem está em work_members é solicitante: acompanha a fase, sem ver tarefas.
-     IF EXISTS (SELECT 1 FROM th_work_members wm WHERE wm.work_id = p_work AND wm.user_id = p_user) THEN
-       RETURN IF(EXISTS (SELECT 1 FROM th_team_boards tb WHERE tb.project_id = v_project), 'follow', 'view');
-     END IF;
+     -- Quem está em work_members é solicitante: acompanha a fase, sem ver tarefas.
+     IF EXISTS (SELECT 1 FROM th_work_members wm WHERE wm.work_id = p_work AND wm.user_id = p_user) THEN RETURN 'follow'; END IF;
      RETURN result;
    END`,
 
@@ -167,7 +164,9 @@ const FUNCTIONS = [
      END IF;
      IF v_project IS NOT NULL THEN
        SET v_prole = th_project_role(p_user, v_project);
-       IF v_prole IN ('manage', 'edit') THEN RETURN 'edit'; END IF;
+       IF v_prole = 'manage' THEN RETURN 'edit'; END IF;
+       IF v_prole = 'edit' AND (v_section IS NULL
+          OR NOT EXISTS (SELECT 1 FROM th_team_boards tb WHERE tb.project_id = v_project)) THEN RETURN 'edit'; END IF;
      END IF;
      IF v_section IS NOT NULL THEN
        SET v_wrole = th_work_role(p_user, v_section);

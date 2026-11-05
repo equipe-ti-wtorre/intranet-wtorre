@@ -59,6 +59,10 @@
     <app-pesq-icon name="edit" [size]="14" />
     Criados por mim
   </button>
+  <button type="button" class="tab-btn" [class.active]="tab() === 'shared'" (click)="setTab('shared')">
+    <app-pesq-icon name="users" [size]="14" />
+    Compartilhados comigo
+  </button>
   <button type="button" class="tab-btn" [class.active]="tab() === 'mine'" (click)="setTab('mine')">
     <app-pesq-icon name="eye" [size]="14" />
     Respondidos por mim
@@ -146,6 +150,45 @@
       }
     }
   </div>
+
+} @else if (tab() === 'shared') {
+  <p class="page-sub" style="margin-bottom: 16px; max-width: none">
+    Formulários cuja gestão foi compartilhada com você.
+  </p>
+  <div class="list-card">
+    @if (loadingLista()) {
+      <div class="empty-state"><p>Carregando…</p></div>
+    } @else if (!compartilhados().length) {
+      <div class="empty-state">
+        <app-pesq-icon name="inbox" [size]="30" />
+        <p>Nenhum formulário compartilhado com você.</p>
+      </div>
+    } @else {
+      @for (item of compartilhados(); track item.id) {
+        <div class="list-row">
+          <button type="button" class="list-row-main" (click)="abrirDashboard(item)">
+            <span class="badge" [class]="statusBadgeClass(item)">{{ statusBadgeText(item) }}</span>
+            <div class="row-icon">
+              <app-pesq-icon name="file-text" />
+            </div>
+            <div class="row-main">
+              <p class="row-title">{{ item.title }}</p>
+              <div class="row-meta">
+                <span>Formulário</span>
+                <span>·</span>
+                <span>{{ janelaRotulo(item) }}</span>
+                <span class="badge typepill">{{ papelBadge(item) }}</span>
+              </div>
+            </div>
+          </button>
+          <button type="button" class="chev-right" (click)="abrirDashboard(item)" aria-label="Abrir resultados">
+            <app-pesq-icon name="chevron-right" [size]="15" />
+          </button>
+        </div>
+      }
+    }
+  </div>
+
 } @else {
   <p class="page-sub" style="margin-bottom: 16px; max-width: none">
     Formulários que <b>você</b> já respondeu como colaborador — inclusive os que outras

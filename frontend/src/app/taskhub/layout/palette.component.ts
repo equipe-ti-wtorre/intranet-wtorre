@@ -72,11 +72,11 @@ export class PaletteComponent implements OnDestroy {
     const r = this.results();
     const cmds = this.commands.filter(c => !q || c.label.toLowerCase().includes(q));
     const works: Item[] = (r.works || []).map(w => ({
-      kind: 'project', label: w.name, note: w.team_name, color: w.color, run: () => this.go(`/equipes/${w.team_id}/projetos/${w.id}`),
+      kind: 'project', label: w.name, note: w.team_name, color: w.color,       run: () => this.go(`/ti/taskhub/equipes/${w.team_id}/projetos/${w.id}`),
     }));
     const projects: Item[] = [...works, ...(q.length >= 2 ? r.projects : this.data.projects().slice(0, 5)).map((p): Item => ({
       kind: 'project', label: p.name, note: p.is_board ? 'Equipe' : p.owner_name || p.team_name || undefined, color: p.color,
-      run: () => this.go(p.is_board && p.team_id ? `/equipes/${p.team_id}` : `/projetos/${p.id}`),
+      run: () => this.go(p.is_board && p.team_id ? `/ti/taskhub/kanban/equipes/${p.team_id}` : `/ti/taskhub/projetos/${p.id}`),
     }))];
     const tasks: Item[] = r.tasks.map(t => ({
       kind: 'task', label: t.title, note: t.project?.name || (t.space === 'pessoal' ? 'Individual' : 'Sem projeto'), icon: t.status.category === 'done' ? 'check' : 'list',

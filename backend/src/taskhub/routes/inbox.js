@@ -48,4 +48,10 @@ router.post('/:id/snooze', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+router.delete('/:id', ah(async (req, res) => {
+  const { rowCount } = await query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [intParam(req.params.id), req.user.id]);
+  if (!rowCount) throw new HttpError(404, 'Notificação não encontrada');
+  res.json({ ok: true });
+}));
+
 module.exports = router;

@@ -3,12 +3,12 @@ const { query } = require('../db');
 const { ah, intParam, HttpError } = require('../lib/http');
 const { TASK_SELECT, STATUS_CATEGORY_SQL, formatTask, DAY_REF_MIN } = require('../lib/tasks');
 const { isoDate, addDays, weekStart } = require('../lib/dates');
-const { oversees, overseesSector } = require('./teams');
+const { oversees, seesTeamPanel, seesSectorPanel } = require('./teams');
 
 // Painel de uma equipe ou de um setor inteiro: mesma lógica, muda o grupo de pessoas.
 const GROUPS = {
-  team: { people: 'SELECT user_id FROM team_members WHERE team_id = $2', table: 'teams', check: oversees, label: 'equipe' },
-  sector: { people: 'SELECT id FROM users WHERE sector_id = $2 AND active IS DISTINCT FROM false', table: 'sectors', check: overseesSector, label: 'setor' },
+  team: { people: 'SELECT user_id FROM team_members WHERE team_id = $2', table: 'teams', check: seesTeamPanel, label: 'esta equipe' },
+  sector: { people: 'SELECT id FROM users WHERE sector_id = $2 AND active IS DISTINCT FROM false', table: 'sectors', check: seesSectorPanel, label: 'este setor' },
 };
 
 const OPEN = `${STATUS_CATEGORY_SQL} IN ('todo','doing','blocked')`;
@@ -23,7 +23,9 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
   const G = GROUPS[req.params.kind];
   const teamId = intParam(req.params.id);
   const me = req.user.id;
-  if (!(await G.check(req.user, teamId))) throw new HttpError(403, `Você não acompanha este ${G.label}.`);
+  if (!(await G.check(req.user, teamId))) throw new HttpError(403, `Você não acompanha ${G.label}.`);
+  // Quem gerencia vê a equipe inteira; o membro vê só o próprio trabalho (as tarefas já passam por th_task_access).
+  const full = req.params.kind === 'sector' || !!Number(await oversees(req.user, teamId));
 
   const { rows: [team] } = await query(`SELECT id, name, color FROM ${G.table} WHERE id = $1`, [teamId]);
   if (!team) throw new HttpError(404, 'Não encontrado');
@@ -73,9 +75,9 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
        AND COALESCE((SELECT space FROM projects px WHERE px.id = t.project_id), t.space) = 'profissional'
      LEFT JOIN projects p ON p.id = t.project_id
      LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
-     WHERE u.id IN (${G.people}) AND u.active IS DISTINCT FROM false AND $1::int IS NOT NULL AND (p.id IS NULL OR p.archived = false)
+     WHERE u.id IN (${G.people}) AND u.active IS DISTINCT FROM false AND ($5 = 1 OR u.id = $1) AND (p.id IS NULL OR p.archived = false)
      GROUP BY u.id ORDER BY u.name`,
-    [me, teamId, today, in7]
+    [me, teamId, today, in7, full ? 1 : 0]
   );
 
   const list = async (extra, order, limit = 40, params = []) => {
@@ -95,6 +97,7 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
 
   res.json({
     team,
+    scope: full ? 'full' : 'mine',
     generated_at: new Date(),
     kpis: {
       ...numbers(k, KPI_FIELDS),
@@ -110,19 +113,39 @@ router.get('/:kind(team|sector)/:id', ah(async (req, res) => {
     triage: await list(`${OPEN} AND t.deadline IS NULL`, 't.created_at DESC', 30),
     waiting_other: await waitingOther(me, teamId, G.people),
     teams: req.params.kind === 'sector' ? await sectorTeams(me, teamId, today) : undefined,
+    ...(req.params.kind === 'sector' ? await sectorProjectData(teamId, today) : {}),
   });
 }));
 
 const OPEN_TK = `COALESCE(ws.category, CASE WHEN tk.completed_at IS NOT NULL THEN 'done' ELSE 'todo' END) IN ('todo','doing','blocked')`;
-const TEAM_FIELDS = ['members_count', 'open', 'overdue'];
+const OPEN_SEC = `COALESCE(ws.category, CASE WHEN t.completed_at IS NOT NULL THEN 'done' ELSE 'todo' END) IN ('todo','doing','blocked')`;
+const TEAM_FIELDS = ['members_count', 'open', 'overdue', 'projects_n'];
 
-// Equipes do setor, com abertas e atrasadas visíveis para quem abre o painel.
+function dayKey(v) {
+  if (!v) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return isoDate(v);
+  const s = String(v);
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+
+function projectStatus(row, today) {
+  if (row.completed_at) return 'done';
+  const phase = String(row.phase_name || '').toLowerCase();
+  if (phase.includes('pausa')) return 'paused';
+  const lateDue = !!row.due_date && row.due_date < today;
+  if (row.tasks_overdue || row.tasks_blocked || lateDue) return 'attention';
+  return 'doing';
+}
+
+// Equipes do setor, com abertas, atrasadas e projetos do quadro.
 async function sectorTeams(me, sectorId, today) {
   const canSee = `th_task_access($1, tk.id) IS NOT NULL`;
   const professional = `COALESCE(p.space, tk.space) = 'profissional' AND (p.id IS NULL OR p.archived = false)`;
   const { rows } = await query(
     `SELECT tm.id, tm.name, tm.color,
        (SELECT COUNT(*) FROM team_members m WHERE m.team_id = tm.id) AS members_count,
+       (SELECT COUNT(*) FROM project_sections s JOIN team_boards b ON b.project_id = s.project_id
+         WHERE b.team_id = tm.id AND s.completed_at IS NULL) AS projects_n,
        COUNT(tk.id) FILTER (WHERE ${OPEN_TK} AND ${professional} AND ${canSee}) AS open,
        COUNT(tk.id) FILTER (WHERE ${OPEN_TK} AND ${professional} AND tk.deadline < $3 AND ${canSee}) AS overdue
      FROM teams tm
@@ -134,7 +157,69 @@ async function sectorTeams(me, sectorId, today) {
      GROUP BY tm.id, tm.name, tm.color ORDER BY tm.name`,
     [me, sectorId, today]
   );
-  return rows.map(r => ({ ...r, ...numbers(r, TEAM_FIELDS) }));
+  return rows.map(r => {
+    const n = numbers(r, TEAM_FIELDS);
+    const { projects_n, ...rest } = { ...r, ...n, projects: n.projects_n };
+    return rest;
+  });
+}
+
+// Cartões do quadro das equipes do setor (quem abre o painel já acompanha o setor).
+async function sectorProjectData(sectorId, today) {
+  const { rows } = await query(
+    `SELECT s.id, s.name, s.color, s.due_date, s.completed_at, s.position,
+       tm.id AS team_id, tm.name AS team_name, tm.color AS team_color,
+       sph.name AS phase_name,
+       (SELECT COUNT(*) FROM tasks t WHERE t.section_id = s.id) AS tasks_total,
+       (SELECT COUNT(*) FROM tasks t LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
+         WHERE t.section_id = s.id AND (ws.category IN ('done','canceled')
+           OR (ws.category IS NULL AND t.completed_at IS NOT NULL))) AS tasks_done,
+       (SELECT COUNT(*) FROM tasks t LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
+         WHERE t.section_id = s.id AND ${OPEN_SEC} AND t.deadline < $2) AS tasks_overdue,
+       (SELECT COUNT(*) FROM tasks t LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
+         WHERE t.section_id = s.id AND ws.category = 'blocked') AS tasks_blocked,
+       COALESCE(
+         (SELECT u.name FROM work_owners wo JOIN users u ON u.id = wo.user_id
+           WHERE wo.work_id = s.id ORDER BY u.id = s.owner_id DESC, u.name LIMIT 1),
+         o.name
+       ) AS owner_name
+     FROM project_sections s
+     JOIN team_boards b ON b.project_id = s.project_id
+     JOIN teams tm ON tm.id = b.team_id
+     LEFT JOIN users o ON o.id = s.owner_id
+     LEFT JOIN work_phase wp ON wp.work_id = s.id
+     LEFT JOIN team_phases sph ON sph.id = wp.phase_id
+     WHERE tm.sector_id = $1 AND tm.archived = false
+     ORDER BY tm.name, s.completed_at IS NOT NULL, s.position, s.id`,
+    [sectorId, today]
+  );
+
+  const countFields = ['tasks_total', 'tasks_done', 'tasks_overdue', 'tasks_blocked'];
+  const groups = new Map();
+  const kpis = { total: 0, done: 0, doing: 0, paused: 0, attention: 0 };
+
+  for (const raw of rows) {
+    const row = { ...raw, ...numbers(raw, countFields), due_date: dayKey(raw.due_date) };
+    const status = projectStatus(row, today);
+    const pct = status === 'done' ? 100 : (row.tasks_total ? Math.round((row.tasks_done / row.tasks_total) * 100) : 0);
+    const item = {
+      id: row.id, name: row.name, color: row.color, team_id: row.team_id,
+      status, pct, due_date: row.due_date, owner_name: row.owner_name || null,
+    };
+    kpis.total += 1;
+    if (status === 'done') kpis.done += 1;
+    else if (status === 'paused') kpis.paused += 1;
+    else {
+      kpis.doing += 1;
+      if (status === 'attention') kpis.attention += 1;
+    }
+    if (!groups.has(row.team_id)) {
+      groups.set(row.team_id, { id: row.team_id, name: row.team_name, color: row.team_color, projects: [] });
+    }
+    groups.get(row.team_id).projects.push(item);
+  }
+
+  return { project_kpis: kpis, team_projects: [...groups.values()] };
 }
 
 // Tarefas compartilhadas da equipe que dependem de alguém de outro setor numa etapa.
