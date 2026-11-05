@@ -72,6 +72,7 @@ router.get('/templates', requireJwt, controller.listTemplates);
 router.get('/formularios', requireJwt, controller.listFormularios);
 router.post('/formularios', requireJwt, controller.criarRascunho);
 router.get('/formularios/:id/responder', requireJwt, controller.payloadResponder);
+router.post('/formularios/:id/base', requireJwt, controller.substituirBase);
 router.post('/formularios/:id/base/lookup', requireJwt, controller.lookupBase);
 router.post(
   '/formularios/:id/respostas',
@@ -80,6 +81,10 @@ router.post(
   controller.enviarResposta
 );
 router.get('/formularios/:id/resultados', requireJwt, controller.resultados);
+router.get('/formularios/:id/acessos', requireJwt, controller.listAcessos);
+router.put('/formularios/:id/acessos', requireJwt, controller.salvarAcessos);
+router.get('/formularios/:id/historico', requireJwt, controller.listHistorico);
+router.get('/formularios/:id/export.xlsx', requireJwt, controller.exportarResultados);
 router.post('/formularios/:id/anexos/zip', requireJwt, controller.zipAnexos);
 router.get('/formularios/:id/minha-resposta', requireJwt, controller.minhaResposta);
 router.post('/formularios/:id/clonar', requireJwt, controller.clonar);

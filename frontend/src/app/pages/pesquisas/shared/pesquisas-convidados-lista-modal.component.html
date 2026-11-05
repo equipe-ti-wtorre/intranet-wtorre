@@ -3,13 +3,13 @@
   [title]="titulo()"
   [subtitle]="subtitle()"
   size="wide"
-  [showSave]="!!editando()"
+  [showSave]="noFormulario()"
   saveLabel="Salvar"
   [cancelLabel]="cancelLabel()"
-  (save)="salvarEdicao()"
+  (save)="salvarFormulario()"
   (cancel)="onCancel()"
 >
-  @if (editando(); as g) {
+  @if (noFormulario()) {
     <div class="field">
       <label>Nome</label>
       <input type="text" name="listaNome" autocomplete="name" [ngModel]="nome()" (ngModelChange)="nome.set($event)" />
@@ -25,8 +25,10 @@
         [ngModel]="documento()"
         (ngModelChange)="formatarDocumento($event)"
       />
-      @if (!g.cpf && g.cpfMascara) {
-        <p class="help">Documento atual: {{ g.cpfMascara }}. Deixe em branco para manter.</p>
+      @if (editando(); as g) {
+        @if (!g.cpf && g.cpfMascara) {
+          <p class="help">Documento atual: {{ g.cpfMascara }}. Deixe em branco para manter.</p>
+        }
       }
     </div>
     <div class="field">
@@ -39,8 +41,10 @@
         [ngModel]="rg()"
         (ngModelChange)="formatarRg($event)"
       />
-      @if (!g.rg && g.rgMascara) {
-        <p class="help">RG atual: {{ g.rgMascara }}. Deixe em branco para manter.</p>
+      @if (editando(); as g) {
+        @if (!g.rg && g.rgMascara) {
+          <p class="help">RG atual: {{ g.rgMascara }}. Deixe em branco para manter.</p>
+        }
       }
     </div>
     <div class="field">
@@ -55,14 +59,40 @@
       />
     </div>
   } @else {
-    <input
-      type="search"
-      class="guest-lista-search"
-      placeholder="Buscar por nome, documento ou e-mail..."
-      name="listaBusca"
-      [ngModel]="busca()"
-      (ngModelChange)="busca.set($event)"
-    />
+    <div class="guest-lista-toolbar">
+      <input
+        type="search"
+        class="guest-lista-search"
+        placeholder="Buscar por nome, documento ou e-mail..."
+        name="listaBusca"
+        [ngModel]="busca()"
+        (ngModelChange)="busca.set($event)"
+      />
+      @if (acoesCadastro()) {
+        <div class="guest-lista-toolbar-actions">
+          <button type="button" class="guest-lista-tool" [disabled]="importando()" (click)="iniciarCriacao()">
+            <app-pesq-icon name="plus" [size]="14" />
+            Inserir convidados
+          </button>
+          <button
+            type="button"
+            class="guest-lista-tool"
+            [disabled]="importando()"
+            (click)="excelInput.click()"
+          >
+            <app-pesq-icon name="table" [size]="14" />
+            Importar planilha
+          </button>
+          <input
+            #excelInput
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            hidden
+            (change)="onArquivo($event)"
+          />
+        </div>
+      }
+    </div>
     @if (!convidados().length) {
       <p class="guest-lista-empty">Nenhum convidado na lista ainda.</p>
     } @else if (!filtrados().length) {

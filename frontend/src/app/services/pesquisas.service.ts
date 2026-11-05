@@ -4,8 +4,10 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   ListaTipo,
+  PesquisasAcesso,
   PesquisasAprovador,
   PesquisasConvidado,
+  PesquisasHistoricoItem,
   PesquisasConvidadosLoteResult,
   PesquisasDestinatario,
   PesquisasErroLog,
@@ -102,6 +104,16 @@ export class PesquisasService {
     );
   }
 
+  substituirBase(
+    id: number,
+    base: Record<string, unknown>[]
+  ): Observable<{ baseResumo: NonNullable<PesquisasFormulario['baseResumo']> }> {
+    return this.http.post<{ baseResumo: NonNullable<PesquisasFormulario['baseResumo']> }>(
+      this.api(`/formularios/${id}/base`),
+      { base }
+    );
+  }
+
   publicoLookupBase(
     slug: string,
     valor: string,
@@ -130,6 +142,27 @@ export class PesquisasService {
     return this.http.get<PesquisasResultados>(
       this.api(`/formularios/${encodeURIComponent(String(ref))}/resultados`)
     );
+  }
+
+  exportarResultados(id: number): Observable<HttpResponse<Blob>> {
+    return this.http.get(this.api(`/formularios/${id}/export.xlsx`), {
+      observe: 'response',
+      responseType: 'blob',
+    });
+  }
+
+  listAcessos(id: number): Observable<PesquisasAcesso[]> {
+    return this.http.get<PesquisasAcesso[]>(this.api(`/formularios/${id}/acessos`));
+  }
+
+  salvarAcessos(id: number, acessos: PesquisasAcesso[]): Observable<PesquisasAcesso[]> {
+    return this.http.put<PesquisasAcesso[]>(this.api(`/formularios/${id}/acessos`), {
+      acessos: acessos.map((a) => ({ usuarioId: a.usuarioId, papel: a.papel })),
+    });
+  }
+
+  listHistorico(id: number): Observable<PesquisasHistoricoItem[]> {
+    return this.http.get<PesquisasHistoricoItem[]>(this.api(`/formularios/${id}/historico`));
   }
 
   baixarAnexosZip(

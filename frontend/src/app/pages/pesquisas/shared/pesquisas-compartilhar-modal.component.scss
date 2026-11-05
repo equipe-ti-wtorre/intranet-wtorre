@@ -1,0 +1,26 @@
+.dest-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.dest-who b,
+.dest-who span {
+  white-space: normal;
+}
+
+.share-papel-btns {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.share-papel-btns .dest-btn--ghost {
+  background: var(--surface-2, #f4f6fa);
+  color: var(--ink-dim, #8a93a8);
+  font-weight: 600;
+}
+
+.dest-row .share-papel-btns .dest-btn {
+  flex: 0 0 auto;
+}

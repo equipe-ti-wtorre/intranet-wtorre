@@ -28,6 +28,43 @@ export function isChaveHeader(raw: string): boolean {
   return isDocHeader(raw) || isEmailHeader(raw) || isRgHeader(raw);
 }
 
+const BASE_MAX_COLS = 40;
+const BASE_MAX_HEADER = 120;
+const BASE_MAX_CELL = 500;
+
+/** Mantém identidade e colunas que viraram campo; descarta vazio e corta texto. */
+export function enxugarLinhasBase(
+  rows: Record<string, unknown>[] | null | undefined,
+  campos: string[]
+): Record<string, string>[] {
+  const list = Array.isArray(rows) ? rows : [];
+  const first = list.find((row) => row && typeof row === 'object');
+  if (!first) return [];
+  const permitidos = new Set(
+    (campos || []).map((c) => normHeader(String(c || '').slice(0, BASE_MAX_HEADER)))
+  );
+  const keep: { raw: string; header: string }[] = [];
+  for (const raw of Object.keys(first).slice(0, BASE_MAX_COLS)) {
+    const header = String(raw || '').trim().slice(0, BASE_MAX_HEADER);
+    if (!header) continue;
+    if (isNomeHeader(header) || isChaveHeader(header) || permitidos.has(normHeader(header))) {
+      keep.push({ raw, header });
+    }
+  }
+  const out: Record<string, string>[] = [];
+  for (const row of list) {
+    if (!row || typeof row !== 'object') continue;
+    const item: Record<string, string> = {};
+    for (const col of keep) {
+      const cell = String(row[col.raw] ?? '').trim().slice(0, BASE_MAX_CELL);
+      if (!cell) continue;
+      item[col.header] = cell;
+    }
+    if (Object.keys(item).length) out.push(item);
+  }
+  return out;
+}
+
 export interface ExtractedGuest {
   nome: string;
   cpf: string;

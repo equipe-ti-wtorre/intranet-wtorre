@@ -33,6 +33,7 @@ export interface ConvidadoListaEdicao {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const NOVO_KEY = -1;
 
 function chaveConvidado(nome: string, cpf: string, email: string, rg: string): string {
   if (cpf && (cpf.length === 11 || cpf.length === 14)) return `d:${cpf}`;
@@ -54,26 +55,37 @@ export class PesquisasConvidadosListaModalComponent {
   private readonly alertas = inject(AlertasService);
 
   readonly open = input(false);
+  readonly acoesCadastro = input(false);
+  readonly importando = input(false);
   readonly convidados = input<ConvidadoListaItem[]>([]);
   readonly fechar = output<void>();
   readonly remover = output<number>();
   readonly atualizar = output<ConvidadoListaEdicao>();
+  readonly criar = output<ConvidadoListaEdicao>();
+  readonly importar = output<File>();
 
   readonly busca = signal('');
   readonly editando = signal<ConvidadoListaItem | null>(null);
+  readonly criando = signal(false);
   readonly nome = signal('');
   readonly documento = signal('');
   readonly rg = signal('');
   readonly email = signal('');
   private estavaAberto = false;
 
-  readonly titulo = computed(() => (this.editando() ? 'Editar convidado' : 'Convidados'));
+  readonly noFormulario = computed(() => !!this.editando() || this.criando());
+  readonly titulo = computed(() => {
+    if (this.criando()) return 'Novo convidado';
+    if (this.editando()) return 'Editar convidado';
+    return 'Convidados';
+  });
   readonly subtitle = computed(() => {
+    if (this.criando()) return 'Preencha ao menos nome, CPF, CNPJ, RG ou e-mail.';
     if (this.editando()) return 'Altere os dados e salve para atualizar a lista.';
     const n = this.convidados().length;
     return n === 1 ? '1 convidado na lista.' : `${n} convidados na lista.`;
   });
-  readonly cancelLabel = computed(() => (this.editando() ? 'Voltar' : 'Fechar'));
+  readonly cancelLabel = computed(() => (this.noFormulario() ? 'Voltar' : 'Fechar'));
   readonly filtrados = computed(() => {
     const q = this.busca().trim().toLowerCase();
     const lista = this.convidados();
@@ -88,10 +100,10 @@ export class PesquisasConvidadosListaModalComponent {
     effect(() => {
       const aberto = this.open();
       if (aberto && !this.estavaAberto) {
-        this.resetEdicao();
+        this.resetFormulario();
         this.busca.set('');
       }
-      if (!aberto) this.resetEdicao();
+      if (!aberto) this.resetFormulario();
       this.estavaAberto = aberto;
     });
   }
@@ -105,6 +117,7 @@ export class PesquisasConvidadosListaModalComponent {
   }
 
   iniciarEdicao(g: ConvidadoListaItem): void {
+    this.criando.set(false);
     this.editando.set(g);
     this.nome.set(g.nome);
     this.documento.set(g.cpf || '');
@@ -112,21 +125,53 @@ export class PesquisasConvidadosListaModalComponent {
     this.email.set(g.email);
   }
 
+  iniciarCriacao(): void {
+    this.editando.set(null);
+    this.criando.set(true);
+    this.nome.set('');
+    this.documento.set('');
+    this.rg.set('');
+    this.email.set('');
+  }
+
   onCancel(): void {
-    if (this.editando()) {
-      this.resetEdicao();
+    if (this.noFormulario()) {
+      this.resetFormulario();
       return;
     }
     this.fechar.emit();
   }
 
-  salvarEdicao(): void {
+  salvarFormulario(): void {
+    if (this.criando()) {
+      const parsed = this.validar({
+        key: NOVO_KEY,
+        nome: '',
+        cpf: '',
+        cpfMascara: '',
+        rg: '',
+        rgMascara: '',
+        email: '',
+      });
+      if (!parsed) return;
+      this.criar.emit(parsed);
+      this.resetFormulario();
+      return;
+    }
     const atual = this.editando();
     if (!atual) return;
     const parsed = this.validar(atual);
     if (!parsed) return;
     this.atualizar.emit(parsed);
-    this.resetEdicao();
+    this.resetFormulario();
+  }
+
+  onArquivo(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || this.importando()) return;
+    this.importar.emit(file);
   }
 
   async confirmarRemocao(g: ConvidadoListaItem): Promise<void> {
@@ -138,8 +183,9 @@ export class PesquisasConvidadosListaModalComponent {
     this.remover.emit(g.key);
   }
 
-  private resetEdicao(): void {
+  private resetFormulario(): void {
     this.editando.set(null);
+    this.criando.set(false);
     this.nome.set('');
     this.documento.set('');
     this.rg.set('');

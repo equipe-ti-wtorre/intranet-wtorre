@@ -43,18 +43,32 @@
           Editar
         </button>
       }
-      <button type="button" class="btn-secondary" (click)="exportar()">
+      @if (podeCompartilhar()) {
+        <button type="button" class="btn-secondary" [disabled]="compartilhando()" (click)="abrirCompartilhar()">
+          <app-pesq-icon name="users" [size]="15" />
+          Compartilhar
+        </button>
+      }
+      <button type="button" class="btn-secondary" (click)="abrirHistorico()">
+        <app-pesq-icon name="clock" [size]="15" />
+        Histórico
+      </button>
+      <button type="button" class="btn-secondary" [disabled]="exportando()" (click)="exportar()">
         <app-pesq-icon name="download" [size]="15" />
-        Exportar
+        {{ exportando() ? 'Exportando…' : 'Exportar' }}
       </button>
-      <button type="button" class="btn-primary" [disabled]="agindo()" (click)="toggleAtivo()">
-        <app-pesq-icon name="megaphone" [size]="16" />
-        {{ d.formulario.eventoAtivo === false ? 'Ativar' : 'Desativar' }}
-      </button>
-      <button type="button" class="btn-danger" [disabled]="agindo()" (click)="excluir()">
-        <app-pesq-icon name="trash" [size]="15" />
-        Excluir
-      </button>
+      @if (podeEditar()) {
+        <button type="button" class="btn-primary" [disabled]="agindo()" (click)="toggleAtivo()">
+          <app-pesq-icon name="megaphone" [size]="16" />
+          {{ d.formulario.eventoAtivo === false ? 'Ativar' : 'Desativar' }}
+        </button>
+      }
+      @if (podeExcluir()) {
+        <button type="button" class="btn-danger" [disabled]="agindo()" (click)="excluir()">
+          <app-pesq-icon name="trash" [size]="15" />
+          Excluir
+        </button>
+      }
     </div>
   </div>
 
@@ -255,64 +269,14 @@
         </div>
       </div>
       <p class="page-sub" style="margin-top: 14px">Basta nome, CPF, CNPJ, RG ou e-mail. O acesso pelo link usa CPF, CNPJ, RG ou e-mail.</p>
-      <div class="guest-list-head">
-        <label>Lista de convidados</label>
-        <div class="guest-list-actions">
-          <button
-            type="button"
-            class="btn-secondary"
-            [disabled]="importandoConvidados()"
-            (click)="convidadosExcelInput.click()"
-          >
-            <app-pesq-icon name="table" [size]="14" />
-            Importar planilha
-          </button>
-          <input
-            #convidadosExcelInput
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            hidden
-            (change)="onExcelConvidados($event)"
-          />
-          <button
-            type="button"
-            class="btn-secondary"
-            [disabled]="importandoConvidados()"
-            (click)="abrirConvidadoModal()"
-          >
-            <app-pesq-icon name="plus" [size]="14" />
-            Inserir convidados
-          </button>
-        </div>
-      </div>
-      <div class="guest-table">
-        @if (!(d.formulario.convidados || []).length && !d.publicoAlvoTotal) {
-          <p class="page-sub">Nenhum convidado na lista.</p>
-        } @else {
-          @if ((d.formulario.convidados || []).length) {
-            <div class="guest-row guest-row-head">
-              <span>Nome</span>
-              <span>CPF/CNPJ</span>
-              <span>RG</span>
-              <span>E-mail</span>
-              <span></span>
-            </div>
+      <div class="guest-import-row">
+        <button type="button" class="add-q-btn" (click)="abrirListaConvidados()">
+          <app-pesq-icon name="users" [size]="15" />
+          Acessar convidados
+          @if (totalConvidados()) {
+            <span class="guest-count">{{ totalConvidados() }}</span>
           }
-          @for (g of d.formulario.convidados || []; track g.id || g.email || g.nome) {
-            <div class="guest-row">
-              <span>{{ g.nome || '—' }}</span>
-              <span>{{ g.cpfMascara || '—' }}</span>
-              <span>{{ g.rgMascara || '—' }}</span>
-              <span>{{ g.email || '—' }}</span>
-              <span class="guest-row-actions">
-                <button type="button" class="btn-secondary" (click)="editarConvidado(g)">Editar</button>
-                <button type="button" class="q-del" (click)="removerConvidado(g)" aria-label="Remover convidado">
-                  <app-pesq-icon name="x" [size]="15" />
-                </button>
-              </span>
-            </div>
-          }
-        }
+        </button>
       </div>
     </div>
   }
@@ -509,12 +473,32 @@
   />
 }
 
-<app-pesquisas-convidado-modal
-  [open]="convidadoModalAberto()"
-  [formularioId]="data()?.formulario?.id ?? null"
-  [convidado]="convidadoEditando()"
-  (saved)="onConvidadoSalvo()"
-  (cancel)="fecharConvidadoModal()"
+
+<app-pesquisas-compartilhar-modal
+  [open]="compartilharAberto()"
+  [donoUsuarioId]="data()?.formulario?.criadorId ?? null"
+  [selecionados]="acessos()"
+  (confirm)="salvarAcessos($event)"
+  (cancel)="fecharCompartilhar()"
+/>
+
+<app-pesquisas-historico-modal
+  [open]="historicoAberto()"
+  [itens]="historico()"
+  [carregando]="historicoLoading()"
+  (fechar)="fecharHistorico()"
+/>
+
+<app-pesquisas-convidados-lista-modal
+  [open]="listaConvidadosAberta()"
+  [acoesCadastro]="podeEditar()"
+  [importando]="importandoConvidados()"
+  [convidados]="listaConvidados()"
+  (fechar)="fecharListaConvidados()"
+  (criar)="criarConvidadoLista($event)"
+  (atualizar)="atualizarConvidadoLista($event)"
+  (remover)="removerConvidadoLista($event)"
+  (importar)="onExcelConvidados($event)"
 />
 
 @if (answerModal(); as modal) {
