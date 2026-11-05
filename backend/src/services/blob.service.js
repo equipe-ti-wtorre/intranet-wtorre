@@ -12,10 +12,12 @@ const { validarNomeContainer } = require('../utils/container-nome.validation');
 const { mapAzureBlobError } = require('../utils/azure-blob.errors');
 const pesquisasBlobLocal = require('./pesquisas-blob-local');
 const solicitacaoBlobLocal = require('./solicitacao-blob-local');
+const taskhubBlobLocal = require('./taskhub-blob-local');
 
 function discoLocal(container) {
   if (pesquisasBlobLocal.isLocalContainer(container)) return pesquisasBlobLocal;
   if (solicitacaoBlobLocal.isLocalContainer(container)) return solicitacaoBlobLocal;
+  if (taskhubBlobLocal.isLocalContainer(container)) return taskhubBlobLocal;
   return null;
 }
 
@@ -178,6 +180,11 @@ async function gerarSasLeitura(container, blobName, opts = {}) {
     err.status = 400;
     throw err;
   }
+  if (taskhubBlobLocal.isLocalContainer(container)) {
+    const err = new Error('Anexo da tarefa fica só no disco deste ambiente e não tem link público.');
+    err.status = 400;
+    throw err;
+  }
   return withBlobError(async () => {
     const now = new Date();
     const startsOn = new Date(now.getTime() - 5 * 60 * 1000);
@@ -229,6 +236,7 @@ function urlBlobPublico(container, blobName) {
     return pesquisasBlobLocal.publicUrl(blobName);
   }
   if (solicitacaoBlobLocal.isLocalContainer(container)) return null;
+  if (taskhubBlobLocal.isLocalContainer(container)) return null;
   const baseUrl = svc.getContainerClient(container).getBlockBlobClient(blobName).url;
   return baseUrl;
 }
@@ -245,4 +253,5 @@ module.exports = {
   baixarBuffer,
   urlBlobPublico,
   novoBlobName,
+  contentDispositionAttachment,
 };

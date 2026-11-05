@@ -5,7 +5,7 @@ import { WorkDashboard } from '../core/models';
 export type SlideKey = 'capa' | 'resumo' | 'andamento' | 'status' | 'evolucao' | 'prazos' | 'atencao' | 'equipe' | 'entregas';
 
 export const SLIDES: { key: SlideKey; label: string; hint: string }[] = [
-  { key: 'capa', label: 'Capa', hint: 'Projeto, equipe, responsável e data' },
+  { key: 'capa', label: 'Capa', hint: 'Projeto, equipe, desenvolvedor e data' },
   { key: 'resumo', label: 'Resumo', hint: 'Progresso, tempo até o prazo e números principais' },
   { key: 'andamento', label: 'Em andamento', hint: 'O que está sendo feito agora' },
   { key: 'status', label: 'Situação das tarefas', hint: 'Quantas tarefas em cada status' },

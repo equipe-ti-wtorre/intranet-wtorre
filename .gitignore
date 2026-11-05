@@ -18,5 +18,6 @@ backend/storage/documentos/
 backend/storage/documentos-thumbs/
 backend/storage/pesquisas-capas/
 backend/storage/solicitacao-colaborador/
+backend/storage/taskhub-anexos/
 backend/storage/rustdesk/*.zip
 frontend/.well-known/

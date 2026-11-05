@@ -5,94 +5,164 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
 import { UiService } from '../core/ui.service';
 import { Task, TeamDashboard } from '../core/models';
-import { minutesLabel, relativeTime } from '../core/format';
+import { activityValue, minutesLabel, relativeTime } from '../core/format';
 import { AvatarComponent, IconComponent, TaskRowComponent } from '../shared/ui';
 import { TEAM_SLIDES, TeamSlideKey, buildTeamDeck, defaultTeamSlides } from '../presentation/team-deck';
 import { DeckSlide } from '../presentation/day-deck';
 import { DeckViewerComponent } from '../presentation/deck-viewer.component';
 import { downloadDeckPptx } from '../presentation/deck-pptx';
+import { savePainelLast } from '../core/sector-nav';
+import { TeamBarComponent } from '../shared/team-bar.component';
 
 const KIND_LABEL = { team: 'Equipe', sector: 'Setor' } as const;
 type DashKind = 'team' | 'sector';
+type ProjectFilter = 'all' | 'done' | 'doing' | 'paused';
+const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention: 'Atenção', doing: 'Em andamento' } as const;
 
 @Component({
   selector: 'app-team-dashboard',
   standalone: true,
-  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent],
+  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent, TeamBarComponent],
   template: `
     @if (d(); as d) {
-      <div class="page td-page">
+      <div class="page td-page" [class.td-page--sector]="kind() === 'sector'">
         <div class="page-head">
           <div>
-            <div class="crumbs">
-              <a routerLink="/ti/taskhub">Início</a>
-              <span>›</span>
-              <a routerLink="/ti/taskhub/equipes">{{ kindLabel() }}s</a>
-            </div>
-            <h1 class="td-title">
-              <span class="td-dot" [style.background]="d.team.color"></span>
-              {{ d.team.name }}
-            </h1>
-            <p class="muted">{{ kindLabel() }} · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</p>
-          </div>
-          <div class="actions">
-            <button class="btn-action-primary btn-sm" (click)="openPresent()">Apresentar</button>
-            <button class="btn-action-secondary btn-sm" [disabled]="loading()" (click)="load()">{{ loading() ? 'Atualizando…' : 'Atualizar' }}</button>
+            <div class="crumb">Painel › {{ d.team.name }}</div>
             @if (kind() === 'team') {
-              <a class="btn-action-secondary btn-sm" [routerLink]="['/ti/taskhub/equipes']" [queryParams]="{ equipe: d.team.id }">Membros da equipe</a>
+              <h1 class="td-title">
+                <span class="td-dot" [style.background]="d.team.color"></span>
+                {{ d.team.name }}
+              </h1>
+              <p class="muted">Equipe · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</p>
+            } @else {
+              <h1>Setor · {{ d.team.name }}</h1>
+              <p class="sub">Projetos e trabalho das equipes do setor — atualizado {{ relativeTime(d.generated_at) }}. Clique em um cartão para filtrar os projetos.</p>
             }
           </div>
-        </div>
-
-        <div class="td-kpis">
-          <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'open' })">
-            <b>{{ d.kpis.open }}</b>
-            <span><span class="l">Abertas</span>
-              <small>{{ d.kpis.created_week }} {{ d.kpis.created_week === 1 ? 'criada' : 'criadas' }} nesta semana</small></span>
-          </button>
-          <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'doing' })">
-            <b>{{ d.kpis.doing }}</b>
-            <span><span class="l">Em andamento</span><small>sendo feitas agora</small></span>
-          </button>
-          <button class="td-kpi" [class.td-kpi--bad]="d.kpis.overdue" type="button" (click)="goTasks({ status: 'open', due: 'overdue' })">
-            <b>{{ d.kpis.overdue }}</b>
-            <span><span class="l">Atrasadas</span><small>{{ d.kpis.overdue ? 'passaram do prazo' : 'tudo em dia' }}</small></span>
-          </button>
-          <button class="td-kpi" [class.td-kpi--warn]="d.kpis.blocked" type="button" (click)="goTasks({ status: 'blocked' })">
-            <b>{{ d.kpis.blocked }}</b>
-            <span><span class="l">Bloqueadas</span><small>{{ d.kpis.blocked ? 'precisam de ajuda' : 'nada travado' }}</small></span>
-          </button>
-          <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'done' })">
-            <b>{{ d.kpis.done_week }}</b>
-            <span><span class="l">Concluídas na semana</span><small>semana passada: {{ d.kpis.done_prev_week }}</small></span>
-          </button>
-          <div class="td-kpi" [class.td-kpi--ok]="(onTimePct() ?? -1) >= 80" [class.td-kpi--warn]="(onTimePct() ?? 100) < 80">
-            <b [class.td-kpi-txt]="onTimePct() === null">{{ onTime() }}</b>
-            <span><span class="l">Pontualidade</span>
-              <small>{{ onTimePct() === null ? 'ainda sem entregas com prazo' : 'entregas com prazo em 30 dias' }}</small></span>
+          <div class="actions">
+            @if (kind() === 'team') {
+              <button class="btn-action-primary btn-sm" (click)="openPresent()">Apresentar</button>
+              <a class="btn-action-secondary btn-sm" [routerLink]="['/ti/taskhub/equipes']" [queryParams]="{ equipe: d.team.id }">Membros da equipe</a>
+            }
+            <button class="btn-action-secondary btn-sm" [disabled]="loading()" (click)="load()">{{ loading() ? 'Atualizando…' : 'Atualizar' }}</button>
           </div>
         </div>
 
-        @if (kind() === 'sector' && d.teams?.length) {
-          <div class="td-teams">
-            @for (tm of d.teams; track tm.id) {
-              <a class="td-team" [routerLink]="['/ti/taskhub/equipes', tm.id, 'painel']">
-                <b><span class="td-dot" [style.background]="tm.color"></span>{{ tm.name }}</b>
-                <small>{{ tm.members_count }} {{ tm.members_count === 1 ? 'pessoa' : 'pessoas' }} · {{ tm.open }} abertas</small>
-                @if (tm.overdue) { <span class="wk-late">{{ tm.overdue }} atrasadas</span> }
-              </a>
+        <app-team-bar view="painel" [current]="kind() === 'team' ? d.team.id : null" [currentSector]="kind() === 'sector' ? d.team.id : null" />
+
+        @if (kind() === 'sector') {
+          <div class="td-kpis">
+            <button class="td-kpi" type="button" [class.td-kpi--on]="projectFilter() === 'all'" (click)="setProjectFilter('all')">
+              <b>{{ d.project_kpis?.total || 0 }}</b>
+              <span><span class="l">Total de projetos</span><small>em todas as equipes do setor</small></span>
+            </button>
+            <button class="td-kpi td-kpi--ok" type="button" [class.td-kpi--on]="projectFilter() === 'done'" (click)="setProjectFilter('done')">
+              <b>{{ d.project_kpis?.done || 0 }}</b>
+              <span><span class="l">Concluídos</span><small>{{ donePct() }}% do total</small></span>
+            </button>
+            <button class="td-kpi td-kpi--brand" type="button" [class.td-kpi--on]="projectFilter() === 'doing'" (click)="setProjectFilter('doing')">
+              <b>{{ d.project_kpis?.doing || 0 }}</b>
+              <span><span class="l">Em andamento</span>
+                <small>{{ d.project_kpis?.attention || 0 }} com atenção</small></span>
+            </button>
+            <button class="td-kpi td-kpi--warn" type="button" [class.td-kpi--on]="projectFilter() === 'paused'" (click)="setProjectFilter('paused')">
+              <b>{{ d.project_kpis?.paused || 0 }}</b>
+              <span><span class="l">Em pausa</span><small>parados por decisão</small></span>
+            </button>
+          </div>
+        } @else {
+          <div class="td-kpis">
+            <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'open' })">
+              <b>{{ d.kpis.open }}</b>
+              <span><span class="l">Abertas</span>
+                <small>{{ d.kpis.created_week }} {{ d.kpis.created_week === 1 ? 'criada' : 'criadas' }} nesta semana</small></span>
+            </button>
+            <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'doing' })">
+              <b>{{ d.kpis.doing }}</b>
+              <span><span class="l">Em andamento</span><small>sendo feitas agora</small></span>
+            </button>
+            <button class="td-kpi" [class.td-kpi--bad]="d.kpis.overdue" type="button" (click)="goTasks({ status: 'open', due: 'overdue' })">
+              <b>{{ d.kpis.overdue }}</b>
+              <span><span class="l">Atrasadas</span><small>{{ d.kpis.overdue ? 'passaram do prazo' : 'tudo em dia' }}</small></span>
+            </button>
+            <button class="td-kpi" [class.td-kpi--warn]="d.kpis.blocked" type="button" (click)="goTasks({ status: 'blocked' })">
+              <b>{{ d.kpis.blocked }}</b>
+              <span><span class="l">Bloqueadas</span><small>{{ d.kpis.blocked ? 'precisam de ajuda' : 'nada travado' }}</small></span>
+            </button>
+            <button class="td-kpi td-kpi--brand" type="button" (click)="goTasks({ status: 'done' })">
+              <b>{{ d.kpis.done_week }}</b>
+              <span><span class="l">Concluídas na semana</span><small>semana passada: {{ d.kpis.done_prev_week }}</small></span>
+            </button>
+            <div class="td-kpi" [class.td-kpi--ok]="(onTimePct() ?? -1) >= 80" [class.td-kpi--warn]="(onTimePct() ?? 100) < 80">
+              <b [class.td-kpi-txt]="onTimePct() === null">{{ onTime() }}</b>
+              <span><span class="l">Pontualidade</span>
+                <small>{{ onTimePct() === null ? 'ainda sem entregas com prazo' : 'entregas com prazo em 30 dias' }}</small></span>
+            </div>
+          </div>
+        }
+
+        @if (kind() === 'sector') {
+          <div class="td-card td-proj-wrap">
+            <h2 class="td-card-title">Projetos por equipe</h2>
+            <p class="muted">Todos os projetos · clique para abrir o projeto.</p>
+            @if (filteredTeamProjects().length) {
+              @for (g of filteredTeamProjects(); track g.id) {
+                <div class="td-proj-team">
+                  <div class="td-proj-team-h">
+                    <span class="td-dot" [style.background]="g.color"></span>
+                    <b>{{ g.name }}</b>
+                    <span class="muted">{{ g.projects.length }} {{ g.projects.length === 1 ? 'projeto' : 'projetos' }}</span>
+                  </div>
+                  @for (p of g.projects; track p.id) {
+                    <a class="td-proj" [routerLink]="['/ti/taskhub/equipes', p.team_id, 'projetos', p.id]">
+                      <span class="td-dot" [style.background]="p.color"></span>
+                      <span class="td-proj-name">{{ p.name }}</span>
+                      <span class="td-badge" [class.td-badge--ok]="p.status === 'done'" [class.td-badge--warn]="p.status === 'attention'" [class.td-badge--pause]="p.status === 'paused'">{{ projectStatusLabel[p.status] }}</span>
+                      <span class="td-proj-bar"><i [class.td-proj-bar--done]="p.status === 'done'" [class.td-proj-bar--attn]="p.status === 'attention'" [class.td-proj-bar--pause]="p.status === 'paused'" [style.width.%]="p.pct"></i></span>
+                      <span class="td-proj-meta">
+                        @if (p.status === 'done') { {{ p.pct }}% concluído }
+                        @else if (p.due_date) { {{ p.pct }}% entrega {{ activityValue(p.due_date) }} }
+                        @else { {{ p.pct }}% }
+                      </span>
+                      <span class="td-proj-owner">{{ p.owner_name || '—' }}</span>
+                    </a>
+                  }
+                </div>
+              }
+            } @else {
+              <div class="td-empty">Nenhum projeto neste setor.</div>
             }
           </div>
         }
 
         <div class="td-card td-people">
-          <div class="td-card-head">
+          @if (kind() === 'sector') {
             <h2 class="td-card-title">Pessoas</h2>
-            <span class="td-count">{{ d.people.length }}</span>
-          </div>
-          <p class="muted">Carga da semana: tarefas abertas com prazo até sexta, ou sem prazo. 100% = 5 dias no ritmo de cada um.</p>
+            <p class="muted">Carga = horas estimadas de tudo o que está a pessoa (compartilhado ou não) com prazo até 7 dias ou sem prazo, sobre uma semana de referência de 35 h. Os números da tabela mostram só o que foi compartilhado com você.</p>
+          } @else {
+            <div class="td-card-head">
+              <h2 class="td-card-title">Pessoas</h2>
+              <span class="td-count">{{ d.people.length }}</span>
+            </div>
+            <p class="muted">Carga da semana: tarefas abertas com prazo até sexta, ou sem prazo. 100% = 5 dias no ritmo de cada um.</p>
+          }
+          <div class="table-scroll">
           <table class="table">
-            <thead><tr><th>Pessoa</th><th>Abertas</th><th>Atrasadas</th><th>Concluídas 7 d</th><th>Carga da semana</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Pessoa</th>
+                <th>Abertas</th>
+                @if (kind() === 'sector') {
+                  <th>Em andamento</th>
+                  <th>Bloqueadas</th>
+                }
+                <th>Atrasadas</th>
+                <th>Concluídas 7 d</th>
+                @if (kind() === 'sector') { <th>Para outros setores</th> }
+                <th>Carga da semana</th>
+              </tr>
+            </thead>
             <tbody>
               @for (p of d.people; track p.id) {
                 <tr class="click" (click)="goPerson(p.id)">
@@ -100,25 +170,43 @@ type DashKind = 'team' | 'sector';
                     <div class="who">
                       <app-avatar [person]="p" />
                       <div>
-                        <div>{{ p.name }}@if (p.is_manager) { <span class="td-badge">Gestor</span> }</div>
-                        <div class="muted">{{ p.job_title || '—' }}@if (p.away_until) { · ausente }</div>
+                        @if (kind() === 'sector') {
+                          <div>
+                            {{ p.name }}
+                            @if (p.is_manager) { <span class="td-badge">gestor</span> }
+                            @if (p.away_until) { <span class="td-badge td-badge--warn">ausente</span> }
+                          </div>
+                        } @else {
+                          <div>{{ p.name }}@if (p.is_manager) { <span class="td-badge">Gestor</span> }</div>
+                          <div class="muted">{{ p.job_title || '—' }}@if (p.away_until) { · ausente }</div>
+                        }
                       </div>
                     </div>
                   </td>
                   <td>{{ p.open }}</td>
-                  <td [class.wk-late]="p.overdue">{{ p.overdue || '—' }}</td>
+                  @if (kind() === 'sector') {
+                    <td>{{ p.doing }}</td>
+                    <td [class.wk-late]="p.blocked">{{ p.blocked }}</td>
+                  }
+                  <td [class.wk-late]="p.overdue">{{ kind() === 'sector' ? p.overdue : (p.overdue || '—') }}</td>
                   <td>{{ p.done_7d }}</td>
+                  @if (kind() === 'sector') { <td>{{ p.other_teams }}</td> }
                   <td>
                     <div class="td-load">
                       <span class="loadbar"><i [class.warn]="p.load_pct > 80" [class.over]="p.load_pct > 100" [style.width.%]="Math.min(p.load_pct, 100)"></i></span>
-                      <b [class.wk-late]="p.load_pct > 100">{{ p.load_pct }}%</b>
-                      <span class="muted">{{ minutesLabel(p.load_week_min) }}</span>
+                      @if (kind() === 'sector') {
+                        <span [class.wk-late]="p.load_pct > 100">{{ p.load_pct }}% · {{ minutesLabel(p.load_week_min) || '0 min' }}</span>
+                      } @else {
+                        <b [class.wk-late]="p.load_pct > 100">{{ p.load_pct }}%</b>
+                        <span class="muted">{{ minutesLabel(p.load_week_min) }}</span>
+                      }
                     </div>
                   </td>
                 </tr>
               }
             </tbody>
           </table>
+          </div>
         </div>
 
         <div class="td-grid">
@@ -221,9 +309,12 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
   exporting = signal(false);
   deck = signal<DeckSlide[]>([]);
   picked = signal<TeamSlideKey[]>([]);
+  projectFilter = signal<ProjectFilter>('all');
   readonly Math = Math;
   readonly minutesLabel = minutesLabel;
   readonly relativeTime = relativeTime;
+  readonly activityValue = activityValue;
+  readonly projectStatusLabel = PROJECT_STATUS_LABEL;
   kindLabel = computed(() => KIND_LABEL[this.kind()]);
   slideOptions = computed(() => TEAM_SLIDES.filter(s => s.key !== 'equipes' || this.kind() === 'sector'));
   onTimePct = computed(() => {
@@ -234,6 +325,19 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
   onTime = computed(() => {
     const p = this.onTimePct();
     return p == null ? 'sem dados' : `${p}%`;
+  });
+  donePct = computed(() => {
+    const k = this.d()?.project_kpis;
+    if (!k?.total) return 0;
+    return Math.round((k.done / k.total) * 100);
+  });
+  filteredTeamProjects = computed(() => {
+    const groups = this.d()?.team_projects || [];
+    const f = this.projectFilter();
+    if (f === 'all') return groups;
+    return groups
+      .map(g => ({ ...g, projects: g.projects.filter(p => f === 'doing' ? p.status === 'doing' || p.status === 'attention' : p.status === f) }))
+      .filter(g => g.projects.length);
   });
   private sub?: Subscription;
   private lastId = 0;
@@ -251,7 +355,10 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
     if (!id) return;
     this.loading.set(true);
     this.api.teamDashboard(id, this.kind()).subscribe({
-      next: d => { this.d.set(d); this.loading.set(false); },
+      next: d => {
+        this.d.set(d); this.projectFilter.set('all'); this.loading.set(false);
+        savePainelLast(this.kind() === 'sector' ? 'setor' : 'equipe', id);
+      },
       error: e => { this.loading.set(false); this.toast.error(errorMessage(e, 'Não foi possível carregar o painel.')); },
     });
   }
@@ -261,6 +368,9 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
     if (!d) return;
     const scope = this.kind() === 'sector' ? { sector_id: String(d.team.id) } : { team_id: String(d.team.id) };
     void this.router.navigate(['/ti/taskhub/tarefas'], { queryParams: { v: 'filtro', ...scope, ...q } });
+  }
+  setProjectFilter(f: ProjectFilter) {
+    this.projectFilter.set(this.projectFilter() === f && f !== 'all' ? 'all' : f);
   }
   goPerson(id: number) {
     void this.router.navigate(['/ti/taskhub/tarefas'], { queryParams: { v: 'pessoa', pessoa: id, status: 'open' } });

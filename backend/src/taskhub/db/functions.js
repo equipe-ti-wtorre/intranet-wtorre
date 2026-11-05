@@ -132,10 +132,8 @@ const FUNCTIONS = [
      IF v_role IN ('manage', 'edit') OR v_owner = p_user
         OR EXISTS (SELECT 1 FROM th_work_owners wo WHERE wo.work_id = p_work AND wo.user_id = p_user) THEN RETURN 'manage'; END IF;
      IF v_role IN ('view', 'guest') THEN RETURN 'view'; END IF;
-     -- No quadro da equipe, quem está em work_members é solicitante: acompanha a fase, sem ver tarefas.
-     IF EXISTS (SELECT 1 FROM th_work_members wm WHERE wm.work_id = p_work AND wm.user_id = p_user) THEN
-       RETURN IF(EXISTS (SELECT 1 FROM th_team_boards tb WHERE tb.project_id = v_project), 'follow', 'view');
-     END IF;
+     -- Quem está em work_members é solicitante: acompanha a fase, sem ver tarefas.
+     IF EXISTS (SELECT 1 FROM th_work_members wm WHERE wm.work_id = p_work AND wm.user_id = p_user) THEN RETURN 'follow'; END IF;
      RETURN result;
    END`,
 

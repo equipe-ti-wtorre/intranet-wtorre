@@ -2,7 +2,7 @@ const { query } = require('../db');
 
 // Cria uma notificação na Caixa de entrada. Nunca notifica a própria pessoa.
 async function notify(run, { userId, actorId, type, taskId = null, projectId = null, title, body = '' }) {
-  if (!userId || userId === actorId) return;
+  if (!userId) return;
   const exec = run || { query };
   await exec.query(
     `INSERT INTO notifications (user_id, actor_id, type, task_id, project_id, title, body)

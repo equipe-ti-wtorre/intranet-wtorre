@@ -100,7 +100,7 @@ const listRow = (r) => ({ ...formatUser(r), team_name: r.team_name || null, sect
 // Diretório de pessoas para escolher responsável, mencionar etc.
 router.get('/directory', ah(async (req, res) => {
   const { rows } = await query(
-    `SELECT u.id, u.name, u.username, u.initials, u.color, u.avatar_rev, u.job_title, u.away_until, u.profiles, u.sector_id,
+    `SELECT u.id, u.name, u.username, u.initials, u.color, u.avatar_rev, u.job_title, u.department, u.away_until, u.profiles, u.sector_id,
             (u.entra_oid IS NOT NULL) AS from_directory,
             th_is_manager(u.id) AS can_coordinate,
             s.name AS sector_name, ${TEAM_FIELDS('u')}

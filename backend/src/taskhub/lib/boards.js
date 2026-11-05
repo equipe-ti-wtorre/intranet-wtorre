@@ -30,9 +30,4 @@ async function teamOfBoard(run, projectId) {
   return b?.team_id || null;
 }
 
-// Nome do cartão nas mensagens: no quadro da equipe é "projeto"; nos projetos individuais, "trabalho".
-async function workNoun(run, projectId) {
-  return (await teamOfBoard(run, projectId)) ? 'projeto' : 'trabalho';
-}
-
-module.exports = { boardOf, ensureTeamBoard, teamOfBoard, workNoun };
+module.exports = { boardOf, ensureTeamBoard, teamOfBoard };

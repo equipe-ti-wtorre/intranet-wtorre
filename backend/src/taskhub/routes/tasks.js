@@ -7,6 +7,10 @@ const { notify, mentionedUserIds } = require('../lib/notify');
 const { isoDate, addDays } = require('../lib/dates');
 const { projectRole } = require('./projects');
 const { projectPhases, assertProjectPhase, workPhase, setTaskPhase } = require('../lib/phases');
+const { env } = require('../../config/env');
+const blobService = require('../../services/blob.service');
+const { uploadTaskFiles, handleTaskFilesMulterError, blobNameFor } = require('../../config/taskhub-files-upload');
+const { formatFile: formatTaskFile, safeOriginalName, unlinkQuiet } = require('../lib/attachments');
 
 const PRIORITIES = ['critica', 'alta', 'media', 'baixa'];
 const PRIORITY_LABEL = { critica: 'Crítica', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
@@ -200,7 +204,7 @@ router.post('/', ah(async (req, res) => {
     const { rows: [wk] } = await query('SELECT project_id, th_work_role($1, id) AS role FROM project_sections WHERE id = $2', [me, d.section_id]);
     if (!wk || wk.project_id !== projectId) throw new HttpError(422, 'Esse projeto é de outra equipe.');
     // Cria quem coordena o projeto ou quem é responsável pelo trabalho.
-    if (!['edit', 'manage'].includes(role) && wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é quem é da equipe ou o responsável.');
+    if (!['edit', 'manage'].includes(role) && wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é quem é da equipe ou o desenvolvedor.');
     space = (await query('SELECT space FROM projects WHERE id = $1', [projectId])).rows[0].space;
   } else if (space === 'profissional' && !req.user.is_manager) {
     throw new HttpError(403, 'No espaço Corporativo quem cria tarefas é o gestor. Use o espaço Individual para as suas.');
@@ -258,7 +262,7 @@ router.post('/', ah(async (req, res) => {
     }
     await logActivity(c, t.id, me, 'created');
     if (first?.assignee_id) await notifyStep(c, req, { id: t.id, title: d.title, project_id: projectId }, first, first.assignee_id);
-    if (assigneeId && assigneeId !== me) {
+    if (assigneeId) {
       await notify(c, {
         userId: assigneeId, actorId: me, type: 'assigned', taskId: t.id, projectId,
         title: `${req.user.name} atribuiu uma tarefa a você`, body: d.title,
@@ -304,6 +308,16 @@ const updateSchema = z.object({
   position: z.number().optional(),
 });
 
+async function requireTaskView(userId, taskId) {
+  const { rows } = await query(
+    'SELECT t.id, th_task_access($1, t.id) AS access FROM tasks t WHERE t.id = $2',
+    [userId, taskId]
+  );
+  const t = rows[0];
+  if (!t || !t.access) throw new HttpError(404, 'Tarefa não encontrada');
+  return t;
+}
+
 async function requireTaskEdit(userId, taskId, allowWork = false) {
   const { rows } = await query(
     `SELECT t.*, th_task_access($1, t.id) AS access, ws.category AS category, ws.name AS status_name,
@@ -318,6 +332,30 @@ async function requireTaskEdit(userId, taskId, allowWork = false) {
     throw new HttpError(403, t.access === 'work' ? 'Você pode atualizar o status e comentar; o restante quem altera é o gestor.' : 'Você só pode comentar nesta tarefa.');
   }
   return t;
+}
+
+async function listTaskFiles(taskId) {
+  const { rows } = await query(
+    `SELECT f.id, f.name, f.mime, f.size_bytes, f.created_at, f.uploaded_by, u.name AS uploader_name
+       FROM task_files f LEFT JOIN users u ON u.id = f.uploaded_by
+      WHERE f.task_id = $1 ORDER BY f.id`,
+    [taskId]
+  );
+  return rows.map(formatTaskFile);
+}
+
+async function removeTaskBlobs(taskId) {
+  const { rows } = await query(
+    'SELECT container, `blob` FROM task_files WHERE task_id = $1',
+    [taskId]
+  );
+  for (const f of rows) {
+    try {
+      await blobService.removerBlob(f.container, f.blob);
+    } catch {
+      /* blob ausente não impede excluir a tarefa */
+    }
+  }
 }
 
 // O que o colaborador (acesso "work") pode mudar na tarefa que está com ele.
@@ -470,7 +508,87 @@ router.patch('/:id', ah(async (req, res) => {
 router.delete('/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
   await requireTaskEdit(req.user.id, id);
+  await removeTaskBlobs(id);
   await query('DELETE FROM tasks WHERE id = $1', [id]);
+  res.json({ ok: true });
+}));
+
+// ---- Anexos -----------------------------------------------------------------
+router.get('/:id/files', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  await requireTaskView(req.user.id, id);
+  res.json(await listTaskFiles(id));
+}));
+
+router.post(
+  '/:id/files',
+  uploadTaskFiles.array('files', env.taskhubAnexoMaxFiles),
+  handleTaskFilesMulterError,
+  ah(async (req, res) => {
+    const id = intParam(req.params.id);
+    await requireTaskEdit(req.user.id, id);
+    const incoming = Array.isArray(req.files) ? req.files : [];
+    if (!incoming.length) throw new HttpError(400, 'Envie pelo menos um arquivo.');
+
+    const { rows: [{ n }] } = await query(
+      'SELECT COUNT(*)::int AS n FROM task_files WHERE task_id = $1',
+      [id]
+    );
+    if (Number(n) + incoming.length > env.taskhubAnexoMaxFiles) {
+      incoming.forEach((f) => unlinkQuiet(f.path));
+      throw new HttpError(400, `A tarefa pode ter no máximo ${env.taskhubAnexoMaxFiles} arquivos.`);
+    }
+
+    const container = await blobService.garantirContainer(env.taskhubContainer);
+    const created = [];
+    try {
+      for (const file of incoming) {
+        const blob = blobNameFor(file);
+        await blobService.enviarArquivo(container, file.path, blob, file.mimetype);
+        unlinkQuiet(file.path);
+        const { rows: [row] } = await query(
+          `INSERT INTO task_files (task_id, uploaded_by, name, mime, size_bytes, container, \`blob\`)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, name, mime, size_bytes, created_at, uploaded_by`,
+          [id, req.user.id, safeOriginalName(file.originalname), file.mimetype || 'application/octet-stream', file.size, container, blob]
+        );
+        row.uploader_name = req.user.name;
+        created.push(formatTaskFile(row));
+      }
+    } catch (err) {
+      incoming.forEach((f) => unlinkQuiet(f.path));
+      throw err;
+    }
+    res.status(201).json(created);
+  })
+);
+
+router.get('/:id/files/:fileId', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  const fileId = intParam(req.params.fileId, 'fileId');
+  await requireTaskView(req.user.id, id);
+  const { rows: [row] } = await query(
+    'SELECT name, mime, container, `blob` FROM task_files WHERE id = $1 AND task_id = $2',
+    [fileId, id]
+  );
+  if (!row) throw new HttpError(404, 'Arquivo não encontrado.');
+  const downloaded = await blobService.baixarBuffer(row.container, row.blob);
+  res.setHeader('Content-Type', downloaded.contentType || row.mime || 'application/octet-stream');
+  res.setHeader('Content-Disposition', blobService.contentDispositionAttachment(row.name));
+  res.send(downloaded.buffer);
+}));
+
+router.delete('/:id/files/:fileId', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  const fileId = intParam(req.params.fileId, 'fileId');
+  await requireTaskEdit(req.user.id, id);
+  const { rows: [row] } = await query(
+    'SELECT container, `blob` FROM task_files WHERE id = $1 AND task_id = $2',
+    [fileId, id]
+  );
+  if (!row) throw new HttpError(404, 'Arquivo não encontrado.');
+  await blobService.removerBlob(row.container, row.blob);
+  await query('DELETE FROM task_files WHERE id = $1', [fileId]);
   res.json({ ok: true });
 }));
 
@@ -584,7 +702,7 @@ router.patch('/:id/subtasks/:subId', ah(async (req, res) => {
   if (finishing && cur.access !== 'edit') {
     const turn = await currentStep({ query }, id);
     if (turn && turn.id !== subId) {
-      throw new HttpError(409, `Ainda não é a vez desta etapa: aguarde ${turn.assignee_name || 'o responsável'} concluir "${turn.title}".`);
+      throw new HttpError(409, `Ainda não é a vez desta etapa: aguarde ${turn.assignee_name || 'o desenvolvedor'} concluir "${turn.title}".`);
     }
   }
 

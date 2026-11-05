@@ -5,14 +5,15 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
 import { DataService } from '../core/data.service';
 import { ToastService } from '../core/toast.service';
-import { Team } from '../core/models';
+import { Person, Team } from '../core/models';
 import { AutofocusDirective, AvatarComponent, EmptyComponent, IconComponent } from '../shared/ui';
 import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
+import { PersonPickerComponent } from '../shared/person-picker.component';
 
 @Component({
   selector: 'app-teams',
   standalone: true,
-  imports: [FormsModule, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, EmptyComponent, ConfirmDeleteComponent],
+  imports: [FormsModule, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, EmptyComponent, ConfirmDeleteComponent, PersonPickerComponent],
   template: `
     <div class="page">
       <div class="page-head">
@@ -46,8 +47,8 @@ import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
               <h2 style="font-size:18px">{{ t.name }}</h2>
               <span class="muted">· {{ t.sector_name }}</span>
               <span class="grow"></span>
-              <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes', t.id]"><app-icon name="board" [size]="14" />Projetos</a>
-              @if (t.can_dashboard) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes', t.id, 'painel']"><app-icon name="chart" [size]="14" />Painel</a> }
+              <a class="btn btn-sm" [routerLink]="['/ti/taskhub/kanban/equipes', t.id]"><app-icon name="board" [size]="14" />Projetos</a>
+              @if (t.can_dashboard) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/painel/equipes', t.id]"><app-icon name="chart" [size]="14" />Painel</a> }
               @if (t.can_edit) {
                 <button class="btn btn-sm" (click)="openEdit(t)">Editar</button>
                 <button class="btn btn-sm btn-danger" (click)="deleting.set(t)">Excluir</button>
@@ -62,10 +63,7 @@ import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
                   @if (t.can_edit && (t.managers?.length || 0) > 1) { <button (click)="removeManager(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button> }</span>
               }
               @if (t.can_edit) {
-                <select #mg class="select" style="width:220px;max-width:100%;height:28px" (change)="addManager(+mg.value); mg.value = ''" aria-label="Adicionar gestor">
-                  <option value="">Adicionar gestor…</option>
-                  @for (p of managerCandidates(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
-                </select>
+                <app-person-picker class="pp-toolbar" [people]="managerCandidates()" placeholder="Adicionar gestor…" (picked)="addManager($event ?? 0)" />
               }
             </div>
 
@@ -85,18 +83,15 @@ import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
             @if (!(t.members || []).length) { <div class="muted small" style="padding:10px 8px">Nenhum membro ainda.</div> }
             @if (t.can_edit) {
               <div class="mini-form" style="max-width:520px">
-                <select class="select" [(ngModel)]="newMember" aria-label="Pessoa">
-                  <option [ngValue]="null">Adicionar pessoa do setor {{ t.sector_name }}</option>
-                  @for (u of memberCandidates(); track u.id) { <option [ngValue]="u.id">{{ u.name }}{{ u.team_name ? ' · também em ' + u.team_name : '' }}</option> }
-                </select>
-                <button class="btn btn-sm" [disabled]="!newMember" (click)="addMember()">Adicionar</button>
+                <app-person-picker class="grow" [people]="memberCandidates()" [placeholder]="'Adicionar pessoa do setor ' + t.sector_name + '…'"
+                                   [subOf]="alsoIn" (picked)="addMember($event)" />
               </div>
               <div class="muted small" style="margin-top:6px">Aparecem as pessoas do setor. A mesma pessoa pode estar em várias equipes; quem é da equipe vê e cria os projetos dela.</div>
             }
 
             <div class="block-title" style="margin-top:22px">Projetos da equipe</div>
             <div class="tlist">
-              <a class="trow" [routerLink]="['/ti/taskhub/equipes', t.id]">
+              <a class="trow" [routerLink]="['/ti/taskhub/kanban/equipes', t.id]">
                 <span class="dot" style="width:8px;height:8px;border-radius:3px" [style.background]="t.color"></span>
                 <span class="t-title">Abrir o quadro de projetos</span>
                 <span class="muted small">{{ t.projects_count || 0 }} {{ t.projects_count === 1 ? 'projeto em andamento' : 'projetos em andamento' }}</span>
@@ -152,8 +147,6 @@ export class TeamsPage implements OnInit {
   selected = signal<Team | null>(null);
   error = signal('');
   form: any = null;
-  newMember: number | null = null;
-
   grouped = computed(() => {
     const map = new Map<string, Team[]>();
     for (const t of this.data.teams()) {
@@ -211,10 +204,11 @@ export class TeamsPage implements OnInit {
     });
   }
 
-  addMember() {
-    if (!this.newMember) return;
-    this.api.setTeamMember(this.selected()!.id, this.newMember, 'membro').subscribe({
-      next: () => { this.newMember = null; this.reload(); }, error: e => this.toast.error(errorMessage(e)),
+  alsoIn = (p: Person) => [p.team_name ? `também em ${p.team_name}` : '', p.department || ''].filter(Boolean).join(' · ');
+  addMember(userId: number | null) {
+    if (!userId) return;
+    this.api.setTeamMember(this.selected()!.id, userId, 'membro').subscribe({
+      next: () => this.reload(), error: e => this.toast.error(errorMessage(e)),
     });
   }
   removeMember(userId: number) { this.api.removeTeamMember(this.selected()!.id, userId).subscribe({ next: () => this.reload(), error: e => this.toast.error(errorMessage(e)) }); }

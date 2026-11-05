@@ -37,7 +37,7 @@ import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from '
           }
           @case ('andamento') {
             <div class="pv-slide"><h2>Em andamento</h2>
-              <table class="pv-table"><thead><tr><th>Tarefa</th><th>Status</th><th>Responsável</th><th>Prazo</th></tr></thead>
+              <table class="pv-table"><thead><tr><th>Tarefa</th><th>Status</th><th>Desenvolvedor</th><th>Prazo</th></tr></thead>
                 <tbody>@for (i of d.doing.slice(0, 9); track i.id) { <tr><td>{{ i.title }}</td><td>{{ i.status || '—' }}</td><td>{{ i.assignee || '—' }}</td><td>{{ fmt(i.due_date) }}</td></tr> }</tbody></table>
               @if (!d.doing.length) { <p class="pv-empty">Nenhuma tarefa em andamento agora.</p> }
             </div>
@@ -69,7 +69,7 @@ import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from '
           }
           @case ('prazos') {
             <div class="pv-slide"><h2>Próximos prazos</h2>
-              <table class="pv-table"><thead><tr><th>Tarefa</th><th>Status</th><th>Responsável</th><th>Prazo</th></tr></thead>
+              <table class="pv-table"><thead><tr><th>Tarefa</th><th>Status</th><th>Desenvolvedor</th><th>Prazo</th></tr></thead>
                 <tbody>@for (i of d.upcoming.slice(0, 9); track i.id) { <tr><td>{{ i.title }}</td><td>{{ i.status || '—' }}</td><td>{{ i.assignee || '—' }}</td><td>{{ fmt(i.due_date) }}</td></tr> }</tbody></table>
               @if (!d.upcoming.length) { <p class="pv-empty">Nada vence nos próximos 14 dias.</p> }
             </div>
@@ -78,7 +78,7 @@ import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from '
             <div class="pv-slide"><h2>Atrasadas e bloqueios</h2>
               <div class="pv-cols">
                 <div><h3 class="pv-red">Atrasadas ({{ d.overdue.length }})</h3>
-                  @for (i of d.overdue.slice(0, 7); track i.id) { <div class="pv-li"><b>{{ i.title }}</b><span>{{ i.assignee || 'sem responsável' }} · venceu {{ fmt(i.due_date) }}</span></div> }
+                  @for (i of d.overdue.slice(0, 7); track i.id) { <div class="pv-li"><b>{{ i.title }}</b><span>{{ i.assignee || 'sem desenvolvedor' }} · venceu {{ fmt(i.due_date) }}</span></div> }
                   @empty { <p class="pv-empty">Nenhuma.</p> }</div>
                 <div><h3 class="pv-amber">Bloqueadas ({{ d.blocked.length }})</h3>
                   @for (i of d.blocked.slice(0, 7); track i.id) { <div class="pv-li"><b>{{ i.title }}</b><span>{{ i.blocked_reason || 'Sem motivo informado' }} · {{ i.assignee || '—' }}</span></div> }
@@ -90,12 +90,12 @@ import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from '
             <div class="pv-slide"><h2>Equipe</h2>
               <table class="pv-table"><thead><tr><th>Pessoa</th><th>Abertas</th><th>Atrasadas</th><th>Concluídas</th></tr></thead>
                 <tbody>@for (p of d.by_person.slice(0, 10); track p.id) { <tr><td>{{ p.name }}</td><td>{{ p.open }}</td><td [class.pv-red]="p.overdue">{{ p.overdue }}</td><td>{{ p.done }}</td></tr> }</tbody></table>
-              @if (!d.by_person.length) { <p class="pv-empty">Nenhuma tarefa com responsável.</p> }
+              @if (!d.by_person.length) { <p class="pv-empty">Nenhuma tarefa com desenvolvedor.</p> }
             </div>
           }
           @case ('entregas') {
             <div class="pv-slide"><h2>Concluídas na semana</h2>
-              <table class="pv-table"><thead><tr><th>Tarefa</th><th>Status</th><th>Responsável</th><th>Concluída em</th></tr></thead>
+              <table class="pv-table"><thead><tr><th>Tarefa</th><th>Status</th><th>Desenvolvedor</th><th>Concluída em</th></tr></thead>
                 <tbody>@for (i of d.done_week.slice(0, 9); track i.id) { <tr><td>{{ i.title }}</td><td>{{ i.status || '—' }}</td><td>{{ i.assignee || '—' }}</td><td>{{ fmt(i.completed_at) }}</td></tr> }</tbody></table>
               @if (!d.done_week.length) { <p class="pv-empty">Nenhuma tarefa concluída nos últimos 7 dias.</p> }
             </div>
@@ -132,7 +132,7 @@ export class PresentationViewerComponent implements OnInit, OnDestroy {
 
   coverMeta() {
     const p = this.d.subject;
-    return [linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  ');
+    return [linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Desenvolvedor: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  ');
   }
   fmt(iso: string | null) { return fmtDate(iso); }
   wk(iso: string) { return weekLabel(iso); }

@@ -74,12 +74,9 @@ async function dailyDueNotifications() {
       ownersOf.get(o.work_id).push(o.user_id);
     }
     for (const w of works) {
-      const noun = w.team_id ? 'projeto' : 'trabalho';
       const dueTodayWork = w.due_date === today;
       const people = ownersOf.get(w.id)?.length ? ownersOf.get(w.id) : [w.owner_id].filter(Boolean);
-      const title = dueTodayWork
-        ? `O prazo deste ${noun} é hoje`
-        : `${noun === 'projeto' ? 'Projeto' : 'Trabalho'} atrasado`;
+      const title = dueTodayWork ? 'O prazo deste projeto é hoje' : 'Projeto atrasado';
       for (const uid of new Set(people)) {
         await notifyOnce({
           userId: uid, actorId: null, type: dueTodayWork ? 'work_due_today' : 'work_overdue',

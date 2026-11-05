@@ -6,11 +6,12 @@ import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { AuthService } from '../core/auth.service';
 import { CreatableWork, Person, Phase, Priority } from '../core/models';
-import { PRIORITIES, SIZES, TaskSize, dueLabel, todayIso } from '../core/format';
+import { PRIORITIES, SIZES, TASK_FILE_ACCEPT, TASK_FILE_MAX, TASK_FILE_MAX_MB, TaskSize, dueLabel, fileSize, taskFileError, todayIso } from '../core/format';
 import { parseQuickTask } from '../core/quick-parse';
 import { takeBulletLine } from '../core/steps-text';
 
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { PersonPickerComponent } from '../shared/person-picker.component';
 
 interface DraftStep { title: string; assignee_id: number | null; due_date: string | null; notify: boolean }
 
@@ -19,7 +20,7 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
 @Component({
   selector: 'app-quick-add',
   standalone: true,
-  imports: [AutofocusDirective, FormsModule, IconComponent, AvatarComponent],
+  imports: [AutofocusDirective, FormsModule, IconComponent, AvatarComponent, PersonPickerComponent],
   template: `
     <div class="modal-scrim" (click)="close()">
       <div class="modal wide qa-modal" (click)="$event.stopPropagation()" (keydown.control.enter)="save($event)" (keydown.meta.enter)="save($event)"
@@ -64,10 +65,7 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                 <span class="pill"><app-avatar [person]="p" />{{ p.name }}<button type="button" (click)="toggleContact(p.id)" [attr.aria-label]="'Remover ' + p.name"><app-icon name="x" [size]="12" /></button></span>
               }
             </div>
-            <select #ct class="select" (change)="toggleContact(+ct.value); ct.value = ''" aria-label="Adicionar pessoa com quem foi alinhado">
-              <option value="">Adicionar pessoa…</option>
-              @for (p of contactCandidates(); track p.id) { <option [value]="p.id">{{ p.name }}{{ p.sector_name ? ' · ' + p.sector_name : '' }}</option> }
-            </select>
+            <app-person-picker [people]="contactCandidates()" ariaLabel="Adicionar pessoa com quem foi alinhado" (picked)="toggleContact($event ?? 0)" />
             <span class="hint">Quem participou ou pediu. Só registro: ninguém é avisado.</span>
           </div>
           <div class="field">
@@ -123,10 +121,9 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                   <button type="button" class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveStep(i, 1)" aria-label="Descer etapa" title="Descer"><app-icon name="chevron" [size]="12" class="rot-down" /></button>
                 </span>
                 @if (workId()) {
-                  <select class="inline step-who" [ngModel]="s.assignee_id" (ngModelChange)="editStep(i, { assignee_id: $event })" aria-label="Responsável pela etapa">
-                    <option [ngValue]="null">Responsável</option>
-                    @for (p of people(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
-                  </select>
+                  <app-person-picker class="step-who" mode="single" variant="inline" [people]="people()" [value]="s.assignee_id ?? null"
+                                     [specials]="[{ value: null, label: 'Sem desenvolvedor' }]" placeholder="Desenvolvedor"
+                                     ariaLabel="Desenvolvedor da etapa" (picked)="editStep(i, { assignee_id: $event })" />
                   @if (s.assignee_id && s.assignee_id !== me()) {
                     <label class="check-label step-notify" title="Avisar a pessoa quando for a vez dela"><input type="checkbox" class="switch" role="switch" [ngModel]="s.notify" (ngModelChange)="editStep(i, { notify: $event })" /> avisar</label>
                   }
@@ -140,6 +137,27 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
               <input class="inline grow" placeholder="Adicionar etapa e Enter" [(ngModel)]="newStep" (keydown.enter)="addStep($event)" aria-label="Nova etapa" />
             </div>
             </div>
+          </div>
+          <div class="field span2">
+            <span class="label">Anexos</span>
+            <div class="qa-files">
+              @for (f of pendingFiles(); track $index) {
+                <span class="qa-file-chip">
+                  <app-icon name="paperclip" [size]="13" />
+                  <span class="qa-file-name" [title]="f.name">{{ f.name }}</span>
+                  <span class="muted small">{{ fileSize(f.size) }}</span>
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removePending($index)" [attr.aria-label]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
+                </span>
+              }
+              @if (pendingFiles().length < fileMax) {
+                <label class="btn btn-ghost btn-sm qa-file-add">
+                  <app-icon name="paperclip" [size]="14" />
+                  Anexar arquivos
+                  <input type="file" multiple hidden [accept]="fileAccept" (change)="pickFiles($event)" />
+                </label>
+              }
+            </div>
+            <span class="hint">Imagem, PDF, Word, Excel, PowerPoint, texto ou zip. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</span>
           </div>
         </div>
         <div class="modal-foot">
@@ -160,6 +178,10 @@ export class QuickAddComponent implements OnInit {
 
   priorities = PRIORITIES;
   sizes = SIZES;
+  fileAccept = TASK_FILE_ACCEPT;
+  fileMax = TASK_FILE_MAX;
+  fileMaxMb = TASK_FILE_MAX_MB;
+  fileSize = fileSize;
   size: TaskSize | null = null;
   text = '';
   text$ = signal('');
@@ -184,6 +206,7 @@ export class QuickAddComponent implements OnInit {
   due = signal<string | null>(null);
   priority = signal<Priority>('media');
   saving = signal(false);
+  pendingFiles = signal<File[]>([]);
 
   // Aberto de dentro de um projeto: a tarefa nasce nele e o seletor some.
   locked = computed(() => {
@@ -296,6 +319,29 @@ export class QuickAddComponent implements OnInit {
 
   close() { this.ui.quickAdd.set(null); }
 
+  pickFiles(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const picked = [...(input.files || [])];
+    input.value = '';
+    if (!picked.length) return;
+    const next = [...this.pendingFiles()];
+    for (const f of picked) {
+      const err = taskFileError(f, next.length);
+      if (err) { this.toast.error(err); continue; }
+      next.push(f);
+    }
+    this.pendingFiles.set(next);
+  }
+  removePending(i: number) { this.pendingFiles.update(l => l.filter((_, j) => j !== i)); }
+
+  private finishCreate(id: number, extra: string) {
+    this.saving.set(false);
+    this.toast.show(`Tarefa criada${extra}.`);
+    this.ui.taskChanged$.next(id);
+    this.data.reloadProjects();
+    this.close();
+  }
+
   save(e?: Event) {
     e?.preventDefault();
     const p = this.parsed();
@@ -330,12 +376,19 @@ export class QuickAddComponent implements OnInit {
     this.saving.set(true);
     this.api.createTask(body).subscribe({
       next: t => {
-        this.saving.set(false);
         const extra = t.due_date ? ` · prazo ${dueLabel(t.due_date).toLowerCase()}` : '';
-        this.toast.show(`Tarefa criada${extra}.`);
-        this.ui.taskChanged$.next(t.id);
-        this.data.reloadProjects();
-        this.close();
+        const files = this.pendingFiles();
+        if (!files.length) { this.finishCreate(t.id, extra); return; }
+        this.api.uploadTaskFiles(t.id, files).subscribe({
+          next: () => this.finishCreate(t.id, extra),
+          error: err => {
+            this.saving.set(false);
+            this.toast.error(errorMessage(err, 'A tarefa foi criada, mas os anexos não foram enviados.'));
+            this.ui.taskChanged$.next(t.id);
+            this.data.reloadProjects();
+            this.close();
+          },
+        });
       },
       error: err => { this.saving.set(false); this.toast.error(errorMessage(err)); },
     });
