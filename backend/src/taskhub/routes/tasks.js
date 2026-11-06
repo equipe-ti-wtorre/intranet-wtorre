@@ -1,3 +1,4 @@
+const { isRealDate } = require('../lib/dates');
 const router = require('express').Router();
 const { z } = require('zod');
 const { query, tx } = require('../db');
@@ -14,7 +15,7 @@ const { formatFile: formatTaskFile, safeOriginalName, unlinkQuiet } = require('.
 
 const PRIORITIES = ['critica', 'alta', 'media', 'baixa'];
 const PRIORITY_LABEL = { critica: 'Crítica', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
-const dateOrNull = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use AAAA-MM-DD').nullable();
+const dateOrNull = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use AAAA-MM-DD').refine(isRealDate, 'Data inexistente no calendário').nullable();
 
 // ---- Listagem ---------------------------------------------------------------
 // Filtros: project_id, team_id, assignee (me|id|none), created_by (me), delegated (1),
@@ -192,6 +193,7 @@ async function assertAssignable(run, projectId, assigneeId, me) {
 
 router.post('/', ah(async (req, res) => {
   const d = parse(createSchema, req.body);
+  if (d.start_date && d.due_date && d.due_date < d.start_date) throw new HttpError(422, 'O prazo deve ser igual ou depois da data de início.');
   const me = req.user.id;
   const projectId = d.project_id || null;
   let space = d.space;
@@ -366,6 +368,12 @@ router.patch('/:id', ah(async (req, res) => {
   const me = req.user.id;
   const d = parse(updateSchema, req.body);
   const cur = await requireTaskEdit(me, id, true);
+  {
+    const day = (v) => (v instanceof Date ? isoDate(v) : v ? String(v).slice(0, 10) : null);
+    const start = d.start_date !== undefined ? d.start_date : day(cur.start_date);
+    const due = d.due_date !== undefined ? d.due_date : day(cur.deadline);
+    if (start && due && due < start) throw new HttpError(422, 'O prazo deve ser igual ou depois da data de início.');
+  }
   if (cur.access === 'work') {
     const blocked = Object.keys(d).filter(k => !WORK_FIELDS.has(k));
     if (blocked.length) throw new HttpError(403, 'Você pode atualizar o status, a fase, o tempo e o bloqueio; o restante quem altera é o gestor.');

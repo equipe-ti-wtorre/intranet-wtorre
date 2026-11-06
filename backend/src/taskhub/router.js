@@ -44,7 +44,7 @@ router.use((err, _req, res, _next) => {
   if (status >= 500) console.error('[taskhub]', err);
   res.status(status).json({
     message: status >= 500 ? 'Erro interno do servidor' : err.message,
-    ...(status < 500 && err.extra ? err.extra : {}),
+    ...(status < 500 && err.extra ? (Array.isArray(err.extra) ? { details: err.extra } : err.extra) : {}),
   });
 });
 

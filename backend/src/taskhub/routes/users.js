@@ -1,3 +1,4 @@
+const { isRealDate } = require('../lib/dates');
 const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const { z } = require('zod');
@@ -142,7 +143,7 @@ router.patch('/me', ah(async (req, res) => {
   const data = parse(z.object({
     name: z.string().trim().min(2).max(100).optional(),
     job_title: z.string().trim().max(100).optional(),
-    away_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    away_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário').nullable().optional(),
   }), req.body);
   const sets = []; const params = [];
   for (const [k, v] of Object.entries(data)) { params.push(v); sets.push(`${k} = $${params.length}`); }

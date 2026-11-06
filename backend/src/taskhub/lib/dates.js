@@ -16,6 +16,14 @@ function isIsoDate(v) {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 }
 
+// AAAA-MM-DD que existe no calendário (recusa 2026-13-45, 2027-02-31).
+function isRealDate(v) {
+  if (!isIsoDate(v)) return false;
+  const [y, m, d] = v.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
 // Segunda-feira da semana do dia informado.
 function weekStart(iso) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -64,4 +72,4 @@ function localTimestamp(d = new Date()) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-module.exports = { isoDate, addDays, isIsoDate, weekStart, nextOccurrence, occursAt, localTimestamp };
+module.exports = { isoDate, addDays, isIsoDate, isRealDate, weekStart, nextOccurrence, occursAt, localTimestamp };

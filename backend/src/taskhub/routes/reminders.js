@@ -1,3 +1,4 @@
+const { isRealDate } = require('../lib/dates');
 const express = require('express');
 const { z } = require('zod');
 const { query } = require('../db');
@@ -5,7 +6,7 @@ const { nextOccurrence } = require('../lib/dates');
 
 const router = express.Router();
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (use AAAA-MM-DD)');
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (use AAAA-MM-DD)').refine(isRealDate, 'Data inexistente no calendário');
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/, 'Horário inválido (use HH:MM)');
 const repeatSchema = z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly']);
 

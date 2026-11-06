@@ -1,3 +1,4 @@
+const { isRealDate } = require('../lib/dates');
 const router = require('express').Router();
 const { z } = require('zod');
 const { query, tx } = require('../db');
@@ -109,11 +110,11 @@ const schema = z.object({
   description: z.string().max(5000).default(''),
   owner_id: z.coerce.number().int().positive().nullable().optional(),
   owner_ids: z.array(z.coerce.number().int().positive()).min(1, 'escolha pelo menos um desenvolvedor').max(20).optional(),
-  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário').nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#4c8dff'),
   members: z.array(z.coerce.number().int().positive()).max(200).default([]),
   duration_days: z.coerce.number().int().min(1).max(365).nullable().optional(),
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário').nullable().optional(),
   continues_ids: z.array(z.coerce.number().int().positive()).max(30).optional(),
   department: z.string().trim().max(200).nullable().optional(),
   push: z.boolean().optional(),
@@ -329,8 +330,8 @@ router.patch('/works/:id/phase', ah(async (req, res) => {
 }));
 
 const previewSchema = z.object({
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário'),
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário'),
   owner_ids: z.array(z.coerce.number().int().positive()).min(1).max(20),
   exclude_id: z.coerce.number().int().positive().optional(),
   adjust_ids: z.array(z.coerce.number().int().positive()).max(200).optional(),
@@ -642,23 +643,28 @@ router.delete('/works/:id', ah(async (req, res) => {
   const role = await workRole(req.user.id, id);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
   if (role !== 'manage') throw new HttpError(403, 'Quem exclui o projeto é a gestão da equipe, quem o criou ou o desenvolvedor.');
-  await removeWorkBlobs(id);
+  const blobs = await workBlobs(id);
   await tx(async (c) => {
     await c.query('DELETE FROM tasks WHERE section_id = $1', [id]);
     await c.query('DELETE FROM project_sections WHERE id = $1', [id]);
   });
+  await removeBlobs(blobs);
   res.json({ ok: true });
 }));
 
 // ---- Anexos do projeto --------------------------------------------------------
 // Removem também os anexos das tarefas do projeto, que saem junto com ele.
-async function removeWorkBlobs(workId) {
+async function workBlobs(workId) {
   const { rows } = await query(
     `SELECT container, \`blob\` FROM work_files WHERE work_id = $1
      UNION ALL
      SELECT f.container, f.\`blob\` FROM task_files f JOIN tasks t ON t.id = f.task_id WHERE t.section_id = $1`,
     [workId]
   );
+  return rows;
+}
+
+async function removeBlobs(rows) {
   for (const f of rows) {
     try {
       await blobService.removerBlob(f.container, f.blob);
@@ -842,7 +848,7 @@ const timelineSchema = z.object({
     name: z.string().trim().min(2, 'informe um nome').max(100).optional(),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
     duration_days: z.coerce.number().int().min(1, 'a duração mínima é 1 dia').max(365),
-    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário').nullable().optional(),
   })).max(300),
   remove: z.array(z.number().int().positive()).max(300).default([]),
   reason: z.string().trim().max(500).optional(),
