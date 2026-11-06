@@ -122,10 +122,11 @@ function replaceAggregateFilter(sql) {
   return out;
 }
 
-// No MariaDB, JSON_QUOTE de número e JSON_CONTAINS com candidato que não é JSON devolvem NULL,
-// e NULL dentro de NOT (...) descarta a linha. Por isso: CAST para texto e COALESCE em cada teste.
+// No MariaDB, JSON_QUOTE de número devolve NULL, e NULL dentro de NOT (...) descarta a linha. Por isso: CAST
+// para texto e COALESCE em cada teste. O segundo teste (lista de números) só recebe JSON válido: o MySQL 8
+// dá erro com candidato que não é JSON, onde o MariaDB devolvia NULL.
 const anyOf = (list, value) =>
-  `(COALESCE(JSON_CONTAINS(${list}, JSON_QUOTE(CAST(${value} AS CHAR))), 0) OR COALESCE(JSON_CONTAINS(${list}, CAST(${value} AS CHAR)), 0))`;
+  `(COALESCE(JSON_CONTAINS(${list}, JSON_QUOTE(CAST(${value} AS CHAR))), 0) OR COALESCE(JSON_CONTAINS(${list}, IF(CAST(${value} AS CHAR) REGEXP '^-{0,1}[0-9]+$', CAST(${value} AS CHAR), JSON_QUOTE(CAST(${value} AS CHAR)))), 0))`;
 
 function replaceAny(sql) {
   let out = sql.replace(
@@ -157,6 +158,47 @@ function replaceJsonAgg(sql) {
   return sql
     .replace(/\bjson_build_object\s*\(/gi, 'JSON_OBJECT(')
     .replace(/\bjson_agg\s*\(/gi, 'JSON_ARRAYAGG(');
+}
+
+function topLevelOrderBy(arg) {
+  let depth = 0;
+  let quote = null;
+  for (let k = 0; k < arg.length; k += 1) {
+    const ch = arg[k];
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === "'" || ch === '"' || ch === '`') quote = ch;
+    else if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    else if (depth === 0 && /^\s+ORDER\s+BY\s/i.test(arg.slice(k))) return k;
+  }
+  return -1;
+}
+
+// O MySQL 8 não aceita ORDER BY dentro de JSON_ARRAYAGG; GROUP_CONCAT ordena nos dois bancos.
+// O limite padrão do GROUP_CONCAT no MySQL é 1024 bytes, por isso o SET_VAR (o MariaDB ignora o hint e já usa 1 MB).
+function replaceOrderedJsonAgg(sql) {
+  const re = /\bJSON_ARRAYAGG\s*\(/gi;
+  let out = '';
+  let i = 0;
+  let changed = false;
+  while (i < sql.length) {
+    re.lastIndex = i;
+    const m = re.exec(sql);
+    if (!m) { out += sql.slice(i); break; }
+    const argEnd = scanParen(sql, re.lastIndex);
+    const arg = sql.slice(re.lastIndex, argEnd - 1);
+    const at = topLevelOrderBy(arg);
+    if (at < 0) {
+      out += sql.slice(i, argEnd);
+    } else {
+      const inner = replaceOrderedJsonAgg(arg.slice(0, at));
+      out += sql.slice(i, m.index)
+        + `JSON_EXTRACT(CONCAT('[', GROUP_CONCAT(${inner} ${arg.slice(at).trim()} SEPARATOR ','), ']'), '$')`;
+      changed = true;
+    }
+    i = argEnd;
+  }
+  return changed ? out.replace(/^(\s*SELECT)\b/i, '$1 /*+ SET_VAR(group_concat_max_len = 16777216) */') : out;
 }
 
 function replaceConflict(sql) {
@@ -194,6 +236,7 @@ function translate(sql, params = []) {
   text = text.replace(/\bNOW\(\)\s*\+\s*INTERVAL\s+(\d+)\s+DAY/gi, 'DATE_ADD(NOW(), INTERVAL $1 DAY)');
   text = replaceNullsOrder(text);
   text = replaceJsonAgg(text);
+  text = replaceOrderedJsonAgg(text);
   text = replaceAggregateFilter(text);
   text = replaceAny(text);
   text = text.replace(/\btrue\b/g, '1');

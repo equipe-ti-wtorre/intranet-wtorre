@@ -41,7 +41,7 @@ router.post('/', ah(async (req, res) => {
   const { rows: exists } = await query('SELECT key FROM access_profiles WHERE key LIKE $1', [`${key}%`]);
   if (exists.some(r => r.key === key)) key = `${key}_${exists.length + 1}`;
   await query(
-    `INSERT INTO access_profiles (key, label, description, permissions, system, position)
+    `INSERT INTO access_profiles (key, label, description, permissions, \`system\`, position)
      VALUES ($1, $2, $3, $4, false, 50)`, [key, d.label, d.description, d.permissions]
   );
   const { rows } = await query('SELECT * FROM access_profiles WHERE key = $1', [key]);
@@ -65,7 +65,7 @@ router.patch('/:key', ah(async (req, res) => {
 // Perfis do sistema não são excluídos. Quem usava um perfil excluído e fica sem nenhum vira Colaborador.
 router.delete('/:key', ah(async (req, res) => {
   requireAdmin(req.user);
-  const { rows: [p] } = await query('SELECT system FROM access_profiles WHERE key = $1', [req.params.key]);
+  const { rows: [p] } = await query('SELECT `system` FROM access_profiles WHERE key = $1', [req.params.key]);
   if (!p) throw new HttpError(404, 'Perfil não encontrado');
   if (p.system) throw new HttpError(400, 'Os perfis padrão não podem ser excluídos; edite os acessos deles se precisar.');
   await tx(async (c) => {

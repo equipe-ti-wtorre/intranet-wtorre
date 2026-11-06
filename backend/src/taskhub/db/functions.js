@@ -1,5 +1,5 @@
 const FUNCTIONS = [
-  `CREATE OR REPLACE FUNCTION th_has(p_user INT, p_perm VARCHAR(80))
+  `CREATE FUNCTION th_has(p_user INT, p_perm VARCHAR(80))
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE ok TINYINT DEFAULT 0;
@@ -20,7 +20,7 @@ const FUNCTIONS = [
      RETURN IFNULL(ok, 0);
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_oversees_sector(p_user INT, p_sector INT)
+  `CREATE FUNCTION th_oversees_sector(p_user INT, p_sector INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      IF p_sector IS NULL THEN RETURN 0; END IF;
@@ -33,7 +33,7 @@ const FUNCTIONS = [
      RETURN 0;
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_oversees_team(p_user INT, p_team INT)
+  `CREATE FUNCTION th_oversees_team(p_user INT, p_team INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE v_sector INT;
@@ -46,7 +46,7 @@ const FUNCTIONS = [
      RETURN 0;
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_manages(p_manager INT, p_person INT)
+  `CREATE FUNCTION th_manages(p_manager INT, p_person INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE v_sector INT;
@@ -59,13 +59,13 @@ const FUNCTIONS = [
      RETURN 0;
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_is_manager(p_user INT)
+  `CREATE FUNCTION th_is_manager(p_user INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      RETURN th_has(p_user, 'criar_corporativo');
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_project_role(p_user INT, p_project INT)
+  `CREATE FUNCTION th_project_role(p_user INT, p_project INT)
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE result VARCHAR(10) DEFAULT NULL;
@@ -115,7 +115,7 @@ const FUNCTIONS = [
      RETURN result;
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_work_role(p_user INT, p_work INT)
+  `CREATE FUNCTION th_work_role(p_user INT, p_work INT)
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE result VARCHAR(10) DEFAULT NULL;
@@ -136,7 +136,7 @@ const FUNCTIONS = [
      RETURN result;
    END`,
 
-  `CREATE OR REPLACE FUNCTION th_task_access(p_user INT, p_task INT)
+  `CREATE FUNCTION th_task_access(p_user INT, p_task INT)
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE v_space VARCHAR(12);
@@ -189,7 +189,7 @@ const FUNCTIONS = [
    END`,
 ];
 
-// Sem DROP antes: se uma criação falhar, a versão anterior continua no banco e as telas seguem funcionando.
+// DROP + CREATE em vez de CREATE OR REPLACE: o MySQL 8 da produção não aceita OR REPLACE em funções.
 async function ensureFunctions(pool) {
   try {
     await pool.query('SET SESSION log_bin_trust_function_creators = 1');
@@ -200,6 +200,7 @@ async function ensureFunctions(pool) {
   for (const sql of FUNCTIONS) {
     const name = sql.match(/FUNCTION (\w+)/)[1];
     try {
+      await pool.query(`DROP FUNCTION IF EXISTS ${name}`);
       await pool.query(sql);
     } catch (err) {
       failed.push(name);
