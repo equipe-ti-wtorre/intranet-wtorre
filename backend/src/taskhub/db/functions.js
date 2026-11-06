@@ -1,5 +1,5 @@
 const FUNCTIONS = [
-  `CREATE FUNCTION th_has(p_user INT, p_perm VARCHAR(80))
+  `CREATE OR REPLACE FUNCTION th_has(p_user INT, p_perm VARCHAR(80))
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE ok TINYINT DEFAULT 0;
@@ -20,7 +20,7 @@ const FUNCTIONS = [
      RETURN IFNULL(ok, 0);
    END`,
 
-  `CREATE FUNCTION th_oversees_sector(p_user INT, p_sector INT)
+  `CREATE OR REPLACE FUNCTION th_oversees_sector(p_user INT, p_sector INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      IF p_sector IS NULL THEN RETURN 0; END IF;
@@ -33,7 +33,7 @@ const FUNCTIONS = [
      RETURN 0;
    END`,
 
-  `CREATE FUNCTION th_oversees_team(p_user INT, p_team INT)
+  `CREATE OR REPLACE FUNCTION th_oversees_team(p_user INT, p_team INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE v_sector INT;
@@ -46,7 +46,7 @@ const FUNCTIONS = [
      RETURN 0;
    END`,
 
-  `CREATE FUNCTION th_manages(p_manager INT, p_person INT)
+  `CREATE OR REPLACE FUNCTION th_manages(p_manager INT, p_person INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      DECLARE v_sector INT;
@@ -59,13 +59,13 @@ const FUNCTIONS = [
      RETURN 0;
    END`,
 
-  `CREATE FUNCTION th_is_manager(p_user INT)
+  `CREATE OR REPLACE FUNCTION th_is_manager(p_user INT)
    RETURNS TINYINT READS SQL DATA
    BEGIN
      RETURN th_has(p_user, 'criar_corporativo');
    END`,
 
-  `CREATE FUNCTION th_project_role(p_user INT, p_project INT)
+  `CREATE OR REPLACE FUNCTION th_project_role(p_user INT, p_project INT)
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE result VARCHAR(10) DEFAULT NULL;
@@ -115,7 +115,7 @@ const FUNCTIONS = [
      RETURN result;
    END`,
 
-  `CREATE FUNCTION th_work_role(p_user INT, p_work INT)
+  `CREATE OR REPLACE FUNCTION th_work_role(p_user INT, p_work INT)
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE result VARCHAR(10) DEFAULT NULL;
@@ -136,7 +136,7 @@ const FUNCTIONS = [
      RETURN result;
    END`,
 
-  `CREATE FUNCTION th_task_access(p_user INT, p_task INT)
+  `CREATE OR REPLACE FUNCTION th_task_access(p_user INT, p_task INT)
    RETURNS VARCHAR(10) READS SQL DATA
    BEGIN
      DECLARE v_space VARCHAR(12);
@@ -189,29 +189,24 @@ const FUNCTIONS = [
    END`,
 ];
 
-const NAMES = [
-  'th_task_access',
-  'th_work_role',
-  'th_project_role',
-  'th_is_manager',
-  'th_manages',
-  'th_oversees_team',
-  'th_oversees_sector',
-  'th_has',
-];
-
+// Sem DROP antes: se uma criação falhar, a versão anterior continua no banco e as telas seguem funcionando.
 async function ensureFunctions(pool) {
   try {
     await pool.query('SET SESSION log_bin_trust_function_creators = 1');
   } catch {
     /* sem permissão: tenta criar mesmo assim */
   }
-  for (const name of NAMES) {
-    await pool.query(`DROP FUNCTION IF EXISTS ${name}`);
-  }
+  const failed = [];
   for (const sql of FUNCTIONS) {
-    await pool.query(sql);
+    const name = sql.match(/FUNCTION (\w+)/)[1];
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      failed.push(name);
+      console.error(`[taskhub] Função ${name} não atualizada: ${err.code || ''} ${err.sqlMessage || err.message}`);
+    }
   }
+  if (failed.length) throw new Error(`funções do banco não atualizadas: ${failed.join(', ')}`);
 }
 
 module.exports = { ensureFunctions };
