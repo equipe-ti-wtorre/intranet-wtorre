@@ -373,11 +373,11 @@ CREATE TABLE IF NOT EXISTS th_access_profiles (
   label VARCHAR(60) NOT NULL,
   description TEXT NOT NULL,
   permissions JSON NOT NULL,
-  system TINYINT(1) NOT NULL DEFAULT 0,
+  `system` TINYINT(1) NOT NULL DEFAULT 0,
   position INT NOT NULL DEFAULT 100
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT IGNORE INTO th_access_profiles (`key`, label, description, permissions, system, position) VALUES
+INSERT IGNORE INTO th_access_profiles (`key`, label, description, permissions, `system`, position) VALUES
   ('admin', 'Administrador', 'Cria setores, cadastra pessoas e define perfis. Não vê projetos, tarefas nem o trabalho dos setores.', '["gerenciar_pessoas_todas"]', 1, 1),
   ('gestor', 'Gestor', 'Vê o próprio trabalho e o das equipes e setores que gerencia, e cria equipes, projetos e tarefas.', '["criar_corporativo","criar_equipes"]', 1, 2),
   ('diretoria', 'Diretoria', 'Vê o trabalho dos setores que acompanha e o próprio, e cria projetos e tarefas.', '["criar_corporativo"]', 1, 3),
