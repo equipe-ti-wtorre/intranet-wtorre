@@ -269,7 +269,7 @@ export class UsersPage implements OnInit {
   save() {
     const e = this.editing(); if (!e) return;
     if (this.full() && !this.form.profiles.length) { this.error.set('Escolha ao menos um perfil.'); return; }
-    // Colaborador junto com outro perfil é redundante: o outro já inclui o que o colaborador faz.
+    // Gestor e Diretoria já incluem o trabalho do colaborador. Administrador não inclui.
     const body = { ...this.form };
     const fromDirectory = !!body.from_directory;
     delete body.department;
@@ -282,7 +282,8 @@ export class UsersPage implements OnInit {
       delete body.email;
       delete body.active;
     }
-    if (body.profiles.length > 1) body.profiles = body.profiles.filter((p: string) => p !== 'colaborador');
+    const coversWork = body.profiles.some((p: string) => p !== 'colaborador' && p !== 'admin');
+    if (coversWork) body.profiles = body.profiles.filter((p: string) => p !== 'colaborador');
     if (!body.profiles.includes('diretoria')) body.directed_sectors = [];
     if (!this.full()) { delete body.profiles; delete body.permissions; delete body.directed_sectors; }
     else delete body.team_id;
