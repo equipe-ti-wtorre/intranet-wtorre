@@ -101,7 +101,7 @@ async function workRole(userId, workId) {
 async function requireWork(user, workId, min = 'view') {
   const role = await workRole(user.id, workId);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  if (min === 'manage' && role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem altera é a gestão da equipe, quem o criou ou o desenvolvedor.');
+  if (min === 'manage' && role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem altera é a gestão da equipe, quem o criou ou o responsável.');
   return role;
 }
 
@@ -109,7 +109,7 @@ const schema = z.object({
   name: z.string().trim().min(2, 'informe um nome').max(100),
   description: z.string().max(5000).default(''),
   owner_id: z.coerce.number().int().positive().nullable().optional(),
-  owner_ids: z.array(z.coerce.number().int().positive()).min(1, 'escolha pelo menos um desenvolvedor').max(20).optional(),
+  owner_ids: z.array(z.coerce.number().int().positive()).min(1, 'escolha pelo menos um responsável').max(20).optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário').nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#4c8dff'),
   members: z.array(z.coerce.number().int().positive()).max(200).default([]),
@@ -241,7 +241,7 @@ async function boardImpact(run, userId, pid, incoming) {
 }
 
 function conflictError(impact) {
-  throw new HttpError(409, 'As datas cruzam projetos dos mesmos desenvolvedores.', {
+  throw new HttpError(409, 'As datas cruzam projetos dos mesmos responsáveis.', {
     conflicts: impact.conflicts,
     suggestion: impact.suggestion,
     duration_days: impact.duration_days,
@@ -410,13 +410,13 @@ async function activeIds(c, ids) {
 // No quadro da equipe, só quem é da equipe pode ser responsável.
 async function setOwners(c, req, workId, projectId, ids, name, board = false) {
   const list = [...new Set(ids)];
-  if (!list.length) throw new HttpError(400, 'Escolha pelo menos um desenvolvedor.');
+  if (!list.length) throw new HttpError(400, 'Escolha pelo menos um responsável.');
   const active = await activeIds(c, list);
-  if (list.some(id => !active.has(id))) throw new HttpError(400, 'Desenvolvedor não encontrado ou inativo.');
+  if (list.some(id => !active.has(id))) throw new HttpError(400, 'Responsável não encontrado ou inativo.');
   if (board) {
     for (const uid of list) {
       const { rows: [r] } = await c.query('SELECT th_project_role($1, $2) AS r', [uid, projectId]);
-      if (!['manage', 'edit'].includes(r?.r)) throw new HttpError(400, 'Desenvolvedores precisam ser da equipe.');
+      if (!['manage', 'edit'].includes(r?.r)) throw new HttpError(400, 'Responsáveis precisam ser da equipe.');
     }
   }
   const { rows: cur } = await c.query('SELECT user_id FROM work_owners WHERE work_id = $1', [workId]);
@@ -426,7 +426,7 @@ async function setOwners(c, req, workId, projectId, ids, name, board = false) {
     await c.query('INSERT INTO work_owners (work_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [workId, uid]);
     if (!before.has(uid)) {
       await notify(c, { userId: uid, actorId: req.user.id, type: 'work_owner', projectId,
-        title: `${req.user.name} colocou você como desenvolvedor de um projeto`, body: name });
+        title: `${req.user.name} colocou você como responsável de um projeto`, body: name });
     }
   }
   await c.query('UPDATE project_sections SET owner_id = $1 WHERE id = $2', [list[0], workId]);
@@ -642,7 +642,7 @@ router.delete('/works/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const role = await workRole(req.user.id, id);
   if (!role) throw new HttpError(404, 'Projeto não encontrado');
-  if (role !== 'manage') throw new HttpError(403, 'Quem exclui o projeto é a gestão da equipe, quem o criou ou o desenvolvedor.');
+  if (role !== 'manage') throw new HttpError(403, 'Quem exclui o projeto é a gestão da equipe, quem o criou ou o responsável.');
   const blobs = await workBlobs(id);
   await tx(async (c) => {
     await c.query('DELETE FROM tasks WHERE section_id = $1', [id]);

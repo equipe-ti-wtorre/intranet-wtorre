@@ -61,7 +61,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
       s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.25, h: H, fill: { color: C.brand } });
       s.addText('TaskHub', { x: 1, y: 0.8, w: 6, h: 0.5, fontFace: FONT, fontSize: 16, bold: true, color: 'FFFFFF', margin: 0, isTextBox: true });
       s.addText(title, { x: 1, y: 2.3, w: 11, h: 1.6, fontFace: FONT, fontSize: 44, bold: true, color: 'FFFFFF', margin: 0, valign: 'bottom', isTextBox: true });
-      s.addText([linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Desenvolvedor: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  '),
+      s.addText([linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  '),
         { x: 1, y: 4.05, w: 11, h: 0.5, fontFace: FONT, fontSize: 18, color: 'AAB2C8', margin: 0, isTextBox: true });
       s.addShape(pres.ShapeType.roundRect, { x: 1, y: 4.9, w: 2.1, h: 0.5, rectRadius: 0.1, fill: { color: p.health === 'no_prazo' || p.health === 'concluido' ? GREEN : p.health === 'em_risco' ? AMBER : RED } });
       s.addText(HEALTH_LABEL[p.health], { x: 1, y: 4.9, w: 2.1, h: 0.5, fontFace: FONT, fontSize: 14, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', margin: 0, isTextBox: true });
@@ -104,7 +104,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
     if (key === 'andamento') {
       const s = content('Em andamento');
       if (!d.doing.length) empty(s, 'Nenhuma tarefa em andamento agora.');
-      else s.addTable([head(['Tarefa', 'Status', 'Desenvolvedor', 'Prazo']), ...itemRows(d.doing, i => fmtDate(i.due_date))] as pptxgen.TableRow[], tableOpts([5.0, 3.0, 2.3, 1.833]));
+      else s.addTable([head(['Tarefa', 'Status', 'Responsável', 'Prazo']), ...itemRows(d.doing, i => fmtDate(i.due_date))] as pptxgen.TableRow[], tableOpts([5.0, 3.0, 2.3, 1.833]));
       s.addNotes(`${d.doing.length} tarefas em andamento.`);
     }
 
@@ -146,7 +146,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
     if (key === 'prazos') {
       const s = content('Próximos prazos');
       if (!d.upcoming.length) empty(s, 'Nada vence nos próximos 14 dias.');
-      else s.addTable([head(['Tarefa', 'Status', 'Desenvolvedor', 'Prazo']), ...itemRows(d.upcoming, i => fmtDate(i.due_date))] as pptxgen.TableRow[], tableOpts([5.0, 3.0, 2.3, 1.833]));
+      else s.addTable([head(['Tarefa', 'Status', 'Responsável', 'Prazo']), ...itemRows(d.upcoming, i => fmtDate(i.due_date))] as pptxgen.TableRow[], tableOpts([5.0, 3.0, 2.3, 1.833]));
       s.addNotes(`${d.upcoming.length} tarefas vencem nos próximos 14 dias.`);
     }
 
@@ -157,7 +157,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
         const half = (W - 2 * MX - 0.4) / 2;
         s.addText(`Atrasadas (${d.overdue.length})`, { x: MX, y: 1.3, w: half, h: 0.4, fontFace: FONT, fontSize: 16, bold: true, color: 'BE123C', margin: 0, isTextBox: true });
         s.addText(`Bloqueadas (${d.blocked.length})`, { x: MX + half + 0.4, y: 1.3, w: half, h: 0.4, fontFace: FONT, fontSize: 16, bold: true, color: AMBER, margin: 0, isTextBox: true });
-        const ov = d.overdue.slice(0, 8).map(i => [`${i.title}\n${i.assignee || 'sem desenvolvedor'}`, fmtDate(i.due_date)]);
+        const ov = d.overdue.slice(0, 8).map(i => [`${i.title}\n${i.assignee || 'sem responsável'}`, fmtDate(i.due_date)]);
         const bl = d.blocked.slice(0, 8).map(i => [`${i.title}\n${i.blocked_reason || 'Sem motivo informado'}`, i.assignee || '—']);
         const opts = (x: number) => ({ x, y: 1.85, w: half, colW: [half - 1.4, 1.4], fontFace: FONT, fontSize: 12, color: INK, border: { type: 'solid' as const, color: LINE, pt: 0.75 }, valign: 'middle' as const, margin: 0.08 });
         if (ov.length) s.addTable(ov as pptxgen.TableRow[], opts(MX)); else s.addText('Nenhuma.', { x: MX, y: 1.9, w: half, h: 0.4, fontFace: FONT, fontSize: 14, color: MUTED, isTextBox: true });
@@ -168,7 +168,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
 
     if (key === 'equipe') {
       const s = content('Equipe');
-      if (!d.by_person.length) empty(s, 'Nenhuma tarefa com desenvolvedor.');
+      if (!d.by_person.length) empty(s, 'Nenhuma tarefa com responsável.');
       else s.addTable([head(['Pessoa', 'Abertas', 'Atrasadas', 'Concluídas']), ...d.by_person.slice(0, 12).map(p2 => [
         p2.name, `${p2.open}`, { text: `${p2.overdue}`, options: { color: p2.overdue ? 'BE123C' : MUTED, bold: !!p2.overdue } }, `${p2.done}`,
       ])] as pptxgen.TableRow[], tableOpts([6.133, 2, 2, 2]));
@@ -178,7 +178,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
     if (key === 'entregas') {
       const s = content('Concluídas na semana');
       if (!d.done_week.length) empty(s, 'Nenhuma tarefa concluída nos últimos 7 dias.');
-      else s.addTable([head(['Tarefa', 'Status', 'Desenvolvedor', 'Concluída em']), ...itemRows(d.done_week, i => fmtDate(i.completed_at))] as pptxgen.TableRow[], tableOpts([5.0, 3.0, 2.3, 1.833]));
+      else s.addTable([head(['Tarefa', 'Status', 'Responsável', 'Concluída em']), ...itemRows(d.done_week, i => fmtDate(i.completed_at))] as pptxgen.TableRow[], tableOpts([5.0, 3.0, 2.3, 1.833]));
       s.addNotes(`${d.done_week.length} tarefas concluídas nos últimos 7 dias.`);
     }
   }

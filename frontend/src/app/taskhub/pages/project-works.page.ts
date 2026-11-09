@@ -1,20 +1,20 @@
-import { Component, ElementRef, HostListener, OnChanges, SimpleChanges, computed, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnChanges, SimpleChanges, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgTemplateOutlet } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService, errorMessage } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
-import { CORP_VIEWS, CorpView, PERSONAL_VIEWS, corpViewPath, personalProjectLink, personalViewPath, savePersonalProject } from '../core/corp-views';
+import { CORP_VIEWS, CorpView, PERSONAL_VIEWS, corpViewPath } from '../core/corp-views';
 import { saveKanbanTeam } from '../core/sector-nav';
 import { TeamBarComponent } from '../shared/team-bar.component';
 import { DataService } from '../core/data.service';
 import { ToastService } from '../core/toast.service';
+import { UiService } from '../core/ui.service';
 import { Person, Phase, PhaseScope, Project, SchedulePreview, TaskFile, Team, Work, WorkPhaseLog } from '../core/models';
 import { TASK_FILE_ACCEPT, TASK_FILE_MAX, TASK_FILE_MAX_MB, dueLabel, fileSize, taskFileError, termsFor, todayIso } from '../core/format';
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
 import { ProjectTimelineComponent } from './project-timeline.component';
 import { businessSpan, DEFAULT_DURATION, endAfter, parseIso, sumPhaseDays } from '../core/timeline';
-import { ProjectBarComponent } from '../shared/project-bar.component';
 import { PhaseColumns } from '../shared/phase-columns';
 import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
 import { PhaseRescheduleComponent } from '../shared/phase-reschedule.component';
@@ -30,13 +30,13 @@ type KanbanSort = 'manual' | Sort;
 @Component({
   selector: 'app-project-works',
   standalone: true,
-  imports: [FormsModule, NgTemplateOutlet, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, ProjectTimelineComponent, ConfirmDeleteComponent, TeamBarComponent, ProjectBarComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent],
+  imports: [FormsModule, NgTemplateOutlet, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, ProjectTimelineComponent, ConfirmDeleteComponent, TeamBarComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent],
   template: `
     <div class="page works-page">
       @if (project(); as p) {
         <div class="crumb">
           @if (personal() && locked(); as lv) {
-            <a [routerLink]="personalViewPath(lv)">{{ PERSONAL_VIEWS[lv].label }}</a> › Individual › {{ p.name }}
+            {{ PERSONAL_VIEWS[lv].label }} › Individual
           } @else if (locked(); as lv) {
             <a [routerLink]="corpViewPath(lv)">{{ CORP_VIEWS[lv].label }}</a>
             @if (team()?.sector_name || p.sector_name) { › {{ team()?.sector_name || p.sector_name }} }
@@ -49,8 +49,8 @@ type KanbanSort = 'manual' | Sort;
           <div class="grow">
             <div class="row" style="gap: 10px">
               <span class="wk-dot" [style.background]="p.color"></span>
-              <h1>{{ p.name }}</h1>
-              @if (!isBoard()) { <span class="health" [class]="'health ' + p.health"><i></i>{{ healthLabel[p.health] }}</span> }
+              <h1>{{ personal() ? 'Individual' : p.name }}</h1>
+              @if (!isBoard() && !personal()) { <span class="health" [class]="'health ' + p.health"><i></i>{{ healthLabel[p.health] }}</span> }
               @if (team()?.members?.length) {
                 <span class="wk-avatars" [title]="memberNames()">@for (m of team()!.members!.slice(0, 6); track m.id) { <app-avatar [person]="m" /> }@if (team()!.members!.length > 6) { <span class="wk-more">+{{ team()!.members!.length - 6 }}</span> }</span>
               }
@@ -61,7 +61,7 @@ type KanbanSort = 'manual' | Sort;
               @if (totals().overdue) { · <span class="wk-late">{{ totals().overdue }} atrasadas</span> }
               @if (team(); as tm) { · {{ tm.members_count }} {{ tm.members_count === 1 ? 'pessoa' : 'pessoas' }} na equipe }
               @else if (p.owner_name && p.space === 'profissional') { · Gestor: {{ p.owner_name }} }
-              @if (p.end_date && !isBoard()) { · Entrega {{ due(p.end_date) }} }
+              @if (p.end_date && !isBoard() && !personal()) { · Entrega {{ due(p.end_date) }} }
             </div>
           </div>
           <div class="actions">
@@ -76,11 +76,11 @@ type KanbanSort = 'manual' | Sort;
                 @if (tm.can_panel) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/painel/equipes', tm.id]"><app-icon name="chart" [size]="14" />Painel</a> }
               }
               <a class="btn btn-sm" routerLink="/ti/taskhub/equipes" [queryParams]="{ equipe: tm.id }">Configurações da equipe</a>
-            } @else if (p.my_role === 'manage') { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/projetos', p.id, 'configuracoes']">Configurações</a> }
+            } @else if (p.my_role === 'manage' && !personal()) { <a class="btn btn-sm" [routerLink]="['/ti/taskhub/projetos', p.id, 'configuracoes']">Configurações</a> }
             @if (canCreate()) { <button class="btn btn-primary btn-sm" (click)="openNew()"><app-icon name="plus" [size]="14" />{{ t().novo }}</button> }
           </div>
         </div>
-        @if (p.description && !isBoard()) { <p class="muted" style="max-width: 760px; margin: -6px 0 14px; white-space: pre-wrap">{{ p.description }}</p> }
+        @if (p.description && !isBoard() && !personal()) { <p class="muted" style="max-width: 760px; margin: -6px 0 14px; white-space: pre-wrap">{{ p.description }}</p> }
 
         @if (!locked()) {
           <div class="tl-tabs" role="tablist" aria-label="Visão do projeto">
@@ -92,7 +92,6 @@ type KanbanSort = 'manual' | Sort;
 
         @if (locked(); as lv) {
           @if (teamMode()) { <app-team-bar [view]="lv" [current]="currentTeamId()" [showAll]="lv === 'linha'" /> }
-          @else if (personal()) { <app-project-bar [view]="lv" [current]="p.id" /> }
         }
         @if (view() === 'linha') {
           <app-project-timeline [projectId]="p.id" [board]="isBoard()" (changed)="load(); data.reloadProjects()" />
@@ -151,7 +150,7 @@ type KanbanSort = 'manual' | Sort;
             @if (presenting()) {
               <div class="wk-present-head">
                 <span class="wk-dot" [style.background]="p.color"></span>
-                <h2>{{ p.name }}</h2>
+                <h2>{{ personal() ? 'Individual' : p.name }}</h2>
                 <span class="muted">{{ works().length }} {{ works().length === 1 ? t().one : t().many }} · {{ totals().done }} de {{ totals().total }} tarefas concluídas</span>
                 <span class="grow"></span>
                 <button type="button" class="btn btn-sm" (click)="stopPresent()">Sair da apresentação</button>
@@ -243,7 +242,7 @@ type KanbanSort = 'manual' | Sort;
                           <span class="wk-table__sq" [style.background]="w.color"></span>
                           <span class="wk-table__txt">
                             <b class="ellipsis">{{ w.name }}</b>
-                            <span class="muted small ellipsis">{{ w.owners[0]?.name || w.owner_name || 'Sem desenvolvedor' }}</span>
+                            <span class="muted small ellipsis">{{ w.owners[0]?.name || w.owner_name || 'Sem responsável' }}</span>
                           </span>
                         </div>
                       </td>
@@ -341,7 +340,7 @@ type KanbanSort = 'manual' | Sort;
             <span class="phase-chip" [style.--phase]="w.phase_color">{{ w.phase_name }}</span>
           }
           @if (w.owners?.length) {
-            <span class="row" style="gap: 6px" [title]="'Desenvolvedores: ' + ownerNames(w)"><span class="wk-avatars">@for (o of w.owners.slice(0, 3); track o.id) { <app-avatar [person]="o" /> }</span>{{ w.owners[0].name.split(' ')[0] }}@if (w.owners.length > 1) { <span class="muted"> +{{ w.owners.length - 1 }}</span> }@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
+            <span class="row" style="gap: 6px" [title]="'Responsáveis: ' + ownerNames(w)"><span class="wk-avatars">@for (o of w.owners.slice(0, 3); track o.id) { <app-avatar [person]="o" /> }</span>{{ w.owners[0].name.split(' ')[0] }}@if (w.owners.length > 1) { <span class="muted"> +{{ w.owners.length - 1 }}</span> }@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
           } @else if (w.owner_name) {
             <span class="row" style="gap: 6px"><app-avatar [person]="{ name: w.owner_name, initials: w.owner_initials || '', color: w.owner_color || '' }" />{{ w.owner_name.split(' ')[0] }}@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
           }
@@ -395,15 +394,15 @@ type KanbanSort = 'manual' | Sort;
               <span class="hint">Imagem, PDF, Word, Excel, PowerPoint, texto ou zip. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</span>
             </div>
             <div class="field">
-              <label>Desenvolvedores</label>
+              <label>Responsáveis</label>
               <div class="row" style="flex-wrap: wrap; gap: 6px">
                 @for (m of chosenOwners(); track m.id) {
                   <span class="pill"><app-avatar [person]="m" />{{ m.name }}<button type="button" (click)="toggleOwner(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button></span>
                 }
               </div>
-              <app-person-picker [people]="ownerCandidates()" placeholder="Adicionar desenvolvedor…" (picked)="toggleOwner($event ?? 0)" />
-              @if (!ownerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um desenvolvedor.</span> }
-              @else { <span class="hint">Quem desenvolve o {{ t().one }}. Todos os desenvolvedores podem editar e mover o {{ t().one }}.</span> }
+              <app-person-picker [people]="ownerCandidates()" placeholder="Adicionar responsável…" (picked)="toggleOwner($event ?? 0)" />
+              @if (!ownerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um responsável.</span> }
+              @else { <span class="hint">Quem responde pelo {{ t().one }}. Todos os responsáveis podem editar e mover o {{ t().one }}.</span> }
             </div>
             <ng-container [ngTemplateOutlet]="membersField" />
             <div class="field">
@@ -417,7 +416,7 @@ type KanbanSort = 'manual' | Sort;
               <div class="field"><label for="wk-p">Previsão de entrega</label><input id="wk-p" type="date" class="input" [min]="form.start_date || ''" [ngModel]="form.due_date" (ngModelChange)="onDue($event)" /></div>
             </div>
             @if (spanError()) { <span class="hint" style="margin-top: -6px; color: var(--danger)">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
-            @else if (form.start_date && form.due_date) { <span class="hint" style="margin-top: -6px">{{ span() }} {{ span() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo desenvolvedor faz um por vez e a fila dele é reajustada.</span> }
+            @else if (form.start_date && form.due_date) { <span class="hint" style="margin-top: -6px">{{ span() }} {{ span() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo responsável faz um por vez e a fila dele é reajustada.</span> }
             @else if (form.start_date && phaseDays()) { <span class="hint" style="margin-top: -6px">Roteiro {{ isBoard() ? 'da equipe' : 'do projeto' }}: {{ phaseDays() }} {{ phaseDays() === 1 ? 'dia útil' : 'dias úteis' }}. O prazo é preenchido sozinho.</span> }
             @if (needsReason()) {
               <div class="field">
@@ -539,7 +538,7 @@ type KanbanSort = 'manual' | Sort;
 
             <div class="wk-detail__people">
               <div>
-                <div class="wk-detail__title">Desenvolvedores</div>
+                <div class="wk-detail__title">Responsáveis</div>
                 @for (o of w.owners; track o.id) {
                   <div class="wk-detail__person"><app-avatar [person]="o" /><span><b>{{ o.name }}</b>@if (o.department) { <small class="muted">{{ o.department }}</small> }</span></div>
                 } @empty { <div class="muted small">Nenhum</div> }
@@ -591,7 +590,7 @@ export class ProjectWorksPage implements OnChanges {
   teamId = input<string>();
   vista = input<string | undefined>();
   lockedView = input<CorpView | undefined>();
-  /** Individual no layout do Corporativo: visão travada, escolhendo o projeto na barra. */
+  /** Quadro único do Individual: visão travada, sem escolher projeto. */
   personal = input(false);
   private pid = signal(0);
   team = signal<Team | null>(null);
@@ -613,8 +612,14 @@ export class ProjectWorksPage implements OnChanges {
   });
   corpViewPath = corpViewPath;
   CORP_VIEWS = CORP_VIEWS;
-  personalViewPath = personalViewPath;
   PERSONAL_VIEWS = PERSONAL_VIEWS;
+  private ui = inject(UiService);
+  private boardLoading = false;
+  private watchNew = effect(() => {
+    if (!this.personal() || !this.ui.openPersonalWork() || !this.project()) return;
+    this.ui.openPersonalWork.set(false);
+    this.openNew();
+  }, { allowSignalWrites: true });
   currentTeamId = computed(() => Number(this.teamId()) || null);
   filtersOpen = signal(false);
   kanbanSort = signal<KanbanSort>('manual');
@@ -870,7 +875,7 @@ export class ProjectWorksPage implements OnChanges {
   colors = COLORS;
   healthLabel = { no_prazo: 'No prazo', em_risco: 'Em risco', atrasado: 'Atrasado' } as const;
   filters = computed<{ key: Filter; label: string }[]>(() => [
-    { key: 'todos', label: 'Todos' }, { key: 'responsavel', label: 'Sou desenvolvedor' },
+    { key: 'todos', label: 'Todos' }, { key: 'responsavel', label: 'Sou responsável' },
     { key: 'participo', label: 'Sou solicitante' }, { key: 'atraso', label: 'Com atraso' },
   ]);
 
@@ -904,13 +909,29 @@ export class ProjectWorksPage implements OnChanges {
   private allPeople = computed(() => this.people().length ? this.people() : this.data.people());
 
   ngOnChanges(changes: SimpleChanges) {
+    if (this.personal()) {
+      this.phaseFilter.set(null); this.detail.set(null);
+      if (this.pid()) { this.load(); return; }
+      if (this.boardLoading) return;
+      this.boardLoading = true;
+      this.project.set(null); this.works.set([]); this.team.set(null); this.error.set('');
+      this.api.personalBoard().subscribe({
+        next: r => {
+          this.boardLoading = false;
+          this.pid.set(r.project_id);
+          this.data.personalBoardId.set(r.project_id);
+          this.load();
+        },
+        error: () => { this.boardLoading = false; this.error.set('Não foi possível abrir o quadro individual.'); },
+      });
+      return;
+    }
     if (!changes['id'] && !changes['teamId']) { this.load(); return; }
     const teamId = Number(this.teamId());
     this.project.set(null); this.works.set([]); this.team.set(null); this.error.set('');
     this.phaseFilter.set(null); this.detail.set(null);
     if (!teamId) {
       this.pid.set(Number(this.id()));
-      if (this.personal()) savePersonalProject(this.pid());
       this.load();
       return;
     }
@@ -926,6 +947,7 @@ export class ProjectWorksPage implements OnChanges {
   }
 
   workLink(w: Work) {
+    if (this.personal()) return ['/ti/taskhub/individual/projeto', w.id];
     const p = this.project();
     return p?.is_board && p.team_id ? ['/ti/taskhub/equipes', p.team_id, 'projetos', w.id] : ['/ti/taskhub/projetos', w.project_id, 'trabalhos', w.id];
   }
@@ -941,10 +963,8 @@ export class ProjectWorksPage implements OnChanges {
           this.router.navigate(['/ti/taskhub/kanban/equipes', p.team_id], { replaceUrl: true, queryParamsHandling: 'preserve' });
           return;
         }
-        // Projeto individual abre pelo layout do Individual (Kanban, Projetos, Linha do tempo).
-        if (p.space === 'pessoal' && !this.personal()) {
-          const v = this.vista();
-          this.router.navigate(personalProjectLink(v === 'linha' ? 'linha' : v === 'cards' ? 'quadro' : 'kanban', p.id), { replaceUrl: true });
+        if ((p.space === 'pessoal' || p.is_personal_board) && !this.personal()) {
+          this.router.navigate(['/ti/taskhub/individual/kanban'], { replaceUrl: true });
           return;
         }
         this.project.set(p);

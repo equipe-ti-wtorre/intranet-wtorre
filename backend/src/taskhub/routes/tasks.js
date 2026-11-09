@@ -206,7 +206,7 @@ router.post('/', ah(async (req, res) => {
     const { rows: [wk] } = await query('SELECT project_id, th_work_role($1, id) AS role FROM project_sections WHERE id = $2', [me, d.section_id]);
     if (!wk || wk.project_id !== projectId) throw new HttpError(422, 'Esse projeto é de outra equipe.');
     // Cria quem coordena o projeto ou quem é responsável pelo trabalho.
-    if (wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é a gestão da equipe, quem criou o projeto ou o desenvolvedor.');
+    if (wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é a gestão da equipe, quem criou o projeto ou o responsável.');
     space = (await query('SELECT space FROM projects WHERE id = $1', [projectId])).rows[0].space;
   } else if (space === 'profissional' && !req.user.is_manager) {
     throw new HttpError(403, 'No espaço Corporativo quem cria tarefas é o gestor. Use o espaço Individual para as suas.');
@@ -710,7 +710,7 @@ router.patch('/:id/subtasks/:subId', ah(async (req, res) => {
   if (finishing && cur.access !== 'edit') {
     const turn = await currentStep({ query }, id);
     if (turn && turn.id !== subId) {
-      throw new HttpError(409, `Ainda não é a vez desta etapa: aguarde ${turn.assignee_name || 'o desenvolvedor'} concluir "${turn.title}".`);
+      throw new HttpError(409, `Ainda não é a vez desta etapa: aguarde ${turn.assignee_name || 'o responsável'} concluir "${turn.title}".`);
     }
   }
 

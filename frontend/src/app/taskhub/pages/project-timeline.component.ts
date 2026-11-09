@@ -350,7 +350,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
             <span class="grow"></span>
             <span class="muted small tl-hint">
               @if (draft()) { Arraste as linhas para reordenar e a ponta da barra para mudar a duração. Clique num {{ t().one }} para mudar a data inicial. }
-              @else { Clique num {{ t().one }} para ver datas, tarefas e informações. O mesmo desenvolvedor faz um por vez e a fila dele é reajustada; pessoas diferentes andam em paralelo. }
+              @else { Clique num {{ t().one }} para ver datas, tarefas e informações. O mesmo responsável faz um por vez e a fila dele é reajustada; pessoas diferentes andam em paralelo. }
             </span>
           </div>
         }

@@ -6,7 +6,7 @@ const { ah, parse, intParam, HttpError } = require('../lib/http');
 const { createDefaultStatuses } = require('../lib/projects');
 const { notify } = require('../lib/notify');
 const { TEAM_FIELDS } = require('../lib/users');
-const { teamOfBoard } = require('../lib/boards');
+const { teamOfBoard, ensurePersonalBoard, addPersonalCard } = require('../lib/boards');
 
 // partial = participa só de algum trabalho do projeto (vê o projeto e só esses trabalhos).
 const ROLE_RANK = { partial: 0.5, guest: 1, view: 2, edit: 3, manage: 4 };
@@ -49,6 +49,7 @@ router.get('/', ah(async (req, res) => {
   let where = `th_project_role($1, p.id) IS NOT NULL`;
   if (req.query.team_id) { params.push(intParam(req.query.team_id, 'team_id')); where += ` AND p.team_id = $${params.length}`; }
   if (req.query.archived !== '1') where += ' AND p.archived = false';
+  where += ' AND NOT EXISTS (SELECT 1 FROM personal_boards b WHERE b.project_id = p.id)';
   if (req.query.space === 'pessoal' || req.query.space === 'profissional') { params.push(req.query.space); where += ` AND p.space = $${params.length}`; }
   const { rows } = await query(
     `SELECT p.*, t.name AS team_name, t.sector_id, s.name AS sector_name, o.name AS owner_name, th_project_role($1, p.id) AS my_role,
@@ -81,7 +82,19 @@ router.post('/', ah(async (req, res) => {
   if (d.space === 'profissional' && !req.user.is_manager) {
     throw new HttpError(403, 'Projetos corporativos são criados pelo gestor. Você pode criar projetos no espaço Individual.');
   }
-  if (d.space === 'pessoal') d.members = [];
+  if (d.space === 'pessoal') {
+    const project = await tx(async (client) => {
+      const boardId = await ensurePersonalBoard(client, req.user.id);
+      await addPersonalCard(client, boardId, req.user.id, {
+        name: d.name, description: d.description, color: d.color,
+        start_date: d.start_date || null, due_date: d.end_date || null,
+      });
+      const { rows: [board] } = await client.query('SELECT * FROM projects WHERE id = $1', [boardId]);
+      return board;
+    });
+    res.status(201).json(project);
+    return;
+  }
   const project = await tx(async (client) => {
     let teamId = await ownerTeam(client, req.user.id);
     if (d.team_id && d.space === 'profissional') {
@@ -119,7 +132,8 @@ router.get('/:id', ah(async (req, res) => {
   const role = await requireProject(req.user, id, 'partial');
   const { rows: [project] } = await query(
     `SELECT p.*, t.name AS team_name, t.sector_id, s.name AS sector_name, o.name AS owner_name,
-            EXISTS (SELECT 1 FROM team_boards b WHERE b.project_id = p.id) AS is_board
+            EXISTS (SELECT 1 FROM team_boards b WHERE b.project_id = p.id) AS is_board,
+            EXISTS (SELECT 1 FROM personal_boards b WHERE b.project_id = p.id) AS is_personal_board
        FROM projects p
        LEFT JOIN teams t ON t.id = p.team_id
        LEFT JOIN sectors s ON s.id = t.sector_id

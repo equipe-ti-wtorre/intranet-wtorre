@@ -18,7 +18,6 @@ import { PersonPickerComponent } from '../shared/person-picker.component';
 import { PhaseRescheduleComponent } from '../shared/phase-reschedule.component';
 import { ScheduleImpactComponent, noneAccepted } from '../shared/schedule-impact.component';
 import { termsFor } from '../core/format';
-import { personalProjectLink } from '../core/corp-views';
 import { DateLogComponent } from '../shared/date-log.component';
 
 type Tab = 'kanban' | 'lista' | 'dashboard' | 'config';
@@ -47,8 +46,8 @@ function savedView(): Tab {
               </div>
               <div class="sub">
                 {{ p.name }}
-                @if (w.owners.length) { · {{ w.owners.length === 1 ? 'Desenvolvedor' : 'Desenvolvedores' }}: {{ ownerNames(w) }} }
-                @else if (w.owner_name) { · Desenvolvedor: {{ w.owner_name }} }
+                @if (w.owners.length) { · {{ w.owners.length === 1 ? 'Responsável' : 'Responsáveis' }}: {{ ownerNames(w) }} }
+                @else if (w.owner_name) { · Responsável: {{ w.owner_name }} }
                 @if (p.is_board) {
                   @if (w.members.length) { · {{ w.members.length }} {{ w.members.length === 1 ? 'solicitante' : 'solicitantes' }} }
                 } @else {
@@ -116,7 +115,7 @@ function savedView(): Tab {
               </div>
             </div>
             <div class="settings-section">
-              <div><h2>Desenvolvedores</h2><p class="desc">Quem está desenvolvendo o projeto.</p></div>
+              <div><h2>Responsáveis</h2><p class="desc">Quem responde pelo projeto.</p></div>
               <div>
                 @for (o of w.owners; track o.id) { <div class="status-row"><app-avatar [person]="o" /><span class="grow">{{ o.name }}</span></div> }
               </div>
@@ -151,14 +150,14 @@ function savedView(): Tab {
         @if (work() && !following() && (tab() === 'kanban' || tab() === 'lista')) {
           <div class="toolbar">
             <input class="input" style="width:220px;height:30px" placeholder="Filtrar por título" [ngModel]="text()" (ngModelChange)="text.set($event)" aria-label="Filtrar" />
-            <app-person-picker class="pp-toolbar" mode="single" [people]="people()" [value]="who()" ariaLabel="Desenvolvedor"
-                               [specials]="[{ value: 0, label: 'Todos os desenvolvedores' }, { value: -1, label: 'Sem desenvolvedor' }]"
+            <app-person-picker class="pp-toolbar" mode="single" [people]="people()" [value]="who()" ariaLabel="Responsável"
+                               [specials]="[{ value: 0, label: 'Todos os responsáveis' }, { value: -1, label: 'Sem responsável' }]"
                                (picked)="who.set($event ?? 0)" />
             @if (tab() === 'lista') {
               <select class="select" style="width:150px;height:30px" [ngModel]="groupBy()" (ngModelChange)="groupBy.set($event)" aria-label="Agrupar">
                 @if (work()?.phases?.length) { <option value="phase">Por fase</option> }
                 <option value="status">Por status</option>
-                <option value="due">Por prazo</option><option value="assignee">Por desenvolvedor</option><option value="none">Sem grupo</option>
+                <option value="due">Por prazo</option><option value="assignee">Por responsável</option><option value="none">Sem grupo</option>
               </select>
               <select class="select" style="width:140px;height:30px" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)" aria-label="Ordenar">
                 <option value="manual">Ordem manual</option><option value="due">Por prazo</option><option value="priority">Por prioridade</option>
@@ -252,7 +251,7 @@ function savedView(): Tab {
 
         @if (tab() === 'config' && !following() && work(); as w) {
           <div class="settings-section">
-            <div><h2>{{ t().One }}</h2><p class="desc">Nome, escopo, desenvolvedores e período deste {{ t().one }}. As datas montam a linha do tempo {{ p.is_board ? 'da equipe' : 'do projeto' }}.</p></div>
+            <div><h2>{{ t().One }}</h2><p class="desc">Nome, escopo, responsáveis e período deste {{ t().one }}. As datas montam a linha do tempo {{ p.is_board ? 'da equipe' : 'do projeto' }}.</p></div>
             <div class="stack">
               <div class="fields">
                 <div class="field"><label for="wn">Nome</label><input id="wn" class="input" [disabled]="w.my_role !== 'manage'" [(ngModel)]="wform.name" /></div>
@@ -260,7 +259,7 @@ function savedView(): Tab {
                 <div class="field"><label for="wp">Previsão de entrega</label><input id="wp" type="date" class="input" [disabled]="w.my_role !== 'manage'" [min]="wform.start_date || ''" [ngModel]="wform.due_date" (ngModelChange)="onWDue($event)" /></div>
               </div>
               @if (wformSpanError()) { <span class="hint" style="color: var(--danger)">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
-              @else if (wform.start_date && wform.due_date) { <span class="hint">{{ wformSpan() }} {{ wformSpan() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo desenvolvedor faz um por vez e a fila dele é reajustada.</span> }
+              @else if (wform.start_date && wform.due_date) { <span class="hint">{{ wformSpan() }} {{ wformSpan() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo responsável faz um por vez e a fila dele é reajustada.</span> }
               @if (wNeedsReason()) {
                 <div class="field">
                   <label for="w-reason">Motivo da alteração das datas <span class="wk-late">*</span></label>
@@ -272,16 +271,16 @@ function savedView(): Tab {
               <app-schedule-impact [impact]="wImpact()" [many]="t().many" (toggle)="toggleWAdjust($event)" (useSuggested)="applyWSuggested()" />
               <div class="field"><label for="wd">Descrição/Escopo</label><textarea id="wd" class="textarea" [disabled]="w.my_role !== 'manage'" [(ngModel)]="wform.description"></textarea></div>
               <div class="field">
-                <label>Desenvolvedores</label>
+                <label>Responsáveis</label>
                 <div class="row" style="flex-wrap: wrap; gap: 6px">
                   @for (m of chosenWorkOwners(); track m.id) {
                     <span class="pill"><app-avatar [person]="m" />{{ m.name }}@if (w.my_role === 'manage') {<button type="button" (click)="toggleWorkOwner(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button>}</span>
                   }
                 </div>
                 @if (w.my_role === 'manage') {
-                  <app-person-picker [people]="workOwnerCandidates()" placeholder="Adicionar desenvolvedor…" (picked)="toggleWorkOwner($event ?? 0)" />
+                  <app-person-picker [people]="workOwnerCandidates()" placeholder="Adicionar responsável…" (picked)="toggleWorkOwner($event ?? 0)" />
                 }
-                @if (!wOwnerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um desenvolvedor.</span> }
+                @if (!wOwnerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um responsável.</span> }
               </div>
               @if (w.my_role === 'manage') {
                 <div class="row">
@@ -401,7 +400,7 @@ function savedView(): Tab {
 
           @if (p.space === 'profissional' && !p.is_board) {
           <div class="settings-section">
-            <div><h2>Participantes</h2><p class="desc"><b>Colaborador</b>: vê o projeto e atualiza as tarefas que estão com ele. <b>Coordena</b>: cria, edita, distribui e exclui tarefas deste projeto. O desenvolvedor de um projeto também cria tarefas naquele projeto.</p></div>
+            <div><h2>Participantes</h2><p class="desc"><b>Colaborador</b>: vê o projeto e atualiza as tarefas que estão com ele. <b>Coordena</b>: cria, edita, distribui e exclui tarefas deste projeto. O responsável de um projeto também cria tarefas naquele projeto.</p></div>
             <div>
               @for (m of p.members || []; track m.id) {
                 <div class="status-row">
@@ -460,6 +459,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   teamId = input<string>();
   workId = input<string>();
   mode = input<string>();
+  personal = input(false);
   private resolvedId = signal(0);
   t = computed(() => termsFor());
   deleting = signal<'work' | 'project' | null>(null);
@@ -467,7 +467,8 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   backLink = computed(() => {
     const p = this.project();
     if (p?.is_board && p.team_id) return ['/ti/taskhub/kanban/equipes', p.team_id];
-    return p?.space === 'pessoal' ? personalProjectLink('kanban', p.id) : ['/ti/taskhub/projetos', p?.id];
+    if (p?.space === 'pessoal' || p?.is_personal_board) return ['/ti/taskhub/individual/kanban'];
+    return ['/ti/taskhub/projetos', p?.id];
   });
   work = signal<WorkDetail | null>(null);
   wform: { name: string; description: string; start_date: string | null; due_date: string | null } = { name: '', description: '', start_date: null, due_date: null };
@@ -672,6 +673,14 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     this.loadedId = key;
     this.tab.set(this.mode() === 'config' ? 'config' : savedView());
     this.deleting.set(null);
+    if (this.personal() && this.workId()) {
+      this.project.set(null); this.error.set('');
+      this.api.personalBoard().subscribe({
+        next: r => { this.resolvedId.set(r.project_id); this.load(); },
+        error: () => this.error.set('Não foi possível abrir o projeto individual.'),
+      });
+      return;
+    }
     const teamId = Number(this.teamId());
     if (!teamId) { this.resolvedId.set(Number(this.id())); this.load(); return; }
     this.project.set(null); this.error.set('');
@@ -690,6 +699,10 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     this.api.project(pid).subscribe({
       next: p => {
         // Projeto da equipe abre pelo endereço da equipe; o quadro em si não tem tela própria fora da configuração de status.
+        if (p.is_personal_board && !this.personal()) {
+          this.router.navigate(wid ? ['/ti/taskhub/individual/projeto', wid] : ['/ti/taskhub/individual/kanban'], { replaceUrl: true });
+          return;
+        }
         if (p.is_board && p.team_id && !this.teamId() && (wid || this.mode() !== 'config')) {
           this.router.navigate(wid
             ? ['/ti/taskhub/equipes', p.team_id, 'projetos', wid]

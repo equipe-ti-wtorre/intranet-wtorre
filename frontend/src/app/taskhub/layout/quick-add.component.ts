@@ -122,8 +122,8 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                 </span>
                 @if (workId()) {
                   <app-person-picker class="step-who" mode="single" variant="inline" [people]="people()" [value]="s.assignee_id ?? null"
-                                     [specials]="[{ value: null, label: 'Sem desenvolvedor' }]" placeholder="Desenvolvedor"
-                                     ariaLabel="Desenvolvedor da etapa" (picked)="editStep(i, { assignee_id: $event })" />
+                                     [specials]="[{ value: null, label: 'Sem responsável' }]" placeholder="Responsável"
+                                     ariaLabel="Responsável da etapa" (picked)="editStep(i, { assignee_id: $event })" />
                   @if (s.assignee_id && s.assignee_id !== me()) {
                     <label class="check-label step-notify" title="Avisar a pessoa quando for a vez dela"><input type="checkbox" class="switch" role="switch" [ngModel]="s.notify" (ngModelChange)="editStep(i, { notify: $event })" /> avisar</label>
                   }

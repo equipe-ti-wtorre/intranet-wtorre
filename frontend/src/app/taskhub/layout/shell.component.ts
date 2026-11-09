@@ -254,6 +254,15 @@ export class ShellComponent implements OnInit, OnDestroy {
       const p = this.data.projects().find(x => x.id === Number(m[1]));
       return { project_id: Number(m[1]), section_id: m[2] ? Number(m[2]) : null, space: p?.space };
     }
+    if (url.startsWith('/individual')) {
+      const board = this.data.personalBoardId();
+      const work = url.match(/^\/individual\/projeto\/(\d+)/);
+      return {
+        space: 'pessoal' as const,
+        ...(board ? { project_id: board } : {}),
+        ...(work ? { section_id: Number(work[1]) } : {}),
+      };
+    }
     if (url.includes('space=pessoal') || url.startsWith('/notas') || url.startsWith('/lembretes')) return { space: 'pessoal' as const };
     if (url.startsWith('/meu-dia')) return { plan_today: true };
     return {};

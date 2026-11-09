@@ -21,6 +21,7 @@ const TABLES = [
   'team_managers',
   'team_members',
   'team_boards',
+  'personal_boards',
   'access_profiles',
   'work_members',
   'work_owners',
@@ -61,7 +62,7 @@ const DATE_COLUMNS = new Set([
 
 const BOOL_COLUMNS = new Set([
   'active', 'is_director', 'must_change_password', 'archived', 'members_can_create',
-  'is_private', 'migrated_v2', 'done', 'notified', 'pinned', 'system', 'show_to_manager', 'is_board',
+  'is_private', 'migrated_v2', 'done', 'notified', 'pinned', 'system', 'show_to_manager', 'is_board', 'is_personal_board',
 ]);
 
 function prefixTables(sql) {

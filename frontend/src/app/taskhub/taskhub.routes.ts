@@ -27,18 +27,28 @@ export const TASKHUB_ROUTES: Routes = [
           { path: 'lembretes', loadComponent: () => import('./pages/reminders.page').then((m) => m.RemindersPage) },
           { path: 'tarefas', loadComponent: () => import('./pages/tasks.page').then((m) => m.TasksPage) },
           { path: 'projetos/:id', loadComponent: () => import('./pages/project-works.page').then((m) => m.ProjectWorksPage) },
-          ...([['kanban', 'kanban'], ['projetos', 'quadro'], ['linha-do-tempo', 'linha']] as const).flatMap(([path, view]) => [
-            {
-              path: `individual/${path}`,
-              data: { view },
-              loadComponent: () => import('./pages/personal-picker.page').then((m) => m.PersonalPickerPage),
-            },
-            {
-              path: `individual/${path}/:id`,
-              data: { lockedView: view, personal: true },
-              loadComponent: () => import('./pages/project-works.page').then((m) => m.ProjectWorksPage),
-            },
-          ]),
+          {
+            path: 'individual/kanban',
+            data: { lockedView: 'kanban', personal: true },
+            loadComponent: () => import('./pages/project-works.page').then((m) => m.ProjectWorksPage),
+          },
+          {
+            path: 'individual/projetos',
+            data: { lockedView: 'quadro', personal: true },
+            loadComponent: () => import('./pages/project-works.page').then((m) => m.ProjectWorksPage),
+          },
+          {
+            path: 'individual/linha-do-tempo',
+            loadComponent: () => import('./pages/individual-timeline.page').then((m) => m.IndividualTimelinePage),
+          },
+          {
+            path: 'individual/projeto/:workId',
+            data: { personal: true },
+            loadComponent: () => import('./pages/project.page').then((m) => m.ProjectPage),
+          },
+          { path: 'individual/kanban/:id', redirectTo: '/ti/taskhub/individual/kanban' },
+          { path: 'individual/projetos/:id', redirectTo: '/ti/taskhub/individual/projetos' },
+          { path: 'individual/linha-do-tempo/:id', redirectTo: '/ti/taskhub/individual/linha-do-tempo' },
           { path: 'projetos/:id/trabalhos/:workId', loadComponent: () => import('./pages/project.page').then((m) => m.ProjectPage) },
           {
             path: 'projetos/:id/configuracoes',

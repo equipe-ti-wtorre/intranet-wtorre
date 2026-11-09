@@ -14,6 +14,7 @@ export class DataService {
   readonly people = signal<Person[]>([]);
   readonly unread = signal(0);
   readonly guestWorks = signal<GuestWork[]>([]);
+  readonly personalBoardId = signal<number | null>(null);
   // Quem não acompanha nenhum painel não vê o Painel no menu.
   readonly hasPanel = computed(() => this.teams().some(t => !!t.can_panel) || this.sectors().some(s => !!s.can_panel));
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -23,6 +24,7 @@ export class DataService {
   start() {
     this.reloadProjects();
     this.reloadTeams();
+    this.reloadPersonalBoard();
     this.api.directory().subscribe(p => this.people.set(p));
     this.pollInbox();
     if (!this.timer) this.timer = setInterval(() => this.pollInbox(), 60_000);
@@ -30,6 +32,9 @@ export class DataService {
 
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
 
+  reloadPersonalBoard() {
+    this.api.personalBoard().subscribe({ next: r => this.personalBoardId.set(r.project_id), error: () => {} });
+  }
   reloadProjects() {
     this.api.projects().subscribe(p => this.projects.set(p));
     this.api.guestWorks().subscribe({ next: w => this.guestWorks.set(w), error: () => {} });

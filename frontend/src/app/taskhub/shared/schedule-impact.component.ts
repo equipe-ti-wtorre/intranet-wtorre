@@ -8,7 +8,7 @@ import { SchedulePreview, ScheduleConflict } from '../core/models';
   template: `
     @if (impact(); as imp) {
       <div class="wk-impact">
-        <p>Estas datas coincidem com outros {{ many() }} do mesmo desenvolvedor. Marque os que aceitam reajuste; os desmarcados ficam ao mesmo tempo que este.</p>
+        <p>Estas datas coincidem com outros {{ many() }} do mesmo responsável. Marque os que aceitam reajuste; os desmarcados ficam ao mesmo tempo que este.</p>
         <ul class="wk-impact__list">
           @for (c of imp.conflicts; track c.work_id) {
             <li>
@@ -17,13 +17,13 @@ import { SchedulePreview, ScheduleConflict } from '../core/models';
                 <span class="wk-impact__body">
                   <span><b>{{ c.name }}</b>
                     @if (c.requester_names.length) { <span class="muted"> · Solicitante: {{ c.requester_names.join(', ') }}</span> }
-                    @if (c.owner_names.length) { <span class="muted"> · Desenvolvedor: {{ c.owner_names.join(', ') }}</span> }
+                    @if (c.owner_names.length) { <span class="muted"> · Responsável: {{ c.owner_names.join(', ') }}</span> }
                   </span>
                   <span class="muted small">Hoje: início {{ fmt(c.start) }} · previsão final {{ fmt(c.end) }}@if (c.in_progress) { · já começou }</span>
                   @if (c.accepted) {
                     <span class="small">Novo: início <b>{{ fmt(c.new_start) }}</b> · previsão final <b>{{ fmt(c.new_end) }}</b></span>
                     @if (c.pause; as p) {
-                      <span class="small wk-impact__pause">Fica em pausa de {{ fmt(p.start) }} a {{ fmt(p.end) }}. Avisamos o solicitante e o desenvolvedor.</span>
+                      <span class="small wk-impact__pause">Fica em pausa de {{ fmt(p.start) }} a {{ fmt(p.end) }}. Avisamos o solicitante e o responsável.</span>
                     }
                   } @else {
                     <span class="small muted">{{ stayText(c) }}</span>

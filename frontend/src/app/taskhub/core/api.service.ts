@@ -55,6 +55,8 @@ export class ApiService {
   }
   deleteWorkFile(id: number, fileId: number) { return this.http.delete(`${U}/works/${id}/files/${fileId}`); }
 
+  personalBoard() { return this.http.get<{ project_id: number }>(`${U}/me/board`); }
+
   // Meu Dia
   day(date: string) { return this.http.get<DayData>(`${U}/me/day`, { params: this.params({ date }) }); }
   planAdd(task_id: number, date: string, position?: number, period?: string) { return this.http.post(`${U}/me/day/items`, { task_id, date, position, period }); }

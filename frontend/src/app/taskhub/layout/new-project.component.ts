@@ -1,7 +1,6 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { personalProjectLink, savePersonalProject } from '../core/corp-views';
 import { ApiService, errorMessage } from '../core/api.service';
 import { DataService } from '../core/data.service';
 import { UiService } from '../core/ui.service';
@@ -146,10 +145,10 @@ export class NewProjectComponent {
         return { user_id, role };
       }),
     }).subscribe({
-      next: (p) => {
+      next: () => {
         const personal = this.space === 'pessoal';
         this.data.reloadProjects(); this.close(); this.toast.show('Projeto criado.');
-        if (personal && p?.id) { savePersonalProject(p.id); void this.router.navigate(personalProjectLink('kanban', p.id)); }
+        if (personal) void this.router.navigateByUrl('/ti/taskhub/individual/kanban');
       },
       error: e => { this.saving.set(false); this.error.set(errorMessage(e)); },
     });

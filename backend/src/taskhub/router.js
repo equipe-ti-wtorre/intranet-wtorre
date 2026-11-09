@@ -1,6 +1,8 @@
 const express = require('express');
 const { authenticate, requirePasswordChanged, requireAdmin } = require('./middleware/auth');
 const { ah } = require('./lib/http');
+const { tx } = require('./db');
+const { ensurePersonalBoard } = require('./lib/boards');
 const { adminStatus } = require('./lib/entra');
 const { sendAvatar } = require('./lib/avatars');
 
@@ -25,6 +27,11 @@ api.use(require('./routes/works'));
 api.use(require('./routes/work-dashboard'));
 api.use('/projects', require('./routes/projects'));
 api.use('/tasks', require('./routes/tasks'));
+api.get('/me/board', ah(async (req, res) => {
+  const projectId = await tx((c) => ensurePersonalBoard(c, req.user.id));
+  if (!projectId) return res.status(404).json({ message: 'Pessoa não encontrada' });
+  res.json({ project_id: projectId });
+}));
 api.use('/me/day', require('./routes/day'));
 api.use('/inbox', require('./routes/inbox'));
 api.use('/dashboard', require('./routes/dashboard'));

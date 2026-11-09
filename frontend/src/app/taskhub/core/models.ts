@@ -205,7 +205,7 @@ export interface AccessProfile { key: string; label: string; description: string
 export interface Permission { key: string; label: string; hint: string; }
 
 export interface Project {
-  id: number; team_id: number | null; team_name: string | null; sector_id?: number | null; sector_name?: string | null; space: Space; members_count?: number; is_member?: boolean; is_board?: boolean; name: string; description: string; color: string;
+  id: number; team_id: number | null; team_name: string | null; sector_id?: number | null; sector_name?: string | null; space: Space; members_count?: number; is_member?: boolean; is_board?: boolean; is_personal_board?: boolean; name: string; description: string; color: string;
   owner_id: number | null; owner_name: string | null; start_date: string | null; end_date: string | null;
   health: 'no_prazo' | 'em_risco' | 'atrasado';
   archived: boolean; my_role: ProjectRole;
@@ -269,5 +269,5 @@ export interface TeamDashboard {
 
 export interface SearchResult {
   tasks: Task[]; projects: Project[]; people: Person[];
-  works: { id: number; name: string; color: string; project_id: number; team_id: number; team_name: string }[];
+  works: { id: number; name: string; color: string; project_id: number; team_id: number | null; team_name: string }[];
 }

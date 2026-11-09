@@ -23,6 +23,7 @@ export class UiService {
   readonly paletteOpen = signal(false);
   readonly helpOpen = signal(false);
   readonly newProjectOpen = signal<false | 'profissional' | 'pessoal'>(false);
+  readonly openPersonalWork = signal(false);
   readonly newProjectSectorId = signal<number | null>(null);
   readonly palette = signal<AppPalette>(readPalette());
   readonly logoFullSrc = computed(() => (this.palette() === 'nubank-parque' ? 'assets/taskhub/brand/logo-nubank-parque-negativo.svg' : 'assets/taskhub/logo.svg'));
@@ -41,6 +42,7 @@ export class UiService {
   openTask(id: number) { this.drawerTaskId.set(id); }
   closeTask() { this.drawerTaskId.set(null); }
   openQuickAdd(defaults: QuickAddDefaults = {}) { this.quickAdd.set(defaults); }
+  askPersonalWork() { this.openPersonalWork.set(true); }
   openNewProject(space: 'profissional' | 'pessoal', sectorId: number | null = null) {
     this.newProjectSectorId.set(space === 'profissional' ? sectorId : null);
     this.newProjectOpen.set(space);

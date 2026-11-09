@@ -62,7 +62,7 @@ export class PaletteComponent implements OnDestroy {
     { kind: 'cmd', label: 'Lembretes', note: 'G L', icon: 'bell', run: () => this.go('/lembretes') },
     { kind: 'cmd', label: 'Atribuídas por mim', note: 'G A', icon: 'send', run: () => this.go('/tarefas?v=delegadas&space=profissional') },
     { kind: 'cmd', label: 'Equipes', note: 'G E', icon: 'people', run: () => this.go('/equipes') },
-    { kind: 'cmd', label: 'Novo projeto individual', icon: 'folder', run: () => { this.close(); this.ui.openNewProject('pessoal'); } },
+    { kind: 'cmd', label: 'Novo projeto individual', icon: 'folder', run: () => { this.ui.askPersonalWork(); this.go('/ti/taskhub/individual/kanban'); } },
     { kind: 'cmd', label: 'Alternar paleta WTorre / Nubank', icon: 'moon', run: () => { this.ui.togglePalette(); this.close(); } },
     { kind: 'cmd', label: 'Atalhos de teclado', note: '?', icon: 'gear', run: () => { this.close(); this.ui.helpOpen.set(true); } },
   ];
@@ -72,7 +72,7 @@ export class PaletteComponent implements OnDestroy {
     const r = this.results();
     const cmds = this.commands.filter(c => !q || c.label.toLowerCase().includes(q));
     const works: Item[] = (r.works || []).map(w => ({
-      kind: 'project', label: w.name, note: w.team_name, color: w.color,       run: () => this.go(`/ti/taskhub/equipes/${w.team_id}/projetos/${w.id}`),
+      kind: 'project', label: w.name, note: w.team_name, color: w.color,       run: () => this.go(w.team_id ? `/ti/taskhub/equipes/${w.team_id}/projetos/${w.id}` : `/ti/taskhub/individual/projeto/${w.id}`),
     }));
     const projects: Item[] = [...works, ...(q.length >= 2 ? r.projects : this.data.projects().slice(0, 5)).map((p): Item => ({
       kind: 'project', label: p.name, note: p.is_board ? 'Equipe' : p.owner_name || p.team_name || undefined, color: p.color,

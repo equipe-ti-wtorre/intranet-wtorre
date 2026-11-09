@@ -16,7 +16,7 @@ import { concat, toArray } from 'rxjs';
 const ACTIVITY_TEXT: Record<string, string> = {
   created: 'criou a tarefa',
   status_changed: 'mudou o status para',
-  assignee_changed: 'mudou o desenvolvedor para',
+  assignee_changed: 'mudou o responsável para',
   due_changed: 'mudou o prazo para',
   priority_changed: 'mudou a prioridade para',
   title_changed: 'renomeou para',
@@ -96,12 +96,12 @@ const ACTIVITY_TEXT: Record<string, string> = {
               }
             </div>
 
-            <div class="k">Desenvolvedor</div>
+            <div class="k">Responsável</div>
             @if (t.space === 'pessoal') { <div class="v"><app-avatar [person]="t.assignee" /> Você</div> } @else {
             <div class="v">
               <app-person-picker class="grow" mode="single" variant="inline" [groups]="assigneeGroups()" [value]="t.assignee?.id ?? null"
-                                 [specials]="[{ value: null, label: 'Sem desenvolvedor' }]" [placeholder]="t.assignee?.name || 'Sem desenvolvedor'"
-                                 ariaLabel="Desenvolvedor" [disabled]="!editable()" (picked)="patch({ assignee_id: $event })" />
+                                 [specials]="[{ value: null, label: 'Sem responsável' }]" [placeholder]="t.assignee?.name || 'Sem responsável'"
+                                 ariaLabel="Responsável" [disabled]="!editable()" (picked)="patch({ assignee_id: $event })" />
             </div>
             }
             @if (assigneeAway(); as away) {
@@ -219,8 +219,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
                 </span>
                 @if (t.space === 'profissional') {
                 <app-person-picker class="step-who" mode="single" variant="inline" [groups]="assigneeGroups()" [value]="s.assignee_id ?? null"
-                                   [specials]="[{ value: null, label: 'Sem desenvolvedor' }]" [placeholder]="s.assignee_name || 'Desenvolvedor'"
-                                   ariaLabel="Desenvolvedor da etapa" (picked)="setSub(s.id, { assignee_id: $event })" />
+                                   [specials]="[{ value: null, label: 'Sem responsável' }]" [placeholder]="s.assignee_name || 'Responsável'"
+                                   ariaLabel="Responsável da etapa" (picked)="setSub(s.id, { assignee_id: $event })" />
                 @if (s.assignee_id && s.assignee_id !== me) {
                   <label class="check-label step-notify" title="Avisar a pessoa quando for a vez dela"><input type="checkbox" class="switch" role="switch" [checked]="s.notify !== false" (change)="setSub(s.id, { notify: s.notify === false })" /> avisar</label>
                 }
@@ -382,7 +382,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
           <div class="modal-body">
             <div class="field"><label for="mv-reason">Motivo da mudança</label>
               <textarea id="mv-reason" class="textarea" [(ngModel)]="moveReason" placeholder="Por que a tarefa está mudando de etapa?" maxlength="1000" appAutofocus></textarea>
-              <span class="muted small">Visível para você, o desenvolvedor e a gestão do projeto.</span>
+              <span class="muted small">Visível para você, o responsável e a gestão do projeto.</span>
             </div>
             @if (s.category === 'blocked') {
               <div class="field"><label for="mv-block">O que está bloqueando</label>
@@ -472,7 +472,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const cur = list.find(s => s.id === this.currentId());
     if (!list.length) return '';
     if (!cur) return 'Todas concluídas';
-    return `Na vez: ${cur.assignee_id === this.me ? 'você' : cur.assignee_name || 'sem desenvolvedor'}`;
+    return `Na vez: ${cur.assignee_id === this.me ? 'você' : cur.assignee_name || 'sem responsável'}`;
   });
   phaseMenu = signal(false);
   otherPhases = computed(() => {

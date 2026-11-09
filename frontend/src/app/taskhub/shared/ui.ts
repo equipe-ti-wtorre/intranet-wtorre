@@ -71,7 +71,7 @@ export class IconComponent {
         @if (photo(); as src) { <img [src]="src" [alt]="p.name" /> } @else { {{ p.initials }} }
       </span>
     } @else {
-      <span class="avatar none" [class.lg]="large()" [class.xl]="preview()" title="Sem desenvolvedor">?</span>
+      <span class="avatar none" [class.lg]="large()" [class.xl]="preview()" title="Sem responsável">?</span>
     }`,
   styles: [':host{display:inline-flex}'],
 })

@@ -46,11 +46,11 @@ type Candidate = PhaseReschedule['candidates'][number];
             <div class="resched__mode" role="radiogroup" aria-label="Quando um projeto encostar no próximo">
               <label class="resched__opt">
                 <input type="radio" name="resched-mode" [checked]="push()" [disabled]="busy()" (change)="setPush(true)" />
-                <span><b>Reajustar os próximos projetos do mesmo desenvolvedor</b><small>A fila de cada desenvolvedor anda junto. Projetos já iniciados não mudam.</small></span>
+                <span><b>Reajustar os próximos projetos do mesmo responsável</b><small>A fila de cada responsável anda junto. Projetos já iniciados não mudam.</small></span>
               </label>
               <label class="resched__opt">
                 <input type="radio" name="resched-mode" [checked]="!push()" [disabled]="busy()" (change)="setPush(false)" />
-                <span><b>Deixar juntos</b><small>Só muda o prazo dos projetos marcados. O desenvolvedor pode ficar com mais de um projeto ao mesmo tempo.</small></span>
+                <span><b>Deixar juntos</b><small>Só muda o prazo dos projetos marcados. O responsável pode ficar com mais de um projeto ao mesmo tempo.</small></span>
               </label>
             </div>
 
@@ -78,7 +78,7 @@ type Candidate = PhaseReschedule['candidates'][number];
                     }
                   </ul>
                 } @else {
-                  <p class="resched__muted">Só os projetos marcados. Nenhum fica junto com outro do mesmo desenvolvedor.</p>
+                  <p class="resched__muted">Só os projetos marcados. Nenhum fica junto com outro do mesmo responsável.</p>
                 }
               }
             </div>
