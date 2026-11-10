@@ -5,6 +5,27 @@ import { AvatarComponent, IconComponent } from './ui';
 export interface PersonGroup { label: string; people: Person[] }
 export interface PickerSpecial { value: number | null; label: string }
 
+const depKey = (d?: string | null) => (d || '').trim().toLocaleLowerCase('pt-BR');
+
+// Responsável da etapa: quem cria, o departamento dos solicitantes do projeto e o restante.
+export function stepAssigneeGroups(people: Person[], meId: number | null, meFallback?: Person | null): PersonGroup[] {
+  const byName = (a: Person, b: Person) => a.name.localeCompare(b.name, 'pt-BR');
+  const me = (meId ? people.find(p => p.id === meId) : null) || (meFallback?.id === meId ? meFallback : null);
+  const deps = new Map<string, string>();
+  for (const p of people) {
+    const key = depKey(p.department);
+    if (p.is_requester && key && !deps.has(key)) deps.set(key, (p.department || '').trim());
+  }
+  const groups: PersonGroup[] = [];
+  if (me) groups.push({ label: 'Você', people: [me] });
+  const dept = people.filter(p => p.id !== me?.id && deps.has(depKey(p.department))).sort(byName);
+  if (dept.length) groups.push({ label: [...deps.values()].join(' · '), people: dept });
+  const shown = new Set<number>([...(me ? [me.id] : []), ...dept.map(p => p.id)]);
+  const rest = people.filter(p => !shown.has(p.id)).sort(byName);
+  if (rest.length) groups.push({ label: 'Geral', people: rest });
+  return groups;
+}
+
 type Row =
   | { kind: 'label'; key: string; label: string }
   | { kind: 'opt'; key: string; index: number; value: number | null; label: string; person: Person | null; sub: string; selected: boolean };

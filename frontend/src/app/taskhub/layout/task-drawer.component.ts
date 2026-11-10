@@ -7,11 +7,36 @@ import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { AuthService } from '../core/auth.service';
 import { Person, Phase, Status, Subtask, TaskDetail, TaskFile, TimelineEntry } from '../core/models';
-import { PRIORITIES, SIZES, TASK_FILE_ACCEPT, TASK_FILE_MAX, TASK_FILE_MAX_MB, activityValue, dueLabel, fileSize, isTaskImage, stamp, taskFileError, termsFor, todayIso } from '../core/format';
+import { PRIORITIES, SIZES, TASK_FILE_MAX, TASK_FILE_MAX_MB, activityValue, dueLabel, fileSize, isExternalFileDrag, isTaskImage, stamp, taskFileError, termsFor, todayIso } from '../core/format';
 import { AvatarComponent, IconComponent, RichTextComponent, AutofocusDirective } from '../shared/ui';
-import { PersonGroup, PersonPickerComponent } from '../shared/person-picker.component';
+import { PersonGroup, PersonPickerComponent, stepAssigneeGroups } from '../shared/person-picker.component';
 import { takeBulletLine } from '../core/steps-text';
-import { concat, toArray } from 'rxjs';
+import { confirmOpen } from '../core/confirm-open';
+import { firstValueFrom } from 'rxjs';
+
+interface StepSnap {
+  id: number;
+  title: string;
+  assignee_id: number | null;
+  due_date: string | null;
+  notify: boolean;
+  done: boolean;
+}
+
+interface TaskSnap {
+  title: string;
+  description: string;
+  assignee_id: number | null;
+  start_date: string | null;
+  due_date: string | null;
+  priority: TaskDetail['priority'];
+  size: TaskDetail['size'];
+  section_id: number | null;
+  phase_id: number | null;
+  is_private: boolean;
+  project_id: number | null;
+  subtasks: StepSnap[];
+}
 
 const ACTIVITY_TEXT: Record<string, string> = {
   created: 'criou a tarefa',
@@ -30,13 +55,13 @@ const ACTIVITY_TEXT: Record<string, string> = {
   standalone: true,
   imports: [AutofocusDirective, FormsModule, RouterLink, AvatarComponent, IconComponent, RichTextComponent, PersonPickerComponent],
   template: `
-    <div class="task-modal-scrim" (click)="ui.closeTask()">
+    <div class="task-modal-scrim" (click)="close()">
     <aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalhes da tarefa" (click)="$event.stopPropagation()">
       <div class="drawer-head">
         @if (task(); as t) {
           @if (t.project) {
             @if (seesProject()) {
-              <a class="proj-tag" [routerLink]="t.section ? ['/ti/taskhub/projetos', t.project.id, 'trabalhos', t.section.id] : ['/ti/taskhub/projetos', t.project.id]" (click)="ui.closeTask()"><i [style.background]="t.project.color"></i>{{ t.project.name }}@if (t.section) { · {{ t.section.name }} }</a>
+              <a class="proj-tag" [routerLink]="t.section ? ['/ti/taskhub/projetos', t.project.id, 'trabalhos', t.section.id] : ['/ti/taskhub/projetos', t.project.id]" (click)="close()"><i [style.background]="t.project.color"></i>{{ t.project.name }}@if (t.section) { · {{ t.section.name }} }</a>
             } @else {
               <span class="proj-tag" title="Você participa desta tarefa, não do projeto inteiro"><i [style.background]="t.project.color"></i>{{ t.project.name }}</span>
             }
@@ -45,23 +70,25 @@ const ACTIVITY_TEXT: Record<string, string> = {
         }
         <span class="grow"></span>
         @if (task()) {
-          <button class="btn btn-sm btn-ghost dh-day" (click)="planToday()" title="Adicionar ao Meu Dia de hoje"><app-icon name="sun" [size]="14" />Meu Dia</button>
           @if (editable()) {
             <button class="btn btn-sm btn-ghost btn-icon dh-del" (click)="remove()" title="Excluir" aria-label="Excluir tarefa"><app-icon name="trash" [size]="14" /></button>
           }
         }
-        <button class="btn btn-sm btn-ghost btn-icon dh-close" (click)="ui.closeTask()" aria-label="Fechar"><app-icon name="x" [size]="14" /></button>
+        <button class="btn btn-sm btn-ghost btn-icon dh-close" (click)="close()" aria-label="Fechar"><app-icon name="x" [size]="14" /></button>
       </div>
 
       <div class="drawer-body">
         @if (loading()) { <div class="muted">Carregando…</div> }
         @if (error()) { <div class="error-text">{{ error() }}</div> }
         @if (task(); as t) {
-          <textarea #titleEl class="drawer-title" rows="1" [readOnly]="!editable()" [ngModel]="t.title"
-                    (ngModelChange)="draftTitle = $event; autosize()" (blur)="saveTitle()"
-                    (keydown.enter)="$event.preventDefault(); titleEl.blur()" aria-label="Título"></textarea>
+          <textarea #titleEl class="drawer-title" rows="1" [readOnly]="!editable()" [ngModel]="draftTitle"
+                    (ngModelChange)="onTitle($event)" (keydown.enter)="$event.preventDefault(); titleEl.blur()" aria-label="Título"></textarea>
 
-          @if (t.access === 'view') {
+          @if (projectClosed()) {
+            <div class="note-info">Projeto concluído. Reabra o projeto para alterar as tarefas.</div>
+          } @else if (taskClosed()) {
+            <div class="note-info">Tarefa concluída. Reabra para alterar.</div>
+          } @else if (t.access === 'view') {
             <div class="note-info">Você acompanha esta tarefa (só leitura).</div>
           } @else if (t.access === 'work') {
             <div class="note-info">Tarefa criada por {{ t.created_by?.name }}. Você atualiza o status, a estimativa, o bloqueio e as etapas, e pode comentar. O restante quem altera é o gestor.</div>
@@ -80,7 +107,9 @@ const ACTIVITY_TEXT: Record<string, string> = {
                 <div class="step-turn-k">Sua vez</div>
                 <div class="step-turn-t">{{ s.title }}@if (s.due_date) { <span class="muted small"> · {{ dueText(s.due_date) }}</span> }</div>
               </div>
-              <button class="btn btn-primary btn-sm" (click)="openFinish(s)"><app-icon name="check" [size]="14" />Concluí minha parte</button>
+              @if (!locked()) {
+                <button class="btn btn-primary btn-sm" (click)="openFinish(s)"><app-icon name="check" [size]="14" />Concluir minha etapa</button>
+              }
             </div>
           }
 
@@ -92,7 +121,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
                   @for (s of t.statuses; track s.id) { <option [ngValue]="s.id">{{ s.name }}</option> }
                 </select>
               } @else {
-                <label class="check-label"><input type="checkbox" [disabled]="!working()" [checked]="t.status.category === 'done'" (change)="patch({ done: t.status.category !== 'done' })" /> Concluída</label>
+                <label class="check-label"><input type="checkbox" [disabled]="!showConclude()" [checked]="t.status.category === 'done'" (change)="toggleDone()" /> Concluída</label>
               }
             </div>
 
@@ -101,7 +130,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
             <div class="v">
               <app-person-picker class="grow" mode="single" variant="inline" [groups]="assigneeGroups()" [value]="t.assignee?.id ?? null"
                                  [specials]="[{ value: null, label: 'Sem responsável' }]" [placeholder]="t.assignee?.name || 'Sem responsável'"
-                                 ariaLabel="Responsável" [disabled]="!editable()" (picked)="patch({ assignee_id: $event })" />
+                                 ariaLabel="Responsável" [disabled]="!editable()" (picked)="setAssignee($event)" />
             </div>
             }
             @if (assigneeAway(); as away) {
@@ -125,15 +154,15 @@ const ACTIVITY_TEXT: Record<string, string> = {
             <div class="v"><input type="date" class="inline" [disabled]="!editable()" [ngModel]="t.aligned_on" (change)="setAlignedOn($any($event.target).value || null)" aria-label="Data do alinhamento" /></div>
 
             <div class="k">Início</div>
-            <div class="v"><input type="date" class="inline" [disabled]="!editable()" [ngModel]="t.start_date" (change)="patch({ start_date: $any($event.target).value || null })" aria-label="Data de início" /></div>
+            <div class="v"><input type="date" class="inline" [disabled]="!editable()" [ngModel]="t.start_date" (change)="setStart($any($event.target).value || null)" aria-label="Data de início" /></div>
 
             <div class="k">Prazo</div>
-            <div class="v"><input type="date" class="inline" [disabled]="!editable()" [ngModel]="t.due_date" (change)="patch({ due_date: $any($event.target).value || null })" aria-label="Prazo" /></div>
+            <div class="v"><input type="date" class="inline" [disabled]="!editable()" [ngModel]="t.due_date" (change)="setDue($any($event.target).value || null)" aria-label="Prazo" /></div>
 
             <div class="props-sep"></div>
             <div class="k">Prioridade</div>
             <div class="v">
-              <select class="inline" [disabled]="!editable()" [ngModel]="t.priority" (ngModelChange)="patch({ priority: $event })" aria-label="Prioridade">
+              <select class="inline" [disabled]="!editable()" [ngModel]="t.priority" (ngModelChange)="setPriority($event)" aria-label="Prioridade">
                 @for (p of priorities; track p.value) { <option [ngValue]="p.value">{{ p.label }}</option> }
               </select>
             </div>
@@ -142,7 +171,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
             <div class="v">
               <div class="seg" role="group" aria-label="Tempo">
                 @for (z of sizes; track z.v) {
-                  <button type="button" [disabled]="!working()" [class.on]="t.size === z.v" (click)="patch({ size: t.size === z.v ? null : z.v })" [title]="z.hint">{{ z.t }}</button>
+                  <button type="button" [disabled]="!working()" [class.on]="t.size === z.v" (click)="setSize(t.size === z.v ? null : z.v)" [title]="z.hint">{{ z.t }}</button>
                 }
               </div>
             </div>
@@ -152,7 +181,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
               @if (t.sections.length) {
                 <div class="k">{{ terms().One }}</div>
                 <div class="v">
-                  <select class="inline" [disabled]="!editable()" [ngModel]="t.section?.id ?? null" (ngModelChange)="patch({ section_id: $event })" [attr.aria-label]="terms().One">
+                  <select class="inline" [disabled]="!editable()" [ngModel]="t.section?.id ?? null" (ngModelChange)="setSection($event)" [attr.aria-label]="terms().One">
                     @for (s of t.sections; track s.id) { <option [ngValue]="s.id">{{ s.name }}</option> }
                   </select>
                 </div>
@@ -160,7 +189,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
               @if (t.phases?.length) {
                 <div class="k">Fase</div>
                 <div class="v">
-                  <select class="inline" [disabled]="!editable()" [ngModel]="t.phase?.id ?? null" (ngModelChange)="patch({ phase_id: $event })" aria-label="Fase">
+                  <select class="inline" [disabled]="!editable()" [ngModel]="t.phase?.id ?? null" (ngModelChange)="setPhase($event)" aria-label="Fase">
                     @if (!t.phase) { <option [ngValue]="null">Sem fase</option> }
                     @for (f of t.phases; track f.id) { <option [ngValue]="f.id">{{ f.name }}</option> }
                   </select>
@@ -178,7 +207,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
               </div>
               @if (t.project && t.space === 'profissional') {
                 <div class="k">Privacidade</div>
-                <div class="v"><label class="check-label"><input type="checkbox" class="switch" role="switch" [checked]="t.is_private" (change)="patch({ is_private: !t.is_private })" /> Só quem está na tarefa (esconde dos outros participantes)</label></div>
+                <div class="v"><label class="check-label"><input type="checkbox" class="switch" role="switch" [checked]="t.is_private" (change)="setPrivate(!t.is_private)" /> Só quem está na tarefa (esconde dos outros participantes)</label></div>
               }
             }
 
@@ -192,19 +221,30 @@ const ACTIVITY_TEXT: Record<string, string> = {
               </label>
             }
           </div>
-          <textarea #descEl class="textarea" [readOnly]="!editable()" [placeholder]="linesToStepsOn ? 'Cada Enter cria uma etapa. Ou comece a linha com -.' : 'Anotações, contexto, links…'" [ngModel]="t.description"
-                    (ngModelChange)="draftDescription = $event" (blur)="saveDescription()" (keydown.enter)="descEnter($event, descEl)" aria-label="Descrição"></textarea>
+          <textarea #descEl class="textarea" [readOnly]="!editable()" [placeholder]="linesToStepsOn ? 'Cada Enter cria uma etapa. Ou comece a linha com -.' : 'Anotações, contexto, links…'" [ngModel]="draftDescription"
+                    (ngModelChange)="onDescription($event)" (keydown.enter)="descEnter($event, descEl)" aria-label="Descrição"></textarea>
 
           <div class="section-label step-head">
             <span>Etapas</span>
             @if (t.subtasks.length) {
               <span class="step-progress"><i [style.width.%]="(doneSubtasks() / t.subtasks.length) * 100"></i></span>
               <span class="muted small">{{ doneSubtasks() }}/{{ t.subtasks.length }}</span>
-              <span class="muted small grow step-next">{{ nextText() }}</span>
+              <span class="muted small step-next">· {{ nextText() }}</span>
+            }
+            <span class="grow"></span>
+            @if (editable()) {
+              <label class="check-label step-order-switch" title="Ligado: a próxima etapa só conclui depois da anterior. Desligado: as etapas andam ao mesmo tempo.">
+                <input type="checkbox" class="switch" role="switch" [checked]="t.steps_ordered !== false" (change)="setStepsOrdered($any($event.target).checked)" /> Seguir prioridade
+              </label>
             }
           </div>
           @for (s of t.subtasks; track s.id; let i = $index; let last = $last) {
-            <div class="subtask step-row" [class.done]="s.done" [class.mine]="s.assignee_id === me" [class.step-current]="s.id === currentId()">
+            <div class="subtask step-row" [class.done]="s.done" [class.mine]="s.assignee_id === me" [class.step-current]="s.id === currentId()"
+                 [class.step-dragging]="stepDragFrom() === i" [class.step-over]="stepOver() === i"
+                 (dragover)="stepHover($event, i)" (drop)="stepDrop($event, i)">
+              @if (editable()) {
+                <button type="button" class="step-grip" draggable="true" (dragstart)="stepDrag($event, i)" (dragend)="stepDragEnd()" aria-label="Arrastar etapa" title="Arrastar para reordenar"><span></span><span></span><span></span><span></span><span></span><span></span></button>
+              }
               <button class="step-num" [class.on]="s.done" [disabled]="!canTick(s)" (click)="tick(s)"
                       [title]="tickTitle(s)" [attr.aria-label]="s.done ? 'Desmarcar etapa ' + (i + 1) : 'Concluir etapa ' + (i + 1)">
                 @if (s.done) { <app-icon name="check" [size]="12" /> } @else { {{ i + 1 }} }
@@ -218,11 +258,11 @@ const ACTIVITY_TEXT: Record<string, string> = {
                   <button class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveSub(i, 1)" aria-label="Descer etapa" title="Descer"><app-icon name="chevron" [size]="12" class="rot-down" /></button>
                 </span>
                 @if (t.space === 'profissional') {
-                <app-person-picker class="step-who" mode="single" variant="inline" [groups]="assigneeGroups()" [value]="s.assignee_id ?? null"
+                <app-person-picker class="step-who" mode="single" variant="inline" [groups]="stepGroups()" [value]="s.assignee_id ?? null"
                                    [specials]="[{ value: null, label: 'Sem responsável' }]" [placeholder]="s.assignee_name || 'Responsável'"
                                    ariaLabel="Responsável da etapa" (picked)="setSub(s.id, { assignee_id: $event })" />
                 @if (s.assignee_id && s.assignee_id !== me) {
-                  <label class="check-label step-notify" title="Avisar a pessoa quando for a vez dela"><input type="checkbox" class="switch" role="switch" [checked]="s.notify !== false" (change)="setSub(s.id, { notify: s.notify === false })" /> avisar</label>
+                  <label class="check-label step-notify" [title]="t.steps_ordered !== false ? 'Avisar a pessoa quando for a vez dela' : 'Avisar a pessoa sobre esta etapa'"><input type="checkbox" class="switch" role="switch" [checked]="s.notify !== false" (change)="setSub(s.id, { notify: s.notify === false })" /> avisar</label>
                 }
                 }
                 <input type="date" class="inline step-due" [ngModel]="s.due_date" (change)="setSub(s.id, { due_date: $any($event.target).value || null })" aria-label="Prazo da etapa" />
@@ -240,9 +280,11 @@ const ACTIVITY_TEXT: Record<string, string> = {
               <span class="step-num step-num--new"><app-icon name="plus" [size]="12" /></span>
               <input class="inline grow" placeholder="Adicionar etapa e Enter" [(ngModel)]="newSub" (keydown.enter)="addSub()" />
             </div>
-            @if (t.space === 'profissional') { <div class="muted small" style="margin-top:4px">As etapas andam em ordem: cada pessoa é avisada quando chega a vez dela, e a gestão do projeto acompanha cada conclusão.</div> }
+            <div class="muted small" style="margin-top:4px">{{ t.steps_ordered !== false ? 'As etapas andam em ordem: a próxima só conclui depois da anterior, e cada pessoa é avisada quando chega a vez dela.' : 'As etapas andam ao mesmo tempo: cada uma pode ser concluída sem esperar a anterior.' }}</div>
           }
 
+          <div class="th-files-zone" [class.file-over]="fileOver()"
+               (dragenter)="fileEnter($event)" (dragover)="fileHover($event)" (dragleave)="fileLeave($event)" (drop)="fileDrop($event)">
           <div class="section-label step-head">
             <span>Anexos</span>
             @if (files().length) { <span class="muted small">{{ files().length }}</span> }
@@ -251,13 +293,13 @@ const ACTIVITY_TEXT: Record<string, string> = {
               <label class="btn btn-ghost btn-sm qa-file-add">
                 <app-icon name="paperclip" [size]="14" />
                 Incluir
-                <input type="file" multiple hidden [accept]="fileAccept" [disabled]="uploadingFiles()" (change)="addFiles($event)" />
+                <input type="file" multiple hidden [disabled]="uploadingFiles()" (change)="addFiles($event)" />
               </label>
             }
           </div>
           @if (filesLoading()) { <div class="muted small">Carregando anexos…</div> }
           @if (!filesLoading() && !files().length) {
-            <div class="muted small">Nenhum anexo.</div>
+            <div class="muted small">{{ editable() ? 'Nenhum anexo. Arraste um arquivo para cá.' : 'Nenhum anexo.' }}</div>
           }
           <div class="th-files">
             @for (f of files(); track f.id) {
@@ -281,8 +323,9 @@ const ACTIVITY_TEXT: Record<string, string> = {
             }
           </div>
           @if (editable()) {
-            <div class="muted small" style="margin-top:4px">Imagem, PDF, Word, Excel, PowerPoint, texto ou zip. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</div>
+            <div class="muted small" style="margin-top:4px">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</div>
           }
+          </div>
 
           <div class="section-label">Atividade</div>
           <div class="timeline">
@@ -333,10 +376,9 @@ const ACTIVITY_TEXT: Record<string, string> = {
           }
           <div class="row"><span class="muted small grow">Ctrl+Enter envia</span>
             <button class="btn btn-primary btn-sm" [disabled]="!comment.trim() || sending()" (click)="sendComment()">Comentar</button></div>
-          @if (working() || (editable() && otherPhases().length)) {
-            <div class="drawer-actions">
-              @if (working()) {
-                <button type="button" class="btn-action-primary btn-sm" (click)="toggleDone()">{{ t.status.category === 'done' ? 'Reabrir' : 'Concluir' }}</button>
+          <div class="drawer-actions">
+              @if (showConclude()) {
+                <button type="button" class="btn-action-primary btn-sm" (click)="toggleDone()">{{ taskClosed() ? 'Reabrir' : 'Concluir' }}</button>
               }
               @if (editable() && otherPhases().length) {
                 <div class="act-phase">
@@ -350,8 +392,15 @@ const ACTIVITY_TEXT: Record<string, string> = {
                   }
                 </div>
               }
+              <span class="grow"></span>
+              <div class="drawer-actions__right">
+                <button type="button" class="btn btn-sm btn-ghost dh-day" (click)="planToday()" title="Adicionar ao Meu Dia de hoje"><app-icon name="sun" [size]="14" />Meu Dia</button>
+                @if (editable() || working()) {
+                  <button type="button" class="btn btn-sm btn-ghost" (click)="close()">Cancelar</button>
+                  <button type="button" class="btn btn-sm btn-primary" [disabled]="!dirty() || savingEdit()" (click)="saveEdits()">{{ savingEdit() ? 'Salvando…' : 'Salvar' }}</button>
+                }
+              </div>
             </div>
-          }
         </div>
       }
     </aside>
@@ -426,7 +475,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
 
   priorities = PRIORITIES;
   sizes = SIZES;
-  fileAccept = TASK_FILE_ACCEPT;
+  fileOver = signal(false);
   fileMax = TASK_FILE_MAX;
   fileMaxMb = TASK_FILE_MAX_MB;
   fileSize = fileSize;
@@ -436,15 +485,30 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
   private previews = signal<Record<number, string>>({});
   today = todayIso();
   draftTitle = '';
-  draftDescription: string | null = null;
+  draftDescription = '';
+  private baseline = signal<TaskSnap | null>(null);
+  private editTick = signal(0);
+  private tempStep = -1;
+  savingEdit = signal(false);
+  dirty = computed(() => {
+    this.editTick();
+    const t = this.task();
+    const b = this.baseline();
+    return !!t && !!b && this.hasChanges(t, b);
+  });
   linesToStepsOn = false;
   newSub = '';
   comment = '';
   blockReason = '';
 
-  editable = computed(() => this.task()?.access === 'edit');
-  // Colaborador ("work") atualiza status, tamanho, bloqueio e etapas.
-  working = computed(() => ['edit', 'work'].includes(this.task()?.access || ''));
+  projectClosed = computed(() => !!this.task()?.section?.completed_at);
+  taskClosed = computed(() => this.task()?.status.category === 'done');
+  locked = computed(() => this.projectClosed() || this.taskClosed());
+  private canWork = computed(() => ['edit', 'work'].includes(this.task()?.access || ''));
+  editable = computed(() => this.task()?.access === 'edit' && !this.locked());
+  // Colaborador ("work") atualiza status, tamanho, bloqueio e etapas, enquanto a tarefa e o projeto estão abertos.
+  working = computed(() => this.canWork() && !this.locked());
+  showConclude = computed(() => this.canWork() && !this.projectClosed());
   me = this.auth.user()?.id ?? 0;
   terms = computed(() => termsFor());
   seesProject = computed(() => { const p = this.task()?.project; return !p || this.data.projects().some(x => x.id === p.id); });
@@ -460,6 +524,11 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     { label: this.task()?.project ? 'Participantes do projeto' : 'Pessoas', people: this.teamPeople() },
     { label: 'Outras pessoas (veem só esta tarefa)', people: this.otherPeople() },
   ]);
+  stepGroups = computed(() => {
+    const u = this.auth.user();
+    const me = u ? { id: u.id, name: u.name, username: u.username, initials: u.initials, color: u.color, department: u.department } : null;
+    return stepAssigneeGroups(this.people(), this.me, me);
+  });
   doneSubtasks = computed(() => this.task()?.subtasks.filter(s => s.done).length || 0);
   // Etapas em sequência: a da vez é a primeira não concluída.
   currentId = computed(() => this.task()?.subtasks.find(s => !s.done)?.id ?? null);
@@ -509,19 +578,26 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     this.loading.set(true); this.error.set(''); this.linesToStepsOn = false; this.shown.set(4);
     this.api.task(this.taskId()).subscribe({
       next: t => {
-        this.task.set(t); this.loading.set(false); this.draftTitle = t.title;
+        this.draftTitle = t.title;
+        this.draftDescription = t.description || '';
+        this.tempStep = -1;
+        this.baseline.set(this.snap(t));
+        this.task.set(t);
+        this.loading.set(false);
+        this.savingEdit.set(false);
+        this.touch();
         setTimeout(() => this.autosize());
         if (!t.project) {
           this.api.directory().subscribe(p => this.people.set(p));
         } else {
           // Quem é de outro setor não lê o projeto; usa o diretório da empresa.
-          this.api.projectPeople(t.project.id).subscribe({
+          this.api.projectPeople(t.project.id, t.section?.id).subscribe({
             next: p => this.people.set(p),
             error: () => this.api.directory().subscribe(p => this.people.set(p.map(x => ({ ...x, in_team: false })))),
           });
         }
       },
-      error: e => { this.loading.set(false); this.error.set(errorMessage(e, 'Tarefa não encontrada ou sem acesso.')); },
+      error: e => { this.loading.set(false); this.savingEdit.set(false); this.error.set(errorMessage(e, 'Tarefa não encontrada ou sem acesso.')); },
     });
     this.api.timeline(this.taskId()).subscribe({ next: tl => this.timeline.set(tl), error: () => {} });
     this.loadFiles();
@@ -559,6 +635,36 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const input = ev.target as HTMLInputElement;
     const picked = [...(input.files || [])];
     input.value = '';
+    this.takeFiles(picked);
+  }
+
+  fileEnter(ev: DragEvent) {
+    if (!isExternalFileDrag(ev) || !this.editable()) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.fileOver.set(true);
+  }
+  fileHover(ev: DragEvent) {
+    if (!isExternalFileDrag(ev) || !this.editable()) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  fileLeave(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    const next = ev.relatedTarget as Node | null;
+    if (next && (ev.currentTarget as Node).contains(next)) return;
+    this.fileOver.set(false);
+  }
+  fileDrop(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.fileOver.set(false);
+    if (!this.editable()) return;
+    this.takeFiles([...(ev.dataTransfer?.files || [])]);
+  }
+
+  private takeFiles(picked: File[]) {
     if (!picked.length || this.uploadingFiles()) return;
     const keep: File[] = [];
     let count = this.files().length;
@@ -626,19 +732,32 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const t = this.task(); if (!t) return;
     this.api.updateTask(t.id, body).subscribe({
       next: updated => {
-        this.task.set({ ...t, ...updated, subtasks: t.subtasks, statuses: t.statuses, sections: t.sections, phases: t.phases });
-        this.ui.taskChanged$.next(t.id);
-        this.api.timeline(t.id).subscribe(tl => this.timeline.set(tl));
+        const cur = this.task();
+        if (!cur) return;
+        const next: TaskDetail = {
+          ...cur,
+          status: updated.status,
+          completed_at: updated.completed_at,
+          blocked_reason: updated.blocked_reason,
+        };
+        if ('phase_id' in body) {
+          next.phase = updated.phase ?? null;
+          this.baseline.update(b => b ? { ...b, phase_id: updated.phase?.id ?? null } : b);
+        }
+        this.task.set(next);
+        this.ui.taskChanged$.next(cur.id);
+        this.api.timeline(cur.id).subscribe(tl => this.timeline.set(tl));
         after?.();
       },
-      error: e => { this.toast.error(errorMessage(e)); this.statusPick.set(null); this.load(); },
+      error: e => { this.toast.error(errorMessage(e)); this.statusPick.set(null); this.moveFor.set(null); },
     });
   }
 
   toggleDone() {
-    const t = this.task(); if (!t) return;
+    const t = this.task(); if (!t || this.projectClosed()) return;
     this.phaseMenu.set(false);
     const closing = t.status.category !== 'done';
+    if (closing && !confirmOpen('a tarefa', t.subtasks.filter(s => !s.done).map(s => s.title))) return;
     this.patch({ done: closing }, () => this.toast.show(closing ? 'Tarefa concluída. Permanece nesta fase.' : 'Tarefa reaberta.'));
   }
   sendToPhase(f: Phase) {
@@ -650,6 +769,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const t = this.task();
     const s = t?.statuses.find(x => x.id === id);
     if (!t || !s || s.id === t.status.id) return;
+    if (s.category === 'done' && !confirmOpen('a tarefa', t.subtasks.filter(x => !x.done).map(x => x.title))) return;
     this.moveReason = ''; this.blockReason = '';
     this.statusPick.set(id);
     this.moveFor.set(s);
@@ -666,32 +786,82 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
   }
 
   moveProject(projectId: number | null) {
-    if (!projectId) { this.patch({ project_id: null }, () => this.load()); return; }
+    const t = this.task(); if (!t || projectId === (t.project?.id ?? null)) return;
+    if (!projectId) {
+      this.localTask({ project: null, section: null, phase: null });
+      return;
+    }
+    const project = this.data.editableProjects(t.space).find(p => p.id === projectId);
+    if (!project) return;
     this.api.works(projectId).subscribe({
       next: r => {
         const list = r.works.filter(w => !w.completed_at && (r.can_create || w.my_role === 'manage'));
         if (list.length !== 1) {
           const T = termsFor();
           this.toast.show(list.length ? `Aí há mais de um ${T.one}. Abra o ${T.one} e mova a tarefa para lá.` : `Ainda não há nenhum ${T.one} aí.`);
-          this.load();
+          this.touch();
           return;
         }
-        this.patch({ project_id: projectId, section_id: list[0].id }, () => this.load());
+        const w = list[0];
+        this.localTask({
+          project: { id: project.id, name: project.name, color: project.color, team_id: project.team_id, team_name: project.team_name },
+          section: { id: w.id, name: w.name },
+          sections: [{ id: w.id, project_id: projectId, name: w.name, position: w.position ?? 0 }],
+          phases: r.phases,
+          phase: w.phase_id ? { id: w.phase_id, name: w.phase_name || '', color: w.phase_color || '' } : null,
+        });
+        this.loadPeople(projectId, w.id);
       },
       error: e => this.toast.error(errorMessage(e)),
     });
   }
 
-  saveTitle() {
-    const t = this.task();
-    const v = this.draftTitle.trim();
-    if (t && v && v !== t.title) this.patch({ title: v });
+  close() { this.ui.closeTask(); }
+
+  onTitle(value: string) {
+    this.draftTitle = value;
+    this.touch();
+    this.autosize();
   }
 
-  saveDescription() {
-    const t = this.task();
-    if (t && this.draftDescription !== null && this.draftDescription !== t.description) this.patch({ description: this.draftDescription });
-    this.draftDescription = null;
+  onDescription(value: string) {
+    this.draftDescription = value;
+    this.touch();
+  }
+
+  setAssignee(id: number | null) {
+    const person = id == null ? null : (this.people().find(p => p.id === id) || this.data.people().find(p => p.id === id) || null);
+    this.localTask({ assignee: person });
+  }
+
+  setStart(value: string | null) { this.localTask({ start_date: value }); }
+  setDue(value: string | null) { this.localTask({ due_date: value }); }
+  setPriority(value: TaskDetail['priority']) { this.localTask({ priority: value }); }
+  setSize(value: TaskDetail['size']) { this.localTask({ size: value }); }
+  setPrivate(value: boolean) { this.localTask({ is_private: value }); }
+
+  setStepsOrdered(value: boolean) {
+    const t = this.task(); if (!t || (t.steps_ordered !== false) === value) return;
+    this.task.set({ ...t, steps_ordered: value });
+    this.api.updateTask(t.id, { steps_ordered: value }).subscribe({
+      error: e => {
+        this.toast.error(errorMessage(e));
+        this.task.update(cur => cur && cur.id === t.id ? { ...cur, steps_ordered: !value } : cur);
+      },
+    });
+  }
+
+  setSection(id: number | null) {
+    const t = this.task(); if (!t) return;
+    const section = t.sections.find(s => s.id === id);
+    this.localTask({ section: section ? { id: section.id, name: section.name } : null });
+    if (t.project) this.loadPeople(t.project.id, section?.id);
+  }
+
+  setPhase(id: number | null) {
+    const t = this.task(); if (!t) return;
+    const phase = (t.phases || []).find(f => f.id === id);
+    this.localTask({ phase: phase ? { id: phase.id, name: phase.name, color: phase.color } : null });
   }
 
   toggleContact(id: number) {
@@ -699,7 +869,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const cur = (t.contacts || []).map(c => c.id);
     const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
     this.api.setTaskContacts(t.id, next).subscribe({
-      next: r => this.task.set({ ...t, contacts: r.contacts, aligned_on: r.aligned_on }),
+      next: r => this.task.update(cur => cur ? { ...cur, contacts: r.contacts, aligned_on: r.aligned_on } : cur),
       error: e => this.toast.error(errorMessage(e)),
     });
   }
@@ -707,7 +877,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
   setAlignedOn(date: string | null) {
     const t = this.task(); if (!t || date === (t.aligned_on ?? null)) return;
     this.api.setTaskAlignment(t.id, date).subscribe({
-      next: r => this.task.set({ ...t, contacts: r.contacts, aligned_on: r.aligned_on }),
+      next: r => this.task.update(cur => cur ? { ...cur, contacts: r.contacts, aligned_on: r.aligned_on } : cur),
       error: e => this.toast.error(errorMessage(e)),
     });
   }
@@ -721,52 +891,65 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     el.value = r.text;
     el.setSelectionRange(r.caret, r.caret);
     this.draftDescription = r.text;
+    this.touch();
     this.addSteps([r.step]);
   }
 
   private addSteps(titles: string[]) {
     const t = this.task(); if (!t) return;
-    concat(...titles.map(title => this.api.addSubtask(t.id, title))).pipe(toArray()).subscribe({
-      next: list => {
-        const cur = this.task() || t;
-        this.task.set({ ...cur, subtasks: [...cur.subtasks, ...list], subtasks_total: cur.subtasks_total + list.length });
-        this.ui.taskChanged$.next(t.id);
-        setTimeout(() => this.autosize());
-        if (list.length > 1) this.toast.show(`${list.length} etapas criadas.`);
-      },
-      error: e => { this.toast.error(errorMessage(e)); this.load(); },
-    });
+    const steps = titles.map((title, i) => this.makeStep(title, t.subtasks.length + i)).filter(s => s.title);
+    if (!steps.length) return;
+    this.task.set({ ...t, subtasks: [...t.subtasks, ...steps], subtasks_total: t.subtasks_total + steps.length });
+    setTimeout(() => this.autosize());
   }
 
   addSub() {
     const t = this.task(); const title = this.newSub.trim();
     if (!t || !title) return;
-    this.api.addSubtask(t.id, title).subscribe({
-      next: s => { this.task.set({ ...t, subtasks: [...t.subtasks, s], subtasks_total: t.subtasks_total + 1 }); this.newSub = ''; this.ui.taskChanged$.next(t.id); },
-      error: e => this.toast.error(errorMessage(e)),
-    });
+    const step = this.makeStep(title, t.subtasks.length);
+    this.task.set({ ...t, subtasks: [...t.subtasks, step], subtasks_total: t.subtasks_total + 1 });
+    this.newSub = '';
   }
 
   toggleSub(id: number, done: boolean) {
     const t = this.task(); if (!t) return;
     this.task.set({ ...t, subtasks: t.subtasks.map(s => (s.id === id ? { ...s, done } : s)) });
+    if (id < 0) return;
     this.api.updateSubtask(t.id, id, { done }).subscribe({
-      next: () => { this.ui.taskChanged$.next(t.id); this.api.timeline(t.id).subscribe(tl => this.timeline.set(tl)); },
-      error: e => { this.toast.error(errorMessage(e)); this.load(); },
+      next: () => {
+        this.baseline.update(b => b ? { ...b, subtasks: b.subtasks.map(s => s.id === id ? { ...s, done } : s) } : b);
+        this.ui.taskChanged$.next(t.id);
+        this.api.timeline(t.id).subscribe(tl => this.timeline.set(tl));
+      },
+      error: e => {
+        this.toast.error(errorMessage(e));
+        this.task.update(cur => cur ? { ...cur, subtasks: cur.subtasks.map(s => s.id === id ? { ...s, done: !done } : s) } : cur);
+      },
     });
   }
 
-  stepState(s: Subtask) { return s.done ? 'done' : s.id === this.currentId() ? 'turn' : 'wait'; }
-  stepLabel(s: Subtask) { return s.done ? 'Concluída' : s.id === this.currentId() ? 'Na vez' : 'Aguardando'; }
+  private ordered() { return this.task()?.steps_ordered !== false; }
+  stepState(s: Subtask) {
+    if (s.done) return 'done';
+    if (!this.ordered()) return 'turn';
+    return s.id === this.currentId() ? 'turn' : 'wait';
+  }
+  stepLabel(s: Subtask) {
+    if (s.done) return 'Concluída';
+    if (!this.ordered()) return 'Em andamento';
+    return s.id === this.currentId() ? 'Na vez' : 'Aguardando';
+  }
   canTick(s: Subtask) {
+    if (this.locked()) return false;
+    if (s.done) return this.editable();
+    if (this.ordered() && s.id !== this.currentId()) return false;
     if (this.editable()) return true;
-    const mine = s.assignee_id === this.me || this.task()?.access === 'work';
-    return mine && !s.done && s.id === this.currentId();
+    return s.assignee_id === this.me || this.task()?.access === 'work';
   }
   tickTitle(s: Subtask) {
-    if (this.editable()) return s.done ? 'Desmarcar' : 'Marcar como feita';
-    if (s.done) return 'Concluída';
-    return s.id === this.currentId() ? 'Concluir minha parte' : 'Aguarde a etapa anterior';
+    if (s.done) return this.editable() ? 'Desmarcar' : 'Concluída';
+    if (this.ordered() && s.id !== this.currentId()) return 'Aguarde a etapa anterior';
+    return this.editable() ? 'Marcar como feita' : 'Concluir minha etapa';
   }
   tick(s: Subtask) {
     if (!s.done && s.assignee_id === this.me) { this.openFinish(s); return; }
@@ -777,41 +960,77 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
 
   confirmFinish() {
     const t = this.task(); const s = this.finishFor(); if (!t || !s || this.finishing()) return;
+    if (s.id < 0) {
+      this.task.update(cur => cur ? { ...cur, subtasks: cur.subtasks.map(x => x.id === s.id ? { ...x, done: true } : x) } : cur);
+      this.finishFor.set(null);
+      this.toast.show('A etapa fica concluída quando você salvar a tarefa.');
+      return;
+    }
     const note = this.finishNote.trim();
     this.finishing.set(true);
     this.api.updateSubtask(t.id, s.id, note ? { done: true, note } : { done: true }).subscribe({
       next: () => {
         this.finishing.set(false); this.finishFor.set(null);
+        this.task.update(cur => cur ? { ...cur, subtasks: cur.subtasks.map(x => x.id === s.id ? { ...x, done: true } : x) } : cur);
+        this.baseline.update(b => b ? { ...b, subtasks: b.subtasks.map(x => x.id === s.id ? { ...x, done: true } : x) } : b);
         this.toast.show('Etapa concluída. A gestão do projeto foi avisada.');
         this.ui.taskChanged$.next(t.id);
-        this.load();
+        this.api.timeline(t.id).subscribe(tl => this.timeline.set(tl));
       },
-      error: e => { this.finishing.set(false); this.toast.error(errorMessage(e)); this.load(); },
+      error: e => { this.finishing.set(false); this.toast.error(errorMessage(e)); },
     });
   }
 
-  moveSub(i: number, dir: -1 | 1) {
+  stepDragFrom = signal<number | null>(null);
+  stepOver = signal<number | null>(null);
+
+  stepDrag(ev: DragEvent, i: number) {
+    ev.stopPropagation();
+    ev.dataTransfer?.setData('application/x-taskhub-step', String(i));
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+    this.stepDragFrom.set(i);
+  }
+  stepDragEnd() { this.stepDragFrom.set(null); this.stepOver.set(null); }
+  stepHover(ev: DragEvent, i: number) {
+    if (!this.stepDragEvent(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.stepOver.set(i);
+  }
+  stepDrop(ev: DragEvent, to: number) {
+    if (!this.stepDragEvent(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const from = Number(ev.dataTransfer?.getData('application/x-taskhub-step'));
+    this.stepDragEnd();
+    if (!Number.isInteger(from) || from === to) return;
+    this.reorderSub(from, to);
+  }
+  private stepDragEvent(ev: DragEvent) {
+    const types = ev.dataTransfer?.types;
+    return !!types && Array.from(types).includes('application/x-taskhub-step');
+  }
+  moveSub(i: number, dir: -1 | 1) { this.reorderSub(i, i + dir); }
+
+  private reorderSub(from: number, to: number) {
     const t = this.task(); if (!t) return;
-    const list = [...t.subtasks]; const j = i + dir;
-    if (j < 0 || j >= list.length) return;
-    [list[i], list[j]] = [list[j], list[i]];
+    const list = [...t.subtasks];
+    const [item] = list.splice(from, 1);
+    if (!item || to < 0 || to > list.length) return;
+    list.splice(to, 0, item);
     this.task.set({ ...t, subtasks: list });
-    this.api.reorderSubtasks(t.id, list.map(s => s.id)).subscribe({
-      next: () => this.ui.taskChanged$.next(t.id),
-      error: e => { this.toast.error(errorMessage(e)); this.load(); },
-    });
   }
 
   renameSub(id: number, title: string) {
     const t = this.task(); const s = t?.subtasks.find(x => x.id === id);
-    if (!t || !s || !title.trim() || title.trim() === s.title) return;
-    this.api.updateSubtask(t.id, id, { title: title.trim() }).subscribe({ error: e => this.toast.error(errorMessage(e)) });
+    const value = title.trim();
+    if (!t || !s || !value || value === s.title) return;
+    this.task.set({ ...t, subtasks: t.subtasks.map(x => x.id === id ? { ...x, title: value } : x) });
   }
 
   deleteSub(id: number) {
     const t = this.task(); if (!t) return;
-    this.task.set({ ...t, subtasks: t.subtasks.filter(s => s.id !== id) });
-    this.api.deleteSubtask(t.id, id).subscribe({ next: () => this.ui.taskChanged$.next(t.id), error: e => this.toast.error(errorMessage(e)) });
+    this.task.set({ ...t, subtasks: t.subtasks.filter(s => s.id !== id), subtasks_total: Math.max(0, t.subtasks_total - 1) });
   }
 
   onCommentInput() {
@@ -860,16 +1079,177 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
 
   setSub(id: number, body: Record<string, unknown>) {
     const t = this.task(); if (!t) return;
-    this.api.updateSubtask(t.id, id, body).subscribe({
-      next: () => {
-        this.load(); this.ui.taskChanged$.next(t.id);
-        const quiet = t.subtasks.find(s => s.id === id)?.notify === false;
-        if (body['notify'] !== undefined) this.toast.show(body['notify'] ? 'A pessoa será avisada nesta etapa.' : 'A pessoa não será avisada nesta etapa.');
-        else if (body['assignee_id'] && quiet) this.toast.show('Etapa atribuída, sem aviso.');
-        else if (body['assignee_id']) this.toast.show(id === this.currentId() ? 'Etapa atribuída. A pessoa foi avisada.' : 'Etapa atribuída. A pessoa será avisada quando chegar a vez dela.');
-      },
-      error: e => this.toast.error(errorMessage(e)),
+    this.task.set({
+      ...t,
+      subtasks: t.subtasks.map(s => {
+        if (s.id !== id) return s;
+        const next: Subtask = { ...s, ...body };
+        if ('assignee_id' in body) {
+          const assigneeId = (body['assignee_id'] as number | null) || null;
+          const person = assigneeId ? (this.people().find(p => p.id === assigneeId) || this.data.people().find(p => p.id === assigneeId)) : null;
+          next.assignee_id = assigneeId;
+          next.assignee_name = person?.name ?? null;
+          next.assignee_initials = person?.initials ?? null;
+          next.assignee_color = person?.color ?? null;
+        }
+        return next;
+      }),
     });
+  }
+
+  async saveEdits() {
+    const t = this.task();
+    const b = this.baseline();
+    if (!t || !b || this.savingEdit() || !this.dirty()) return;
+    const title = this.draftTitle.trim();
+    if (!title) { this.toast.error('Escreva o título da tarefa.'); return; }
+    if (t.subtasks.some(s => !s.title.trim())) { this.toast.error('Escreva o texto de cada etapa.'); return; }
+    const start = t.start_date || null;
+    const due = t.due_date || null;
+    if (start && due && due < start) { this.toast.error('O prazo deve ser igual ou depois da data de início.'); return; }
+    const body = this.fieldDiff(t, b, title);
+    const removed = b.subtasks.map(s => s.id).filter(id => !t.subtasks.some(s => s.id === id));
+    const updates = this.stepUpdates(t, b);
+    const created = t.subtasks.filter(s => s.id < 0);
+    this.savingEdit.set(true);
+    let savedSome = false;
+    try {
+      if (Object.keys(body).length) {
+        await firstValueFrom(this.api.updateTask(t.id, body));
+        savedSome = true;
+      }
+      for (const id of removed) {
+        await firstValueFrom(this.api.deleteSubtask(t.id, id));
+        savedSome = true;
+      }
+      for (const step of updates) {
+        await firstValueFrom(this.api.updateSubtask(t.id, step.id, step.body));
+        savedSome = true;
+      }
+      const ids = new Map<number, number>();
+      for (const step of created) {
+        const row = await firstValueFrom(this.api.addSubtask(t.id, step.title.trim(), {
+          assignee_id: step.assignee_id,
+          due_date: step.due_date,
+          notify: step.notify !== false,
+          ...(step.done ? { done: true } : {}),
+        }));
+        ids.set(step.id, row.id);
+        savedSome = true;
+      }
+      const order = t.subtasks.map(s => s.id < 0 ? ids.get(s.id)! : s.id);
+      const previous = b.subtasks.map(s => s.id);
+      const orderChanged = order.length !== previous.length || order.some((id, i) => id !== previous[i]);
+      if (orderChanged && order.length) await firstValueFrom(this.api.reorderSubtasks(t.id, order));
+      this.toast.show('Tarefa atualizada.');
+      this.ui.taskChanged$.next(t.id);
+      this.load();
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+      if (savedSome) this.load();
+      else this.savingEdit.set(false);
+    }
+  }
+
+  private touch() { this.editTick.update(n => n + 1); }
+
+  private localTask(patch: Partial<TaskDetail>) {
+    const t = this.task(); if (!t) return;
+    this.task.set({ ...t, ...patch });
+  }
+
+  private loadPeople(projectId: number, sectionId?: number) {
+    this.api.projectPeople(projectId, sectionId).subscribe({
+      next: people => this.people.set(people),
+      error: () => this.api.directory().subscribe(people => this.people.set(people.map(p => ({ ...p, in_team: false })))),
+    });
+  }
+
+  private makeStep(title: string, position: number): Subtask {
+    return { id: this.tempStep--, title: title.trim(), done: false, position, due_date: null, assignee_id: null, notify: true };
+  }
+
+  private snap(t: TaskDetail): TaskSnap {
+    return {
+      title: t.title,
+      description: t.description || '',
+      assignee_id: t.assignee?.id ?? null,
+      start_date: t.start_date || null,
+      due_date: t.due_date || null,
+      priority: t.priority,
+      size: t.size ?? null,
+      section_id: t.section?.id ?? null,
+      phase_id: t.phase?.id ?? null,
+      is_private: !!t.is_private,
+      project_id: t.project?.id ?? null,
+      subtasks: t.subtasks.map(s => ({
+        id: s.id,
+        title: s.title,
+        assignee_id: s.assignee_id ?? null,
+        due_date: s.due_date || null,
+        notify: s.notify !== false,
+        done: !!s.done,
+      })),
+    };
+  }
+
+  private hasChanges(t: TaskDetail, b: TaskSnap) {
+    if (this.draftTitle.trim() !== b.title) return true;
+    if ((this.draftDescription || '') !== (b.description || '')) return true;
+    if ((t.assignee?.id ?? null) !== b.assignee_id) return true;
+    if ((t.start_date || null) !== (b.start_date || null)) return true;
+    if ((t.due_date || null) !== (b.due_date || null)) return true;
+    if (t.priority !== b.priority) return true;
+    if ((t.size ?? null) !== (b.size ?? null)) return true;
+    if ((t.section?.id ?? null) !== b.section_id) return true;
+    if ((t.phase?.id ?? null) !== b.phase_id) return true;
+    if (!!t.is_private !== b.is_private) return true;
+    if ((t.project?.id ?? null) !== b.project_id) return true;
+    if (t.subtasks.length !== b.subtasks.length) return true;
+    return t.subtasks.some((s, i) => {
+      const o = b.subtasks[i];
+      return !o || s.id !== o.id || s.title !== o.title || (s.assignee_id ?? null) !== o.assignee_id
+        || (s.due_date || null) !== (o.due_date || null) || (s.notify !== false) !== o.notify;
+    });
+  }
+
+  private fieldDiff(t: TaskDetail, b: TaskSnap, title: string) {
+    const body: Record<string, unknown> = {};
+    if (title !== b.title) body['title'] = title;
+    if ((this.draftDescription || '') !== (b.description || '')) body['description'] = this.draftDescription || '';
+    if ((t.assignee?.id ?? null) !== b.assignee_id) body['assignee_id'] = t.assignee?.id ?? null;
+    if ((t.start_date || null) !== (b.start_date || null)) body['start_date'] = t.start_date || null;
+    if ((t.due_date || null) !== (b.due_date || null)) body['due_date'] = t.due_date || null;
+    if (t.priority !== b.priority) body['priority'] = t.priority;
+    if ((t.size ?? null) !== (b.size ?? null)) body['size'] = t.size ?? null;
+    const projectId = t.project?.id ?? null;
+    if (projectId !== b.project_id) {
+      body['project_id'] = projectId;
+      body['section_id'] = t.section?.id ?? null;
+    } else if ((t.section?.id ?? null) !== b.section_id) {
+      body['section_id'] = t.section?.id ?? null;
+    }
+    if (projectId === b.project_id && (t.phase?.id ?? null) !== b.phase_id) body['phase_id'] = t.phase?.id ?? null;
+    if (!!t.is_private !== b.is_private) body['is_private'] = !!t.is_private;
+    return body;
+  }
+
+  private stepUpdates(t: TaskDetail, b: TaskSnap) {
+    const saved = new Map(b.subtasks.map(s => [s.id, s]));
+    const updates: { id: number; body: Record<string, unknown> }[] = [];
+    for (const step of t.subtasks) {
+      if (step.id < 0) continue;
+      const old = saved.get(step.id);
+      if (!old) continue;
+      const body: Record<string, unknown> = {};
+      const title = step.title.trim();
+      if (title !== old.title) body['title'] = title;
+      if ((step.assignee_id ?? null) !== old.assignee_id) body['assignee_id'] = step.assignee_id;
+      if ((step.due_date || null) !== (old.due_date || null)) body['due_date'] = step.due_date || null;
+      if ((step.notify !== false) !== old.notify) body['notify'] = step.notify !== false;
+      if (Object.keys(body).length) updates.push({ id: step.id, body });
+    }
+    return updates;
   }
 
   away(p: Person) { return p.away_until && p.away_until >= this.today ? ' (ausente)' : ''; }

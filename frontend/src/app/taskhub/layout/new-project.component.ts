@@ -80,7 +80,7 @@ const COLORS = ['#c9a84c', '#4c8dff', '#2fbf71', '#a78bfa', '#f97316', '#14b8a6'
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" (click)="close()">Cancelar</button>
-          <button class="btn btn-primary" [disabled]="!name.trim() || saving() || !canSave()" (click)="save()">Criar projeto</button>
+          <button class="btn btn-primary" [disabled]="!name.trim() || saving() || !canSave()" (click)="save()">{{ saving() ? 'Salvando…' : 'Salvar' }}</button>
         </div>
       </div>
     </div>

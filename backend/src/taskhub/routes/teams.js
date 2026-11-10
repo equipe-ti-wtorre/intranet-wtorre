@@ -63,6 +63,9 @@ const TEAM_SELECT = `
     th_oversees_team($1, t.id) AS can_dashboard,
     (th_oversees_team($1, t.id) = 1 OR EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1)) AS can_panel,
     (SELECT COUNT(*) FROM team_members m WHERE m.team_id = t.id) AS members_count,
+    (SELECT COUNT(*) FROM users x WHERE x.active IS DISTINCT FROM false
+       AND (EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = x.id)
+            OR EXISTS (SELECT 1 FROM team_managers tm WHERE tm.team_id = t.id AND tm.user_id = x.id))) AS people_count,
     (SELECT COUNT(*) FROM project_sections s JOIN team_boards b ON b.project_id = s.project_id
       WHERE b.team_id = t.id AND s.completed_at IS NULL AND th_work_role($1, s.id) IS NOT NULL) AS projects_count,
     (SELECT b.project_id FROM team_boards b WHERE b.team_id = t.id) AS board_id,
@@ -124,7 +127,12 @@ router.get('/:id', ah(async (req, res) => {
        FROM team_members m JOIN users u ON u.id = m.user_id
       WHERE m.team_id = $1 AND u.active IS DISTINCT FROM false ORDER BY u.name`, [id]
   );
-  res.json({ ...team, can_edit: await canEdit(req.user, id), members });
+  const { rows: sectorManagers } = await query(
+    `SELECT u.id, u.name, u.initials, u.color
+       FROM sector_managers sm JOIN users u ON u.id = sm.user_id
+      WHERE sm.sector_id = $1 AND u.active IS DISTINCT FROM false ORDER BY u.name`, [team.sector_id]
+  );
+  res.json({ ...team, can_edit: await canEdit(req.user, id), members, sector_managers: sectorManagers });
 }));
 
 router.patch('/:id', ah(async (req, res) => {

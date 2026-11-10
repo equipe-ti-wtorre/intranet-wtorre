@@ -20,7 +20,7 @@ export interface User {
 export interface Person {
   id: number; name: string; username: string; initials: string; color: string; avatar_url?: string | null;
   job_title?: string; department?: string | null; away_until?: string | null; role?: string;
-  team_id?: number | null; team_name?: string | null; in_team?: boolean;
+  team_id?: number | null; team_name?: string | null; in_team?: boolean; is_requester?: boolean; can_own?: boolean;
   sector_id?: number | null; sector_name?: string | null;
   profiles?: string[]; can_coordinate?: boolean; from_directory?: boolean;
 }
@@ -46,7 +46,7 @@ export interface Task {
   space: Space;
   tags: string[];
   project: { id: number; name: string; color: string; team_id: number | null; team_name?: string | null } | null;
-  section: { id: number; name: string } | null;
+  section: { id: number; name: string; completed_at?: string | null } | null;
   phase?: { id: number; name: string; color: string } | null;
   status: { id: number | null; name: string; color: string; category: StatusCategory };
   assignee: Person | null;
@@ -54,6 +54,7 @@ export interface Task {
   subtasks_total: number; subtasks_done: number; comments_count: number;
   access: 'edit' | 'work' | 'view' | 'comment';
   my_steps: MyStep[];
+  steps?: { id: number; title: string; done: boolean; assignee_name: string | null }[];
   created_at: string; updated_at: string;
 }
 
@@ -78,6 +79,8 @@ export interface TaskFile {
 
 export interface TaskDetail extends Task {
   subtasks: Subtask[]; statuses: Status[]; sections: Section[]; phases?: Phase[]; current_step_id?: number | null;
+  // true: a etapa seguinte só conclui depois da anterior. false: andam ao mesmo tempo.
+  steps_ordered?: boolean;
   // Registro da reunião: com quem foi alinhado (sem aviso nem acesso) e a data.
   contacts?: TaskContact[]; aligned_on?: string | null;
 }
@@ -98,7 +101,8 @@ export interface Team {
   id: number; name: string; description: string; color: string; can_dashboard?: boolean; can_panel?: boolean;
   sector_id?: number; sector_name?: string; can_edit?: boolean; is_member?: boolean;
   managers?: { id: number; name: string; initials: string; color: string }[];
-  my_role: 'gestor' | 'membro' | null; members_count?: number; projects_count?: number; board_id?: number | null;
+  sector_managers?: { id: number; name: string; initials: string; color: string }[];
+  my_role: 'gestor' | 'membro' | null; members_count?: number; people_count?: number; projects_count?: number; board_id?: number | null;
   members?: (Person & { daily_capacity_min: number; profiles?: Profile[]; is_manager?: boolean })[];
 }
 
@@ -229,6 +233,11 @@ export interface DayData {
   };
   tomorrow: { date: string; planned: number; due: number };
   closure: { summary: string; closed_at: string } | null;
+  due_today?: {
+    tasks: { id: number; title: string; space: Space }[];
+    steps: { id: number; title: string; task_id: number; task: string; space: Space }[];
+    works: { id: number; project_id: number; name: string; space: Space }[];
+  };
 }
 
 export interface Notification {

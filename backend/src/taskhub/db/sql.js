@@ -39,6 +39,7 @@ const TABLES = [
   'task_contacts',
   'task_alignment',
   'task_files',
+  'task_parallel_steps',
   'subtask_quiet',
   'team_phases',
   'project_phases',
@@ -131,6 +132,10 @@ const anyOf = (list, value) =>
 
 function replaceAny(sql) {
   let out = sql.replace(
+    /LOWER\(\s*([\w.]+)\s*\)\s*=\s*ANY\(\s*\$(\d+)\s*\)/gi,
+    (_, col, n) => anyOf(`$${n}`, `LOWER(${col})`)
+  );
+  out = out.replace(
     /\$(\d+)\s*=\s*ANY\(\s*([\w.]+)\s*\)/gi,
     (_, n, list) => anyOf(list, `$${n}`)
   );

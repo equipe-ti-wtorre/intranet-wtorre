@@ -158,19 +158,31 @@ router.get('/:id', ah(async (req, res) => {
 // depois o resto da empresa. Quem recebe uma tarefa passa a ver só aquela tarefa.
 router.get('/:id/people', ah(async (req, res) => {
   const id = intParam(req.params.id);
+  const workId = req.query.work_id ? intParam(req.query.work_id, 'work_id') : null;
   await requireProject(req.user, id, 'partial');
   const { rows } = await query(
     `SELECT u.id, u.name, u.username, u.initials, u.color, u.job_title, u.department, u.away_until,
             ${TEAM_FIELDS('u')},
             (EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = u.id)
               OR EXISTS (SELECT 1 FROM team_boards b JOIN team_members m ON m.team_id = b.team_id
-                          WHERE b.project_id = $1 AND m.user_id = u.id)) AS in_team
+                          WHERE b.project_id = $1 AND m.user_id = u.id)) AS in_team,
+            EXISTS (SELECT 1 FROM work_members wm
+                      JOIN project_sections s ON s.id = wm.work_id
+                     WHERE s.id = $2 AND s.project_id = $1 AND wm.user_id = u.id) AS is_requester,
+            (NOT EXISTS (SELECT 1 FROM team_boards b WHERE b.project_id = $1)
+              OR EXISTS (SELECT 1 FROM team_boards b JOIN team_members m ON m.team_id = b.team_id
+                          WHERE b.project_id = $1 AND m.user_id = u.id)
+              OR EXISTS (SELECT 1 FROM team_boards b JOIN team_managers tm ON tm.team_id = b.team_id
+                          WHERE b.project_id = $1 AND tm.user_id = u.id)
+              OR EXISTS (SELECT 1 FROM team_boards b JOIN teams t ON t.id = b.team_id
+                          JOIN sector_managers sm ON sm.sector_id = t.sector_id
+                          WHERE b.project_id = $1 AND sm.user_id = u.id)) AS can_own
        FROM users u
       WHERE u.active IS DISTINCT FROM false
         AND (u.role <> 'convidado' OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $1 AND pm.user_id = u.id))
-      ORDER BY in_team DESC, u.name`, [id]
+      ORDER BY in_team DESC, u.name`, [id, workId]
   );
-  res.json(rows);
+  res.json(rows.map(r => ({ ...r, is_requester: !!Number(r.is_requester), can_own: !!Number(r.can_own) })));
 }));
 
 router.patch('/:id', ah(async (req, res) => {

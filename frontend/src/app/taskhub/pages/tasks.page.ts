@@ -6,6 +6,7 @@ import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { DataService } from '../core/data.service';
 import { Task } from '../core/models';
+import { askCloseTask } from '../core/confirm-open';
 import { GroupBy, SortBy, TaskListComponent } from '../shared/task-list';
 
 const DUE_LABEL: Record<string, string> = { overdue: 'atrasadas', today: 'com prazo hoje', week: 'com prazo nos próximos 7 dias', none: 'sem prazo' };
@@ -36,7 +37,7 @@ const STATUS_LABEL: Record<string, string> = { blocked: 'bloqueadas', doing: 'em
       </div>
       @if (error()) { <div class="error-text">{{ error() }}</div> }
       @if (loaded()) {
-        <app-task-list [tasks]="tasks()" [groupBy]="groupBy()" [sortBy]="sortBy()" (toggle)="toggle($event)"
+        <app-task-list [tasks]="tasks()" [groupBy]="groupBy()" [sortBy]="sortBy()" [head]="true" (toggle)="toggle($event)"
                        [emptyTitle]="emptyTitle()" [emptyText]="emptyText()" />
       } @else { <div class="muted">Carregando…</div> }
     </div>
@@ -109,8 +110,13 @@ export class TasksPage implements OnInit, OnDestroy {
 
   toggle(t: Task) {
     const done = t.status.category !== 'done';
-    this.api.updateTask(t.id, { done }).subscribe({
+    const run = () => this.api.updateTask(t.id, { done }).subscribe({
       next: u => { this.tasks.update(l => l.map(x => (x.id === t.id ? u : x))); if (done) this.toast.show('Concluída.'); },
+      error: e => this.toast.error(errorMessage(e)),
+    });
+    if (!done) { run(); return; }
+    askCloseTask(this.api.task(t.id), t).subscribe({
+      next: ok => { if (ok) run(); },
       error: e => this.toast.error(errorMessage(e)),
     });
   }

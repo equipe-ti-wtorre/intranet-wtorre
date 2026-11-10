@@ -2,7 +2,6 @@ import { AfterViewInit, Component, Directive, ElementRef, EventEmitter, Input, O
 import { DomSanitizer } from '@angular/platform-browser';
 import { Person, Priority, Task } from '../core/models';
 import { dueLabel, dueTone, isClosed, priorityLabel } from '../core/format';
-import { AuthService } from '../core/auth.service';
 import { DataService } from '../core/data.service';
 import { resolveAvatarUrl } from '../core/avatar';
 
@@ -129,21 +128,31 @@ export class StatusPillComponent {
               (click)="$event.stopPropagation(); toggle.emit(task())"
               [attr.aria-label]="task().status.category === 'done' ? 'Reabrir tarefa' : 'Concluir tarefa'"></button>
       <app-prio [p]="task().priority" />
-      <span class="t-title">{{ task().title }}</span>
-      @if (stepOnly()) { <span class="step-chip" [title]="'Sua etapa: ' + stepText()">Sua etapa: {{ stepText() }}</span> }
-      <span class="meta">
-        @if (showSpace() && task().space === 'pessoal') { <span class="space-chip">Individual</span> }
-        @if (task().is_private) { <app-icon name="lock" [size]="13" class="lock" title="Tarefa privada" /> }
-        @if (task().subtasks_total) {
-          <span class="chip"><app-icon name="subtasks" [size]="13" />{{ task().subtasks_done }}/{{ task().subtasks_total }}</span>
+      <span class="t-main">
+        <span class="t-title" [title]="task().title">{{ task().title }}</span>
+        @if (hasSub()) {
+          <span class="t-sub">
+            @if (stepText()) { <span class="step-chip" [title]="'Sua etapa: ' + stepText()">Sua etapa: {{ stepText() }}</span> }
+            @if (showSpace() && task().space === 'pessoal') { <span class="space-chip">Individual</span> }
+            @if (task().is_private) { <app-icon name="lock" [size]="13" class="lock" title="Tarefa privada" /> }
+            @if (task().subtasks_total) {
+              <span class="chip"><app-icon name="subtasks" [size]="13" />{{ task().subtasks_done }}/{{ task().subtasks_total }}</span>
+            }
+            @if (task().comments_count) { <span class="chip"><app-icon name="comment" [size]="13" />{{ task().comments_count }}</span> }
+          </span>
         }
-        @if (task().comments_count) { <span class="chip"><app-icon name="comment" [size]="13" />{{ task().comments_count }}</span> }
-        @if (showProject() && task().project) {
-          <span class="proj-tag" [title]="task().project!.name + (task().section ? ' › ' + task().section!.name : '')"><i [style.background]="task().project!.color"></i><span class="ellipsis">{{ task().project!.name }}@if (task().section) { › {{ task().section!.name }} }</span></span>
+      </span>
+      <span class="meta">
+        @if (showProject()) {
+          <span class="col-proj">
+            @if (task().project) {
+              <span class="proj-tag" [title]="task().project!.name + (task().section ? ' › ' + task().section!.name : '')"><i [style.background]="task().project!.color"></i>{{ task().project!.name }}@if (task().section) { › {{ task().section!.name }} }</span>
+            }
+          </span>
         }
         @if (showStatus()) { <span class="col-status"><app-status [name]="task().status.name" [color]="task().status.color" /></span> }
         <span class="col-due due" [class]="'col-due due ' + tone()">{{ due() }}</span>
-        <span class="col-who"><app-avatar [person]="task().assignee" /></span>
+        <span class="col-who"><app-avatar [person]="task().assignee" />@if (task().assignee; as who) { <span class="who-name">{{ who.name }}</span> }</span>
       </span>
     </div>`,
 })
@@ -154,11 +163,12 @@ export class TaskRowComponent {
   showSpace = input(false);
   @Output() open = new EventEmitter<Task>();
   @Output() toggle = new EventEmitter<Task>();
-  private auth = inject(AuthService);
   closed = computed(() => isClosed(this.task().status.category));
-  // A tarefa é de outra pessoa, mas há uma etapa pendente comigo.
-  stepOnly = computed(() => this.task().assignee?.id !== this.auth.user()?.id && (this.task().my_steps?.length ?? 0) > 0);
-  stepText = computed(() => this.task().my_steps.map(s => s.title).join('; '));
+  stepText = computed(() => (this.task().my_steps || []).map(s => s.title).filter(Boolean).join('; '));
+  hasSub = computed(() => {
+    const t = this.task();
+    return !!this.stepText() || (this.showSpace() && t.space === 'pessoal') || t.is_private || !!t.subtasks_total || !!t.comments_count;
+  });
   due = computed(() => dueLabel(this.task().due_date));
   tone = computed(() => dueTone(this.task()));
 }

@@ -89,7 +89,9 @@ export class ApiService {
   // Projetos
   projects(params: Record<string, unknown> = {}) { return this.http.get<Project[]>(`${U}/projects`, { params: this.params(params) }); }
   project(id: number) { return this.http.get<Project>(`${U}/projects/${id}`); }
-  projectPeople(id: number) { return this.http.get<Person[]>(`${U}/projects/${id}/people`); }
+  projectPeople(id: number, workId?: number) {
+    return this.http.get<Person[]>(`${U}/projects/${id}/people`, { params: this.params({ work_id: workId }) });
+  }
   workDashboard(id: number) { return this.http.get<WorkDashboard>(`${U}/works/${id}/dashboard`); }
   works(projectId: number) {
     return this.http.get<{ works: Work[]; can_create: boolean; sees_all?: boolean; phases: Phase[]; team_id: number | null; phases_editable: boolean; phases_scope: 'team' | 'project' }>(`${U}/projects/${projectId}/works`);

@@ -12,6 +12,7 @@ import { WeatherService } from '../core/weather.service';
 import { DAY_SLIDES, DaySlideKey, DeckSlide, buildDayDeck } from '../presentation/day-deck';
 import { DeckViewerComponent } from '../presentation/deck-viewer.component';
 import { downloadDeckPptx } from '../presentation/deck-pptx';
+import { askCloseTask } from '../core/confirm-open';
 
 type PlanTask = Task & { period: Period };
 type Line =
@@ -76,6 +77,23 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
           </div>
         </section>
 
+        @if (hasDue()) {
+          <section class="card dl-due-today">
+            <b>Para este dia</b>
+            <div class="dl-due-today__list">
+              @for (t of dueTasks(); track t.id) {
+                <button type="button" class="dl-due-today__item" (click)="ui.openTask(t.id)"><span class="dl-kind">Tarefa</span><span>{{ t.title }}</span></button>
+              }
+              @for (s of dueSteps(); track s.id) {
+                <button type="button" class="dl-due-today__item" (click)="ui.openTask(s.task_id)"><span class="dl-kind">Etapa</span><span>{{ s.title }}</span><span class="muted">{{ s.task }}</span></button>
+              }
+              @for (w of dueWorks(); track w.id) {
+                <a class="dl-due-today__item" [routerLink]="['/ti/taskhub/projetos', w.project_id, 'trabalhos', w.id]"><span class="dl-kind">Projeto</span><span>{{ w.name }}</span></a>
+              }
+            </div>
+          </section>
+        }
+
         <div class="dl-grid">
           <!-- Linha do dia -->
           <section class="card dl-line">
@@ -90,10 +108,11 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
                 </div>
                 @for (l of lines(p.key); track l.key) {
                   @if (l.kind === 'task') {
-                    <div class="dl-row" [class.dl-row--done]="closed(l.task)" [class.dl-row--focus]="l.task.status.category === 'doing'" draggable="true" (dragstart)="drag($event, l.task.id)">
+                    <div class="dl-row" [class.dl-row--done]="closed(l.task)" [class.dl-row--focus]="l.task.status.category === 'doing'" [class.dl-row--today]="onThisDay(l.task)" draggable="true" (dragstart)="drag($event, l.task.id)">
                       <button class="tick" [class.on]="closed(l.task)" [disabled]="!canTick(l.task)" (click)="toggleTask(l.task)" [attr.aria-label]="closed(l.task) ? 'Reabrir' : 'Concluir'"></button>
                       <span class="dl-kind" [class.dl-kind--focus]="l.task.status.category === 'doing'">{{ l.task.status.category === 'doing' ? 'Em foco' : l.task.status.category === 'blocked' ? 'Bloqueada' : 'Tarefa' }}</span>
                       <button class="dl-title" (click)="ui.openTask(l.task.id)">{{ l.task.title }}</button>
+                      @if (stepNames(l.task); as step) { <span class="dl-step" [title]="step">{{ step }}</span> }
                       @if (l.task.project) { <span class="tag">{{ l.task.project.name }}</span> } @else if (l.task.space === 'pessoal') { <span class="tag">Individual</span> }
                       @if (dueText(l.task); as dt) { <span class="dl-due" [class]="'dl-due dl-due--' + dt.tone">{{ dt.text }}</span> }
                       @if (l.task.size) { <span class="sz" [class]="'sz sz--' + l.task.size" [title]="sizeLabel(l.task.size)">{{ sizeShort(l.task.size) }}</span> }
@@ -134,11 +153,18 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
                   <button [class.on]="filter() === f.key" (click)="filter.set(f.key)">{{ f.label }} @if (f.key !== 'all') { {{ countOf(f.key) }} }</button>
                 }
               </div>
+              @if (pick().length) {
+                <div class="dl-pick dl-pick--head">
+                  <span></span><span>Tarefa</span><span>Etapa</span><span>Projeto</span><span>Prazo</span><span></span>
+                </div>
+              }
               @for (t of pick().slice(0, 8); track t.id) {
                 <div class="dl-pick" draggable="true" (dragstart)="drag($event, t.id)">
-                  @if (t.size) { <span class="sz" [class]="'sz sz--' + t.size" [title]="sizeLabel(t.size)">{{ sizeShort(t.size) }}</span> }
+                  @if (t.size) { <span class="sz" [class]="'sz sz--' + t.size" [title]="sizeLabel(t.size)">{{ sizeShort(t.size) }}</span> } @else { <span></span> }
                   <button class="dl-title" (click)="ui.openTask(t.id)">{{ t.title }}</button>
-                  @if (dueText(t); as dt) { <span class="dl-due" [class]="'dl-due dl-due--' + dt.tone">{{ dt.text }}</span> }
+                  <span class="dl-pick__cell" [title]="stepNames(t)">{{ stepNames(t) }}</span>
+                  <span class="dl-pick__cell" [title]="t.section?.name || ''">{{ t.section?.name }}</span>
+                  @if (dueText(t); as dt) { <span class="dl-due" [class]="'dl-due dl-due--' + dt.tone">{{ dt.text }}</span> } @else { <span></span> }
                   <button class="dl-plus" (click)="addToPlan(t, d.current_period || 'manha')" [attr.aria-label]="'Adicionar ' + t.title + ' ao plano'" title="Adicionar ao período atual">+</button>
                 </div>
               } @empty { <div class="muted small" style="padding: 6px 0">Nada pendente aqui.</div> }
@@ -336,6 +362,12 @@ export class MyDayPage implements OnInit, OnDestroy {
   pick = computed(() => { const a = this.all(); const f = this.filter(); return f === 'all' ? a.all : a[f]; });
   countOf(k: 'overdue' | 'today' | 'week') { return this.all()[k].length; }
 
+  private inDueSpace = (space: string) => this.space() === 'todos' || space === this.space();
+  dueTasks = computed(() => (this.d()?.due_today?.tasks || []).filter(t => this.inDueSpace(t.space)));
+  dueSteps = computed(() => (this.d()?.due_today?.steps || []).filter(s => this.inDueSpace(s.space)));
+  dueWorks = computed(() => (this.d()?.due_today?.works || []).filter(w => this.inDueSpace(w.space)));
+  hasDue = computed(() => this.dueTasks().length + this.dueSteps().length + this.dueWorks().length > 0);
+
   doneTasks = computed(() => (this.d()?.plan || []).filter(t => t.status.category === 'done').length);
   leftTasks = computed(() => (this.d()?.plan || []).filter(t => !this.closed(t)));
 
@@ -361,6 +393,13 @@ export class MyDayPage implements OnInit, OnDestroy {
   sizeLabel(s: TaskSize) { return sizeInfo(s).hint; }
   sizeShort(s: TaskSize) { return sizeInfo(s).short; }
   periodLabel(p: Period) { return PERIODS.find(x => x.key === p)!.label.toLowerCase(); }
+  stepNames(t: Task) { return (t.my_steps || []).map(s => s.title).filter(Boolean).join(' · '); }
+  onThisDay(t: Task) {
+    const day = this.date();
+    const due = t.due_date ? String(t.due_date).slice(0, 10) : '';
+    if (due === day) return true;
+    return (t.my_steps || []).some(s => s.due_date && String(s.due_date).slice(0, 10) === day);
+  }
   dueText(t: Task): { text: string; tone: string } | null {
     if (!t.due_date || this.closed(t)) return null;
     const today = this.date();
@@ -402,8 +441,14 @@ export class MyDayPage implements OnInit, OnDestroy {
   }
 
   toggleTask(t: Task) {
-    this.api.updateTask(t.id, { done: !this.closed(t) }).subscribe({
+    const done = !this.closed(t);
+    const run = () => this.api.updateTask(t.id, { done }).subscribe({
       next: () => { this.load(); this.ui.taskChanged$.next(t.id); },
+      error: e => this.toast.error(errorMessage(e, 'Não foi possível atualizar a tarefa.')),
+    });
+    if (!done) { run(); return; }
+    askCloseTask(this.api.task(t.id), t).subscribe({
+      next: ok => { if (ok) run(); },
       error: e => this.toast.error(errorMessage(e, 'Não foi possível atualizar a tarefa.')),
     });
   }

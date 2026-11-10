@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../core/api.service';
 import { DataService } from '../core/data.service';
@@ -6,12 +6,12 @@ import { UiService } from '../core/ui.service';
 import { ToastService } from '../core/toast.service';
 import { AuthService } from '../core/auth.service';
 import { CreatableWork, Person, Phase, Priority } from '../core/models';
-import { PRIORITIES, SIZES, TASK_FILE_ACCEPT, TASK_FILE_MAX, TASK_FILE_MAX_MB, TaskSize, dueLabel, fileSize, taskFileError, todayIso } from '../core/format';
+import { PRIORITIES, SIZES, TASK_FILE_MAX, TASK_FILE_MAX_MB, TaskSize, dueLabel, fileSize, isExternalFileDrag, taskFileError, todayIso } from '../core/format';
 import { parseQuickTask } from '../core/quick-parse';
 import { takeBulletLine } from '../core/steps-text';
 
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
-import { PersonPickerComponent } from '../shared/person-picker.component';
+import { PersonPickerComponent, stepAssigneeGroups } from '../shared/person-picker.component';
 
 interface DraftStep { title: string; assignee_id: number | null; due_date: string | null; notify: boolean }
 
@@ -110,22 +110,25 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                       [placeholder]="linesToStepsOn ? 'Cada Enter cria uma etapa. Ou comece a linha com -.' : 'Anotações, contexto, links…'"></textarea>
           </div>
           <div class="field span2">
-            <span class="label">Etapas</span>
+            <div class="row" style="justify-content: space-between; align-items: center">
+              <span class="label">Etapas</span>
+              <label class="check-label" title="Ligado: a próxima etapa só conclui depois da anterior. Desligado: as etapas andam ao mesmo tempo.">
+                <input type="checkbox" class="switch" role="switch" [(ngModel)]="stepsOrdered" /> Seguir prioridade
+              </label>
+            </div>
             <div class="qa-steps">
-            @for (s of steps(); track $index; let i = $index; let last = $last) {
-              <div class="subtask step-row">
+            @for (s of steps(); track $index; let i = $index) {
+              <div class="subtask step-row" [class.step-dragging]="stepDragFrom() === i" [class.step-over]="stepOver() === i"
+                   (dragover)="stepHover($event, i)" (drop)="stepDrop($event, i)">
+                <button type="button" class="step-grip" draggable="true" (dragstart)="stepDrag($event, i)" (dragend)="stepDragEnd()" aria-label="Arrastar etapa" title="Arrastar para reordenar"><span></span><span></span><span></span><span></span><span></span><span></span></button>
                 <span class="step-num">{{ i + 1 }}</span>
                 <textarea class="step-title" rows="1" [ngModel]="s.title" (ngModelChange)="editStep(i, { title: $event })" (input)="sizeStep($event)" (keydown.enter)="stepEnter($event)" [attr.aria-label]="'Etapa ' + (i + 1)"></textarea>
-                <span class="step-order">
-                  <button type="button" class="btn btn-ghost btn-sm btn-icon" [disabled]="i === 0" (click)="moveStep(i, -1)" aria-label="Subir etapa" title="Subir"><app-icon name="chevron" [size]="12" class="rot-up" /></button>
-                  <button type="button" class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveStep(i, 1)" aria-label="Descer etapa" title="Descer"><app-icon name="chevron" [size]="12" class="rot-down" /></button>
-                </span>
                 @if (workId()) {
-                  <app-person-picker class="step-who" mode="single" variant="inline" [people]="people()" [value]="s.assignee_id ?? null"
+                  <app-person-picker class="step-who" mode="single" variant="inline" [groups]="stepGroups()" [value]="s.assignee_id ?? null"
                                      [specials]="[{ value: null, label: 'Sem responsável' }]" placeholder="Responsável"
                                      ariaLabel="Responsável da etapa" (picked)="editStep(i, { assignee_id: $event })" />
                   @if (s.assignee_id && s.assignee_id !== me()) {
-                    <label class="check-label step-notify" title="Avisar a pessoa quando for a vez dela"><input type="checkbox" class="switch" role="switch" [ngModel]="s.notify" (ngModelChange)="editStep(i, { notify: $event })" /> avisar</label>
+                    <label class="check-label step-notify" [title]="stepsOrdered ? 'Avisar a pessoa quando for a vez dela' : 'Avisar a pessoa sobre esta etapa'"><input type="checkbox" class="switch" role="switch" [ngModel]="s.notify" (ngModelChange)="editStep(i, { notify: $event })" /> avisar</label>
                   }
                 }
                 <input type="date" class="inline step-due" [ngModel]="s.due_date" (ngModelChange)="editStep(i, { due_date: $event || null })" aria-label="Prazo da etapa" />
@@ -137,10 +140,12 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
               <input class="inline grow" placeholder="Adicionar etapa e Enter" [(ngModel)]="newStep" (keydown.enter)="addStep($event)" aria-label="Nova etapa" />
             </div>
             </div>
+            <div class="muted small">{{ stepsOrdered ? 'As etapas andam em ordem: a próxima só conclui depois da anterior.' : 'As etapas andam ao mesmo tempo: cada uma pode ser concluída sem esperar a anterior.' }}</div>
           </div>
           <div class="field span2">
             <span class="label">Anexos</span>
-            <div class="qa-files">
+            <div class="qa-files" [class.file-over]="fileOver()"
+                 (dragenter)="fileEnter($event)" (dragover)="fileHover($event)" (dragleave)="fileLeave($event)" (drop)="fileDrop($event)">
               @for (f of pendingFiles(); track $index) {
                 <span class="qa-file-chip">
                   <app-icon name="paperclip" [size]="13" />
@@ -153,23 +158,23 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                 <label class="btn btn-ghost btn-sm qa-file-add">
                   <app-icon name="paperclip" [size]="14" />
                   Anexar arquivos
-                  <input type="file" multiple hidden [accept]="fileAccept" (change)="pickFiles($event)" />
+                  <input type="file" multiple hidden (change)="pickFiles($event)" />
                 </label>
               }
             </div>
-            <span class="hint">Imagem, PDF, Word, Excel, PowerPoint, texto ou zip. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</span>
+            <span class="hint">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada. Arraste para a área acima.</span>
           </div>
         </div>
         <div class="modal-foot">
           <label class="check-label left"><input type="checkbox" class="switch" role="switch" [(ngModel)]="planToday" /> Planejar para hoje</label>
           <button class="btn btn-ghost" (click)="close()">Cancelar</button>
-          <button class="btn btn-primary" [disabled]="!parsed().title || saving()" (click)="save()" title="Ctrl+Enter">{{ saving() ? 'Criando…' : 'Criar tarefa' }}</button>
+          <button class="btn btn-primary" [disabled]="!parsed().title || saving()" (click)="save()" title="Ctrl+Enter">{{ saving() ? 'Salvando…' : 'Salvar' }}</button>
         </div>
       </div>
     </div>
   `,
 })
-export class QuickAddComponent implements OnInit {
+export class QuickAddComponent implements OnInit, OnDestroy {
   ui = inject(UiService);
   data = inject(DataService);
   private api = inject(ApiService);
@@ -178,7 +183,7 @@ export class QuickAddComponent implements OnInit {
 
   priorities = PRIORITIES;
   sizes = SIZES;
-  fileAccept = TASK_FILE_ACCEPT;
+  fileOver = signal(false);
   fileMax = TASK_FILE_MAX;
   fileMaxMb = TASK_FILE_MAX_MB;
   fileSize = fileSize;
@@ -189,6 +194,7 @@ export class QuickAddComponent implements OnInit {
   newStep = '';
   planToday = false;
   linesToStepsOn = false;
+  stepsOrdered = true;
   me = computed(() => this.auth.user()?.id ?? null);
 
   private defaults = this.ui.quickAdd() || {};
@@ -207,6 +213,7 @@ export class QuickAddComponent implements OnInit {
   priority = signal<Priority>('media');
   saving = signal(false);
   pendingFiles = signal<File[]>([]);
+  private created = false;
 
   // Aberto de dentro de um projeto: a tarefa nasce nele e o seletor some.
   locked = computed(() => {
@@ -224,6 +231,11 @@ export class QuickAddComponent implements OnInit {
     return [...map.entries()].map(([label, works]) => ({ label, works }));
   });
   chosenContacts = computed(() => this.contactIds().map(id => this.data.people().find(p => p.id === id)!).filter(Boolean));
+  stepGroups = computed(() => {
+    const u = this.auth.user();
+    const me = u ? { id: u.id, name: u.name, username: u.username, initials: u.initials, color: u.color, department: u.department } : null;
+    return stepAssigneeGroups(this.people(), this.me(), me);
+  });
   contactCandidates = computed(() => this.data.people().filter(p => !this.contactIds().includes(p.id) && p.id !== this.me()));
 
   // O texto do título preenche campos; o que a pessoa escolher nos campos prevalece.
@@ -252,7 +264,7 @@ export class QuickAddComponent implements OnInit {
     this.steps.update(l => l.map(s => (id ? s : { ...s, assignee_id: null })));
     const w = this.current();
     if (!w) { this.people.set([]); return; }
-    this.api.projectPeople(w.project_id).subscribe(p => this.people.set(p));
+    this.api.projectPeople(w.project_id, w.id).subscribe(p => this.people.set(p));
     this.api.works(w.project_id).subscribe(r => {
       this.phases.set(r.phases || []);
       const asked = this.askedPhase; this.askedPhase = null;
@@ -297,10 +309,37 @@ export class QuickAddComponent implements OnInit {
     this.steps.update(l => l.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   }
   removeStep(i: number) { this.steps.update(l => l.filter((_, j) => j !== i)); }
-  moveStep(i: number, dir: -1 | 1) {
+  stepDragFrom = signal<number | null>(null);
+  stepOver = signal<number | null>(null);
+
+  stepDrag(ev: DragEvent, i: number) {
+    ev.stopPropagation();
+    ev.dataTransfer?.setData('application/x-taskhub-step', String(i));
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+    this.stepDragFrom.set(i);
+  }
+  stepDragEnd() { this.stepDragFrom.set(null); this.stepOver.set(null); }
+  stepHover(ev: DragEvent, i: number) {
+    const types = ev.dataTransfer?.types;
+    if (!types || !Array.from(types).includes('application/x-taskhub-step')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.stepOver.set(i);
+  }
+  stepDrop(ev: DragEvent, to: number) {
+    const types = ev.dataTransfer?.types;
+    if (!types || !Array.from(types).includes('application/x-taskhub-step')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const from = Number(ev.dataTransfer?.getData('application/x-taskhub-step'));
+    this.stepDragEnd();
+    if (!Number.isInteger(from) || from === to) return;
     this.steps.update(l => {
-      const j = i + dir; if (j < 0 || j >= l.length) return l;
-      const copy = [...l]; [copy[i], copy[j]] = [copy[j], copy[i]]; return copy;
+      const next = [...l];
+      const [item] = next.splice(from, 1);
+      if (!item) return l;
+      next.splice(to, 0, item);
+      return next;
     });
   }
 
@@ -317,12 +356,47 @@ export class QuickAddComponent implements OnInit {
     (e.target as HTMLTextAreaElement).blur();
   }
 
-  close() { this.ui.quickAdd.set(null); }
+  ngOnDestroy() {
+    if (!this.created) this.ui.clearTaskDraft();
+  }
+
+  close() {
+    this.ui.quickAdd.set(null);
+  }
 
   pickFiles(ev: Event) {
     const input = ev.target as HTMLInputElement;
     const picked = [...(input.files || [])];
     input.value = '';
+    this.takeFiles(picked);
+  }
+
+  fileEnter(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.fileOver.set(true);
+  }
+  fileHover(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  fileLeave(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    const next = ev.relatedTarget as Node | null;
+    if (next && (ev.currentTarget as Node).contains(next)) return;
+    this.fileOver.set(false);
+  }
+  fileDrop(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.fileOver.set(false);
+    this.takeFiles([...(ev.dataTransfer?.files || [])]);
+  }
+
+  private takeFiles(picked: File[]) {
     if (!picked.length) return;
     const next = [...this.pendingFiles()];
     for (const f of picked) {
@@ -335,6 +409,8 @@ export class QuickAddComponent implements OnInit {
   removePending(i: number) { this.pendingFiles.update(l => l.filter((_, j) => j !== i)); }
 
   private finishCreate(id: number, extra: string) {
+    this.created = true;
+    this.ui.clearTaskDraft();
     this.saving.set(false);
     this.toast.show(`Tarefa criada${extra}.`);
     this.ui.taskChanged$.next(id);
@@ -369,6 +445,7 @@ export class QuickAddComponent implements OnInit {
       contacts,
       aligned_on: this.alignedOn(),
       subtasks: steps,
+      steps_ordered: this.stepsOrdered,
       plan_today: this.planToday,
       plan_period: this.defaults.plan_period,
       space: w ? w.space : 'pessoal',
@@ -382,6 +459,8 @@ export class QuickAddComponent implements OnInit {
         this.api.uploadTaskFiles(t.id, files).subscribe({
           next: () => this.finishCreate(t.id, extra),
           error: err => {
+            this.created = true;
+            this.ui.clearTaskDraft();
             this.saving.set(false);
             this.toast.error(errorMessage(err, 'A tarefa foi criada, mas os anexos não foram enviados.'));
             this.ui.taskChanged$.next(t.id);

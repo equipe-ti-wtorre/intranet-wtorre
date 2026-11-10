@@ -130,6 +130,39 @@ router.get('/', ah(async (req, res) => {
   const openPlan = plan.filter(t => !['done', 'canceled'].includes(t.status.category));
   const planMin = openPlan.reduce((s, t) => s + loadMin(t), 0);
 
+  const { rows: dueTasks } = await query(
+    `SELECT t.id, t.title, COALESCE(p.space, t.space) AS space
+       FROM tasks t
+       LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
+       LEFT JOIN projects p ON p.id = t.project_id
+      WHERE t.assignee_id = $1 AND t.deadline = $2 AND ${OPEN}
+        AND th_task_access($1, t.id) IS NOT NULL
+        AND (p.id IS NULL OR p.archived = false)
+      ORDER BY t.title`,
+    [me, date]
+  );
+  const { rows: dueSteps } = await query(
+    `SELECT s.id, s.title, t.id AS task_id, t.title AS task, COALESCE(p.space, t.space) AS space
+       FROM subtasks s
+       JOIN tasks t ON t.id = s.task_id
+       LEFT JOIN workflow_statuses ws ON ws.id = t.status_id
+       LEFT JOIN projects p ON p.id = t.project_id
+      WHERE s.assignee_id = $1 AND NOT s.done AND s.due_date = $2 AND ${OPEN}
+        AND th_task_access($1, t.id) IS NOT NULL
+        AND (p.id IS NULL OR p.archived = false)
+      ORDER BY s.position, s.id`,
+    [me, date]
+  );
+  const { rows: dueWorks } = await query(
+    `SELECT s.id, s.project_id, s.name, p.space
+       FROM project_sections s
+       JOIN work_owners wo ON wo.work_id = s.id AND wo.user_id = $1
+       JOIN projects p ON p.id = s.project_id
+      WHERE s.completed_at IS NULL AND s.due_date = $2 AND p.archived = false
+      ORDER BY s.name`,
+    [me, date]
+  );
+
   res.json({
     date,
     current_period: date === today ? currentPeriod() : null,
@@ -144,6 +177,11 @@ router.get('/', ah(async (req, res) => {
     waiting: { for_me: forMe, by_me: byMe },
     tomorrow: { date: tomorrow, planned: tm.planned, due: tm.due },
     closure: closure || null,
+    due_today: {
+      tasks: dueTasks.map(t => ({ id: t.id, title: t.title, space: t.space || 'profissional' })),
+      steps: dueSteps.map(s => ({ id: s.id, title: s.title, task_id: s.task_id, task: s.task, space: s.space || 'profissional' })),
+      works: dueWorks.map(w => ({ id: w.id, project_id: w.project_id, name: w.name, space: w.space || 'profissional' })),
+    },
     // Campos antigos mantidos para quem ainda usa a régua em minutos.
     planned_min: plan.reduce((s, t) => s + loadMin(t), 0),
     remaining_min: planMin,
@@ -184,8 +222,8 @@ router.delete('/items/:taskId', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// "Distribuir pelo dia": leva atrasadas, as de hoje e o que sobrou para o plano, encaixando
-// as grandes de manhã, as médias à tarde e as pequenas onde couber, sem passar da capacidade.
+// "Distribuir pelo dia": leva atrasadas, as de hoje, a etapa da pessoa e o que sobrou para o plano.
+// O que vence na data entra mesmo com o período cheio. O resto cabe sem passar da capacidade.
 router.post('/distribute', ah(async (req, res) => {
   const me = req.user.id;
   const date = dateParam(req.body?.date);
@@ -195,7 +233,9 @@ router.post('/distribute', ah(async (req, res) => {
       LEFT JOIN day_plan_items dp ON dp.task_id = t.id AND dp.user_id = $1 AND dp.plan_date = $2
       WHERE ${MINE_SQL('$1')} AND ${OPEN} AND th_task_access($1, t.id) IS NOT NULL AND dp.id IS NULL
         AND (p.id IS NULL OR p.archived = false)
-        AND (t.deadline <= $2 OR t.id IN (SELECT task_id FROM day_plan_items WHERE user_id = $1 AND plan_date < $2 AND plan_date >= $3))
+        AND (t.deadline <= $2
+          OR t.id IN (SELECT task_id FROM day_plan_items WHERE user_id = $1 AND plan_date < $2 AND plan_date >= $3)
+          OR EXISTS (SELECT 1 FROM subtasks ms WHERE ms.task_id = t.id AND ms.assignee_id = $1 AND NOT ms.done AND ms.due_date <= $2))
       ORDER BY t.deadline NULLS LAST, CASE t.priority WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END`,
     [me, date, addDays(date, -7)]
   );
@@ -213,8 +253,11 @@ router.post('/distribute', ah(async (req, res) => {
       const t = formatTask(r);
       const m = loadMin(t);
       const order = pref[t.size || (m >= 180 ? 'G' : m >= 90 ? 'M' : 'P')];
+      const dueThatDay = t.due_date === date || (t.my_steps || []).some(s => String(s.due_date || '').slice(0, 10) === date);
       // Cabe se não passar da fatia do período; um período vazio sempre aceita uma tarefa.
-      const p = order.find(x => used[x] + m <= cap(x) || used[x] === 0);
+      // O que vence na data entra no período preferido mesmo se ele já estiver cheio.
+      let p = order.find(x => used[x] + m <= cap(x) || used[x] === 0);
+      if (!p && dueThatDay) p = order[0];
       if (!p) continue;
       used[p] += m;
       const { rows: [planPos] } = await c.query(

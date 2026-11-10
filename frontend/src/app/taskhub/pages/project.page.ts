@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnDestroy, OnInit, computed, inject, input, signal } from "@angular/core";
+import { Component, ElementRef, HostListener, OnChanges, OnDestroy, OnInit, ViewChild, computed, inject, input, signal } from "@angular/core";
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -18,6 +18,7 @@ import { PersonPickerComponent } from '../shared/person-picker.component';
 import { PhaseRescheduleComponent } from '../shared/phase-reschedule.component';
 import { ScheduleImpactComponent, noneAccepted } from '../shared/schedule-impact.component';
 import { termsFor } from '../core/format';
+import { askCloseTask, confirmOpen, openWorkLines } from '../core/confirm-open';
 import { DateLogComponent } from '../shared/date-log.component';
 
 type Tab = 'kanban' | 'lista' | 'dashboard' | 'config';
@@ -81,7 +82,14 @@ function savedView(): Tab {
               }
             </div>
           </div>
-          @if (w.description) { <p class="muted" style="max-width:760px;margin-bottom:14px;white-space:pre-wrap">{{ w.description }}</p> }
+          @if (w.description) {
+            <div class="work-desc muted" [class.open]="descOpen()">
+              <p #descText class="work-desc__text">{{ descOpen() ? w.description : firstLine(w.description) }}</p>
+              @if (descOpen() || descMultiline() || descCut()) {
+                <button type="button" class="work-desc__more" (click)="toggleDesc()" [attr.aria-expanded]="descOpen()">{{ descOpen() ? 'Ler menos' : 'Ler mais' }}</button>
+              }
+            </div>
+          }
         } @else {
           <div class="crumb"><a [routerLink]="backLink()">‹ {{ p.name }}</a> · {{ t().many }}</div>
           <div class="page-head" style="margin-bottom:12px">
@@ -471,6 +479,23 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     return ['/ti/taskhub/projetos', p?.id];
   });
   work = signal<WorkDetail | null>(null);
+  descOpen = signal(false);
+  descCut = signal(false);
+  descMultiline = computed(() => /\S[\s\S]*\n[\s\S]*\S/.test(this.work()?.description || ''));
+  private descEl?: HTMLElement;
+  @ViewChild('descText') set descTextRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.descEl = ref?.nativeElement;
+    setTimeout(() => this.measureDesc());
+  }
+  @HostListener('window:resize') measureDesc() {
+    const el = this.descEl;
+    this.descCut.set(!!el && !this.descOpen() && el.scrollWidth > el.clientWidth + 1);
+  }
+  firstLine(text: string) { return text.trim().split(/\r?\n/)[0].trim(); }
+  toggleDesc() {
+    this.descOpen.set(!this.descOpen());
+    setTimeout(() => this.measureDesc());
+  }
   wform: { name: string; description: string; start_date: string | null; due_date: string | null } = { name: '', description: '', start_date: null, due_date: null };
   wOwnerIds = signal<number[]>([]);
   wImpact = signal<SchedulePreview | null>(null);
@@ -557,6 +582,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   shortDate(iso: string) { const [, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}`; }
   fmtYear(iso: string) { const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y}`; }
   ui = inject(UiService);
+
   private api = inject(ApiService);
   private toast = inject(ToastService);
   private data = inject(DataService);
@@ -593,7 +619,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   private loadedId = '';
 
   canManage = computed(() => this.project()?.my_role === 'manage');
-  canCreate = computed(() => this.work()?.my_role === 'manage');
+  canCreate = computed(() => this.work()?.my_role === 'manage' && !this.work()?.completed_at);
   workHealth = computed<'no_prazo' | 'em_risco' | 'atrasado'>(() => {
     const w = this.work(); if (!w) return 'no_prazo';
     if (w.due_date && w.due_date < todayIso() && !w.completed_at) return 'atrasado';
@@ -604,7 +630,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     const team = this.project()?.is_board ? new Set(this.people().filter(p => p.in_team).map(p => p.id)) : new Set<number>();
     return this.data.people().filter(p => !ids.has(p.id) && !team.has(p.id));
   });
-  workOwners = computed(() => this.project()?.is_board ? this.people().filter(p => p.in_team) : this.people());
+  workOwners = computed(() => this.project()?.is_board ? this.people().filter(p => p.can_own ?? p.in_team) : this.people());
   chosenWorkOwners = computed(() => {
     const known = [...this.people(), ...(this.work()?.owners || [])];
     return this.wOwnerIds().map(id => known.find(p => p.id === id)!).filter(Boolean);
@@ -673,6 +699,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     this.loadedId = key;
     this.tab.set(this.mode() === 'config' ? 'config' : savedView());
     this.deleting.set(null);
+    this.descOpen.set(false);
     if (this.personal() && this.workId()) {
       this.project.set(null); this.error.set('');
       this.api.personalBoard().subscribe({
@@ -736,6 +763,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
 
   private setWork(w: WorkDetail) {
     this.work.set(w);
+    setTimeout(() => this.measureDesc());
     this.wform = { name: w.name, description: w.description, start_date: w.start_date ?? null, due_date: w.due_date };
     this.wSavedDates = { start: w.start_date ?? null, due: w.due_date ?? null };
     this.wDateReason = '';
@@ -781,11 +809,16 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     const w = this.work(); if (!w) return;
     this.phaseMenu.set(false);
     const closing = !w.completed_at;
-    this.api.updateWork(w.id, { done: closing }).subscribe({
+    const run = () => this.api.updateWork(w.id, { done: closing }).subscribe({
       next: () => {
         this.reloadWork();
         this.toast.show(closing ? `${this.t().One} concluído. Permanece nesta fase.` : `${this.t().One} reaberto.`);
       },
+      error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${this.t().one}.`)),
+    });
+    if (!closing) { run(); return; }
+    this.api.tasks({ project_id: w.project.id, section_id: w.id, status: 'open', with_steps: 1 }).subscribe({
+      next: list => { if (confirmOpen(`o ${this.t().one}`, openWorkLines(list))) run(); },
       error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${this.t().one}.`)),
     });
   }
@@ -838,8 +871,14 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   tone(t: Task) { return dueTone(t); }
 
   toggle(t: Task) {
-    this.api.updateTask(t.id, { done: t.status.category !== 'done' }).subscribe({
+    const done = t.status.category !== 'done';
+    const run = () => this.api.updateTask(t.id, { done }).subscribe({
       next: u => { this.tasks.update(l => l.map(x => (x.id === t.id ? u : x))); this.data.reloadProjects(); },
+      error: e => this.toast.error(errorMessage(e)),
+    });
+    if (!done) { run(); return; }
+    askCloseTask(this.api.task(t.id), t).subscribe({
+      next: ok => { if (ok) run(); },
       error: e => this.toast.error(errorMessage(e)),
     });
   }

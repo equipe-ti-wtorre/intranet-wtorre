@@ -10,8 +10,8 @@ import { TeamBarComponent } from '../shared/team-bar.component';
 import { DataService } from '../core/data.service';
 import { ToastService } from '../core/toast.service';
 import { UiService } from '../core/ui.service';
-import { Person, Phase, PhaseScope, Project, SchedulePreview, TaskFile, Team, Work, WorkPhaseLog } from '../core/models';
-import { TASK_FILE_ACCEPT, TASK_FILE_MAX, TASK_FILE_MAX_MB, dueLabel, fileSize, taskFileError, termsFor, todayIso } from '../core/format';
+import { Person, Phase, PhaseScope, Project, SchedulePreview, Task, TaskFile, Team, Work, WorkPhaseLog } from '../core/models';
+import { TASK_FILE_MAX, TASK_FILE_MAX_MB, dueLabel, fileSize, isExternalFileDrag, taskFileError, termsFor, todayIso } from '../core/format';
 import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
 import { ProjectTimelineComponent } from './project-timeline.component';
 import { businessSpan, DEFAULT_DURATION, endAfter, parseIso, sumPhaseDays } from '../core/timeline';
@@ -20,6 +20,7 @@ import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
 import { PhaseRescheduleComponent } from '../shared/phase-reschedule.component';
 import { ScheduleImpactComponent, noneAccepted } from '../shared/schedule-impact.component';
 import { PersonPickerComponent } from '../shared/person-picker.component';
+import { confirmOpen, openWorkLines } from '../core/confirm-open';
 
 const COLORS = ['#4c8dff', '#2fbf71', '#e11d48', '#f97316', '#a78bfa', '#14b8a6', '#c9a84c', '#ec4899'];
 type Filter = 'todos' | 'responsavel' | 'participo' | 'atraso';
@@ -362,7 +363,8 @@ type KanbanSort = 'manual' | Sort;
               <textarea id="wk-d" class="textarea" style="min-height: 80px" [(ngModel)]="form.description" placeholder="O que será entregue e o que fica de fora"></textarea></div>
             <div class="field">
               <span class="label">Anexos</span>
-              <div class="qa-files">
+              <div class="qa-files" [class.file-over]="fileOver()"
+                   (dragenter)="fileEnter($event)" (dragover)="fileHover($event)" (dragleave)="fileLeave($event)" (drop)="fileDrop($event)">
                 @if (form.id) {
                   @if (formFilesLoading()) { <div class="muted small">Carregando anexos…</div> }
                   @for (f of formFiles(); track f.id) {
@@ -387,11 +389,11 @@ type KanbanSort = 'manual' | Sort;
                   <label class="btn btn-ghost btn-sm qa-file-add">
                     <app-icon name="paperclip" [size]="14" />
                     {{ uploadingFiles() ? 'Enviando…' : 'Anexar arquivos' }}
-                    <input type="file" multiple hidden [accept]="fileAccept" [disabled]="uploadingFiles()" (change)="pickFiles($event)" />
+                    <input type="file" multiple hidden [disabled]="uploadingFiles()" (change)="pickFiles($event)" />
                   </label>
                 }
               </div>
-              <span class="hint">Imagem, PDF, Word, Excel, PowerPoint, texto ou zip. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</span>
+              <span class="hint">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada. Arraste para a área acima.</span>
             </div>
             <div class="field">
               <label>Responsáveis</label>
@@ -463,7 +465,7 @@ type KanbanSort = 'manual' | Sort;
               <button class="btn btn-sm" [disabled]="saving()" (click)="applySuggested()">Usar data sugerida</button>
               <button class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" (click)="save(true)">{{ noneAccepted(impact()) ? 'Salvar (ficam juntos)' : 'Salvar e reajustar' }}</button>
             } @else {
-              <button class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" (click)="save()">{{ form.id ? 'Salvar' : 'Criar ' + t().one }}</button>
+              <button class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" (click)="save()">Salvar</button>
             }
           </div>
         </div>
@@ -556,6 +558,52 @@ type KanbanSort = 'manual' | Sort;
                 <div class="wk-detail__title">Ligações</div>
                 @if (w.continues?.length) { <div class="small">Continua de: <b>{{ namesOf(w.continues) }}</b></div> }
                 @if (w.continued_by?.length) { <div class="small">Continuado por: <b>{{ namesOf(w.continued_by) }}</b></div> }
+              </div>
+            }
+
+            @if (w.my_role !== 'follow') {
+              <div>
+                <div class="wk-detail__title">Tarefas @if (!detailTasksLoading() && detailTasks().length) { <span class="muted">· {{ detailTasks().length }}</span> }</div>
+                @if (detailTasksLoading()) {
+                  <div class="muted small">Carregando…</div>
+                } @else if (!detailTasks().length) {
+                  <div class="muted small">Nenhuma tarefa.</div>
+                } @else {
+                  <div class="wk-detail__tasks">
+                    @for (task of detailTasks(); track task.id) {
+                      <div class="wk-detail__task">
+                        <div class="wk-detail__task-h">
+                          <b>{{ task.title }}</b>
+                          @if (task.status.category === 'done') {
+                            <span class="wk-badge wk-badge--ok">{{ task.status.name }}</span>
+                          } @else {
+                            <span class="wk-badge" [style.--wk-badge]="task.status.color">{{ task.status.name }}</span>
+                          }
+                        </div>
+                        @if (task.assignee) { <div class="muted small">{{ task.assignee.name }}</div> }
+                        @if (task.steps?.length) {
+                          <button type="button" class="wk-detail__steps-toggle" (click)="toggleSteps(task.id)" [attr.aria-expanded]="stepsOpen(task.id)">
+                            Etapas
+                            <app-icon name="chevron" [size]="12" [class.rot-down]="stepsOpen(task.id)" />
+                          </button>
+                          @if (stepsOpen(task.id)) {
+                            <ol class="wk-detail__steps">
+                              @for (s of task.steps; track s.id; let i = $index) {
+                                <li>
+                                  <b>{{ s.title }}</b>
+                                  <span [class]="'step-badge step-badge--' + stepKind(task.steps, i)">{{ stepTag(task.steps, i) }}</span>
+                                  @if (s.assignee_name) { <em>{{ s.assignee_name }}</em> }
+                                </li>
+                              }
+                            </ol>
+                          }
+                        } @else {
+                          <div class="muted small">Sem etapas.</div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
               </div>
             }
 
@@ -667,13 +715,16 @@ export class ProjectWorksPage implements OnChanges {
   detail = signal<Work | null>(null);
   detailLog = signal<WorkPhaseLog[]>([]);
   detailLoading = signal(false);
+  detailTasks = signal<Task[]>([]);
+  detailTasksLoading = signal(false);
+  private stepsOpenIds = signal<Record<number, boolean>>({});
   detailFiles = signal<TaskFile[]>([]);
   detailFilesLoading = signal(false);
   formFiles = signal<TaskFile[]>([]);
   formFilesLoading = signal(false);
   pendingFiles = signal<File[]>([]);
   uploadingFiles = signal(false);
-  fileAccept = TASK_FILE_ACCEPT;
+  fileOver = signal(false);
   fileMax = TASK_FILE_MAX;
   fileMaxMb = TASK_FILE_MAX_MB;
   fileSize = fileSize;
@@ -681,7 +732,16 @@ export class ProjectWorksPage implements OnChanges {
     this.detail.set(w);
     this.detailLog.set([]);
     this.detailFiles.set([]);
+    this.detailTasks.set([]);
+    this.stepsOpenIds.set({});
     this.detailFilesLoading.set(true);
+    if (w.my_role !== 'follow') {
+      this.detailTasksLoading.set(true);
+      this.api.tasks({ project_id: w.project_id, section_id: w.id, status: 'all', with_steps: 1 }).subscribe({
+        next: list => { if (this.detail()?.id === w.id) { this.detailTasks.set(list); this.detailTasksLoading.set(false); } },
+        error: () => { if (this.detail()?.id === w.id) this.detailTasksLoading.set(false); },
+      });
+    }
     this.api.workFiles(w.id).subscribe({
       next: list => { if (this.detail()?.id === w.id) { this.detailFiles.set(list); this.detailFilesLoading.set(false); } },
       error: () => { if (this.detail()?.id === w.id) this.detailFilesLoading.set(false); },
@@ -693,6 +753,17 @@ export class ProjectWorksPage implements OnChanges {
     });
   }
   closeDetail() { this.detail.set(null); }
+  stepsOpen(id: number) { return !!this.stepsOpenIds()[id]; }
+  toggleSteps(id: number) { this.stepsOpenIds.update(m => ({ ...m, [id]: !m[id] })); }
+  stepKind(steps: Task['steps'], index: number) {
+    const list = steps || [];
+    if (list[index]?.done) return 'done';
+    return index === list.findIndex(s => !s.done) ? 'turn' : 'wait';
+  }
+  stepTag(steps: Task['steps'], index: number) {
+    const kind = this.stepKind(steps, index);
+    return kind === 'done' ? 'Concluída' : kind === 'turn' ? 'Na vez' : 'Aguardando';
+  }
   editFromDetail(w: Work) { this.detail.set(null); this.openEdit(w); }
 
   private loadFormFiles(workId: number) {
@@ -706,6 +777,35 @@ export class ProjectWorksPage implements OnChanges {
     const input = ev.target as HTMLInputElement;
     const picked = [...(input.files || [])];
     input.value = '';
+    this.takeFiles(picked);
+  }
+
+  fileEnter(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.fileOver.set(true);
+  }
+  fileHover(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  fileLeave(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    const next = ev.relatedTarget as Node | null;
+    if (next && (ev.currentTarget as Node).contains(next)) return;
+    this.fileOver.set(false);
+  }
+  fileDrop(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.fileOver.set(false);
+    this.takeFiles([...(ev.dataTransfer?.files || [])]);
+  }
+
+  private takeFiles(picked: File[]) {
     const f = this.form;
     if (!picked.length || !f || this.uploadingFiles()) return;
     let count = f.id ? this.formFiles().length : this.pendingFiles().length;
@@ -894,7 +994,7 @@ export class ProjectWorksPage implements OnChanges {
   chosen = computed(() => this.memberIds().map(id => this.allPeople().find(p => p.id === id)!).filter(Boolean));
   // No quadro da equipe, quem é da equipe já participa; a lista é só de gente de fora.
   candidates = computed(() => this.allPeople().filter(p => !this.memberIds().includes(p.id) && !this.ownerIds().includes(p.id) && !(this.isBoard() && p.in_team)));
-  owners = computed(() => this.isBoard() ? this.people().filter(p => p.in_team) : this.people());
+  owners = computed(() => this.isBoard() ? this.people().filter(p => p.can_own ?? p.in_team) : this.people());
   chosenOwners = computed(() => this.ownerIds().map(id => this.allPeople().find(p => p.id === id)!).filter(Boolean));
   ownerCandidates = computed(() => this.owners().filter(p => !this.ownerIds().includes(p.id)));
   ownerNames(w: Work) { return (w.owners || []).map(o => o.name).join(', '); }
@@ -1065,77 +1165,34 @@ export class ProjectWorksPage implements OnChanges {
   due(iso: string) { return iso === todayIso() ? 'hoje' : dueLabel(iso).toLowerCase(); }
 
   openNew(phaseId: number | null = null) {
-    const draft = this.readDraft();
     const me = this.me();
+    this.clearDraft();
     this.blankColor = COLORS[this.works().length % COLORS.length];
-    this.memberIds.set(draft?.member_ids || []);
-    this.ownerIds.set(draft?.owner_ids?.length ? draft.owner_ids : (me ? [me] : []));
-    this.continuesIds.set(draft?.continues_ids || []);
+    this.memberIds.set([]);
+    this.ownerIds.set(me ? [me] : []);
+    this.continuesIds.set([]);
     this.form = {
-      name: draft?.name || '', description: draft?.description || '',
-      start_date: draft?.start_date || null, due_date: draft?.due_date || null,
-      color: draft?.color || this.blankColor, phase_id: phaseId, department: draft?.department || '',
+      name: '', description: '', start_date: null, due_date: null,
+      color: this.blankColor, phase_id: phaseId ?? this.phases()[0]?.id ?? null, department: '',
     };
-    this.deptAuto = !this.form.department || this.form.department === this.firstMemberDept();
+    this.deptAuto = true;
     this.pendingFiles.set([]);
     this.loadDepartments();
     this.impact.set(null); this.skipIds.set([]);
-    this.autoDue = !this.form.due_date;
+    this.autoDue = true;
     this.checkImpact();
   }
-  cancelForm() {
+  cancelForm() { this.dismissForm(); }
+  dismissForm() {
     if (this.form && !this.form.id) this.clearDraft();
     this.form = null;
     this.impact.set(null); this.skipIds.set([]);
     this.impactReq++;
     if (this.impactTimer) { clearTimeout(this.impactTimer); this.impactTimer = null; }
   }
-  dismissForm() {
-    const f = this.form;
-    if (!f) return;
-    if (!f.id) {
-      if (this.formIsBlank()) this.clearDraft();
-      else { this.writeDraft(); this.toast.show('Rascunho salvo.'); }
-    }
-    this.form = null;
-    this.impact.set(null); this.skipIds.set([]);
-    this.impactReq++;
-    if (this.impactTimer) { clearTimeout(this.impactTimer); this.impactTimer = null; }
-  }
   private draftKey() { return `taskhub_work_draft_${this.pid()}`; }
-  private readDraft(): { name: string; description: string; start_date: string | null; due_date: string | null; color: string; department: string; owner_ids: number[]; member_ids: number[]; continues_ids: number[] } | null {
-    try {
-      const raw = localStorage.getItem(this.draftKey());
-      if (!raw) return null;
-      const d = JSON.parse(raw);
-      if (!d || typeof d.name !== 'string' || typeof d.color !== 'string') return null;
-      const ids = (v: unknown) => Array.isArray(v) ? v.filter(n => typeof n === 'number') : [];
-      return {
-        name: d.name, description: typeof d.description === 'string' ? d.description : '',
-        start_date: typeof d.start_date === 'string' ? d.start_date : null,
-        due_date: typeof d.due_date === 'string' ? d.due_date : null,
-        department: typeof d.department === 'string' ? d.department : '',
-        color: d.color, owner_ids: ids(d.owner_ids), member_ids: ids(d.member_ids), continues_ids: ids(d.continues_ids),
-      };
-    } catch { return null; }
-  }
-  private writeDraft() {
-    const f = this.form; if (!f) return;
-    try {
-      localStorage.setItem(this.draftKey(), JSON.stringify({
-        name: f.name, description: f.description || '', start_date: f.start_date, due_date: f.due_date, color: f.color, department: f.department || '',
-        owner_ids: this.ownerIds(), member_ids: this.memberIds(), continues_ids: this.continuesIds(),
-      }));
-    } catch { /* armazenamento cheio: o formulário fecha mesmo assim */ }
-  }
-  private clearDraft() { try { localStorage.removeItem(this.draftKey()); } catch { /* ignore */ } }
-  private formIsBlank() {
-    const f = this.form; if (!f) return true;
-    const me = this.me();
-    const owners = this.ownerIds();
-    const onlyMe = owners.length === (me ? 1 : 0) && (!me || owners[0] === me);
-    return !f.name.trim() && !(f.description || '').trim() && !f.start_date && !f.due_date && !f.department.trim()
-      && !this.memberIds().length && !this.continuesIds().length && onlyMe && f.color === this.blankColor;
+  private clearDraft() {
+    try { localStorage.removeItem(this.draftKey()); } catch { /* ignore */ }
   }
   openEdit(w: Work) {
     this.memberIds.set(w.members.map(m => m.id));
@@ -1209,8 +1266,14 @@ export class ProjectWorksPage implements OnChanges {
 
   toggleDone(w: Work) {
     const T = this.t();
-    this.api.updateWork(w.id, { done: !w.completed_at }).subscribe({
-      next: () => { this.load(); this.toast.show(w.completed_at ? `${T.One} reaberto.` : `${T.One} concluído.`); },
+    const closing = !w.completed_at;
+    const run = () => this.api.updateWork(w.id, { done: closing }).subscribe({
+      next: () => { this.load(); this.toast.show(closing ? `${T.One} concluído.` : `${T.One} reaberto.`); },
+      error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${T.one}.`)),
+    });
+    if (!closing) { run(); return; }
+    this.api.tasks({ project_id: w.project_id, section_id: w.id, status: 'open', with_steps: 1 }).subscribe({
+      next: list => { if (confirmOpen(`o ${T.one}`, openWorkLines(list))) run(); },
       error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${T.one}.`)),
     });
   }

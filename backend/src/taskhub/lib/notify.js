@@ -3,6 +3,8 @@ const { query } = require('../db');
 // Cria uma notificação na Caixa de entrada. Nunca notifica a própria pessoa.
 async function notify(run, { userId, actorId, type, taskId = null, projectId = null, title, body = '' }) {
   if (!userId) return;
+  // A própria ação já aparece em Meu Dia e Minhas tarefas. Prazo e lembrete vêm sem autor.
+  if (actorId && Number(userId) === Number(actorId)) return;
   const exec = run || { query };
   await exec.query(
     `INSERT INTO notifications (user_id, actor_id, type, task_id, project_id, title, body)

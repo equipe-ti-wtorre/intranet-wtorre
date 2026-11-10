@@ -52,8 +52,14 @@ router.get('/', ah(async (req, res) => {
   else if (req.query.due === 'none') where.push('t.deadline IS NULL');
 
   const limit = Math.min(Number(req.query.limit) || 500, 1000);
+  const stepsSql = req.query.with_steps === '1'
+    ? `(SELECT COALESCE(json_agg(json_build_object('id', st.id, 'title', st.title, 'done', st.done, 'assignee_name', su.name) ORDER BY st.position, st.id), '[]')
+            FROM subtasks st LEFT JOIN users su ON su.id = st.assignee_id
+           WHERE st.task_id = t.id) AS steps`
+    : '';
+  const select = stepsSql ? TASK_SELECT.replace('FROM tasks t', `,\n         ${stepsSql}\n    FROM tasks t`) : TASK_SELECT;
   const { rows } = await query(
-    `${TASK_SELECT} WHERE ${where.join(' AND ')}
+    `${select} WHERE ${where.join(' AND ')}
      ORDER BY ws.position NULLS LAST, t.position, t.deadline NULLS LAST, t.id
      LIMIT ${limit}`,
     params
@@ -126,6 +132,7 @@ router.get('/:id', ah(async (req, res) => {
     ...task,
     subtasks: subtasks.map(s => ({ ...s, notify: !!s.notify, is_current: s.id === current?.id })),
     current_step_id: current?.id ?? null,
+    steps_ordered: await stepsOrdered({ query }, id),
     contacts, aligned_on,
     statuses, sections, phases,
   });
@@ -163,6 +170,8 @@ const createSchema = z.object({
   plan_today: z.boolean().default(false),
   plan_period: z.enum(['manha', 'tarde', 'fim']).optional(),
   space: z.enum(['profissional', 'pessoal']).default('profissional'),
+  // true: a etapa seguinte só conclui depois da anterior. false: andam ao mesmo tempo.
+  steps_ordered: z.boolean().default(true),
 });
 
 async function firstStatus(run, projectId, category = 'todo') {
@@ -203,8 +212,9 @@ router.post('/', ah(async (req, res) => {
     if (!role) throw new HttpError(404, 'Projeto não encontrado');
     // Toda tarefa de projeto fica dentro de um trabalho.
     if (!d.section_id) throw new HttpError(422, 'Escolha o projeto da tarefa.', [{ campo: 'section_id', mensagem: 'obrigatório' }]);
-    const { rows: [wk] } = await query('SELECT project_id, th_work_role($1, id) AS role FROM project_sections WHERE id = $2', [me, d.section_id]);
+    const { rows: [wk] } = await query('SELECT project_id, completed_at, th_work_role($1, id) AS role FROM project_sections WHERE id = $2', [me, d.section_id]);
     if (!wk || wk.project_id !== projectId) throw new HttpError(422, 'Esse projeto é de outra equipe.');
+    if (wk.completed_at) throw new HttpError(409, 'O projeto está concluído. Reabra para alterar as tarefas.');
     // Cria quem coordena o projeto ou quem é responsável pelo trabalho.
     if (wk.role !== 'manage') throw new HttpError(403, 'Você só acompanha este projeto. Quem cria tarefas é a gestão da equipe, quem criou o projeto ou o responsável.');
     space = (await query('SELECT space FROM projects WHERE id = $1', [projectId])).rows[0].space;
@@ -247,15 +257,16 @@ router.post('/', ah(async (req, res) => {
         d.due_date || null, d.start_date || null, d.estimate_min ?? (d.size ? SIZE_MIN[d.size] : null), d.is_private, d.tags, pos.p,
         category === 'done' ? new Date() : null, space, d.size || null]
     );
-    let first = null;
+    const createdSteps = [];
     for (const [i, s] of steps.entries()) {
       const { rows: [row] } = await c.query(
         `INSERT INTO subtasks (task_id, title, position, assignee_id, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING ${SUB_FIELDS}`,
         [t.id, s.title, i, s.assignee_id || null, s.due_date || null]
       );
       if (s.assignee_id && s.notify === false) await setQuiet(c, row.id, false);
-      if (i === 0) first = row;
+      createdSteps.push(row);
     }
+    await setStepsOrdered(c, t.id, d.steps_ordered !== false);
     await setContacts(c, t.id, d.contacts);
     await setAlignedOn(c, t.id, d.aligned_on === undefined ? isoDate() : d.aligned_on);
     if (projectId) {
@@ -263,7 +274,10 @@ router.post('/', ah(async (req, res) => {
       await setTaskPhase(c, t.id, d.phase_id || await workPhase(c, d.section_id));
     }
     await logActivity(c, t.id, me, 'created');
-    if (first?.assignee_id) await notifyStep(c, req, { id: t.id, title: d.title, project_id: projectId }, first, first.assignee_id);
+    const createdTask = { id: t.id, title: d.title, project_id: projectId };
+    for (const row of createdSteps) {
+      if (row.assignee_id) await notifyStep(c, req, createdTask, row, row.assignee_id);
+    }
     if (assigneeId) {
       await notify(c, {
         userId: assigneeId, actorId: me, type: 'assigned', taskId: t.id, projectId,
@@ -308,7 +322,27 @@ const updateSchema = z.object({
   move_reason: z.string().trim().min(3, 'escreva o motivo').max(1000).optional(),
   phase_id: z.coerce.number().int().positive().nullable().optional(),
   position: z.number().optional(),
+  steps_ordered: z.boolean().optional(),
 });
+
+async function sectionClosed(sectionId) {
+  if (!sectionId) return false;
+  const { rows: [s] } = await query('SELECT completed_at FROM project_sections WHERE id = $1', [sectionId]);
+  return !!s?.completed_at;
+}
+
+function taskIsDone(cur) {
+  return cur?.category === 'done' || (!cur?.category && !!cur?.completed_at);
+}
+
+async function assertTaskOpen(cur, allowReopen = false) {
+  if (await sectionClosed(cur?.section_id)) {
+    throw new HttpError(409, 'O projeto está concluído. Reabra para alterar as tarefas.');
+  }
+  if (taskIsDone(cur) && !allowReopen) {
+    throw new HttpError(409, 'A tarefa está concluída. Reabra para alterar.');
+  }
+}
 
 async function requireTaskView(userId, taskId) {
   const { rows } = await query(
@@ -380,6 +414,22 @@ router.patch('/:id', ah(async (req, res) => {
   }
   if (cur.eff_space === 'pessoal' && d.assignee_id && d.assignee_id !== me) {
     throw new HttpError(400, 'Tarefas individuais ficam com você.');
+  }
+  const targetSection = d.section_id !== undefined ? d.section_id : cur.section_id;
+  if (await sectionClosed(targetSection)) {
+    throw new HttpError(409, 'O projeto está concluído. Reabra para alterar as tarefas.');
+  }
+  if (taskIsDone(cur)) {
+    let reopening = d.done === false;
+    if (!reopening && d.status_id && d.status_id !== cur.status_id) {
+      const { rows: [st] } = await query(
+        'SELECT category FROM workflow_statuses WHERE id = $1 AND project_id = $2',
+        [d.status_id, cur.project_id]
+      );
+      reopening = !!st && st.category !== 'done';
+    }
+    const extra = Object.keys(d).filter(k => !['done', 'status_id', 'move_reason', 'blocked_reason'].includes(k));
+    if (!reopening || extra.length) throw new HttpError(409, 'A tarefa está concluída. Reabra para alterar.');
   }
 
   await tx(async (c) => {
@@ -464,6 +514,29 @@ router.patch('/:id', ah(async (req, res) => {
     if (d.blocked_reason !== undefined) set('blocked_reason', d.blocked_reason || null);
     if (d.position !== undefined) set('position', d.position);
 
+    if (d.steps_ordered !== undefined) {
+      const wasOrdered = await stepsOrdered(c, id);
+      if (d.steps_ordered !== wasOrdered) {
+        await setStepsOrdered(c, id, d.steps_ordered);
+        if (!d.steps_ordered) {
+          const current = await currentStep(c, id);
+          const { rows: open } = await c.query(
+            `SELECT s.id, s.title, s.assignee_id FROM subtasks s
+              WHERE s.task_id = $1 AND s.done = false AND s.assignee_id IS NOT NULL`, [id]
+          );
+          const taskTitle = d.title || cur.title;
+          for (const s of open) {
+            if (s.id === current?.id || await isQuiet(c, s.id)) continue;
+            await notify(c, {
+              userId: s.assignee_id, actorId: me, type: 'step_assigned', taskId: id, projectId,
+              title: `Você já pode fazer a etapa ${s.title}`,
+              body: `${taskTitle} — as etapas andam ao mesmo tempo`,
+            });
+          }
+        }
+      }
+    }
+
     let assigneeChanged = false;
     if (d.assignee_id !== undefined && d.assignee_id !== cur.assignee_id) {
       await assertAssignable(c, projectId, d.assignee_id, me);
@@ -515,7 +588,8 @@ router.patch('/:id', ah(async (req, res) => {
 
 router.delete('/:id', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireTaskEdit(req.user.id, id);
+  const cur = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(cur);
   await removeTaskBlobs(id);
   await query('DELETE FROM tasks WHERE id = $1', [id]);
   res.json({ ok: true });
@@ -534,7 +608,8 @@ router.post(
   handleTaskFilesMulterError,
   ah(async (req, res) => {
     const id = intParam(req.params.id);
-    await requireTaskEdit(req.user.id, id);
+    const cur = await requireTaskEdit(req.user.id, id);
+    await assertTaskOpen(cur);
     const incoming = Array.isArray(req.files) ? req.files : [];
     if (!incoming.length) throw new HttpError(400, 'Envie pelo menos um arquivo.');
 
@@ -589,7 +664,8 @@ router.get('/:id/files/:fileId', ah(async (req, res) => {
 router.delete('/:id/files/:fileId', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const fileId = intParam(req.params.fileId, 'fileId');
-  await requireTaskEdit(req.user.id, id);
+  const cur = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(cur);
   const { rows: [row] } = await query(
     'SELECT container, `blob` FROM task_files WHERE id = $1 AND task_id = $2',
     [fileId, id]
@@ -612,6 +688,17 @@ async function currentStep(c, taskId) {
       WHERE s.task_id = $1 AND s.done = false ORDER BY s.position, s.id LIMIT 1`, [taskId]
   );
   return s || null;
+}
+
+// Sem linha em task_parallel_steps, as etapas seguem a ordem. Com linha, andam juntas.
+async function stepsOrdered(c, taskId) {
+  const { rows } = await c.query('SELECT 1 FROM task_parallel_steps WHERE task_id = $1', [taskId]);
+  return rows.length === 0;
+}
+
+async function setStepsOrdered(c, taskId, ordered) {
+  if (ordered) await c.query('DELETE FROM task_parallel_steps WHERE task_id = $1', [taskId]);
+  else await c.query('INSERT INTO task_parallel_steps (task_id) VALUES ($1) ON CONFLICT DO NOTHING', [taskId]);
 }
 
 // Gestão da tarefa: dono e Coordena do projeto, responsável pelo trabalho, responsável e criador da tarefa.
@@ -647,14 +734,18 @@ async function notifyTurn(c, actor, task, step) {
   });
 }
 
-// Quem entra numa etapa só é avisado quando ela é a da vez; as futuras avisam ao chegar a vez.
+// Com a prioridade ligada, só a etapa da vez avisa. Desligada, o responsável é avisado na hora.
 async function notifyStep(c, req, task, sub, assigneeId) {
-  if (!assigneeId) return;
-  const cur = await currentStep(c, task.id);
-  if (cur?.id !== sub.id || await isQuiet(c, sub.id)) return;
+  if (!assigneeId || await isQuiet(c, sub.id)) return;
+  const ordered = await stepsOrdered(c, task.id);
+  if (ordered) {
+    const cur = await currentStep(c, task.id);
+    if (cur?.id !== sub.id) return;
+  }
+  const turn = ordered ? ' (é a sua vez)' : '';
   await notify(c, {
     userId: assigneeId, actorId: req.user.id, type: 'step_assigned', taskId: task.id, projectId: task.project_id,
-    title: `${req.user.name} pediu sua participação em uma tarefa`, body: `${task.title} — etapa: ${sub.title} (é a sua vez)`,
+    title: `${req.user.name} pediu sua participação em uma tarefa`, body: `${task.title} — etapa: ${sub.title}${turn}`,
   });
 }
 
@@ -671,6 +762,7 @@ const subSchema = z.object({
 router.post('/:id/subtasks', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const task = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(task);
   const d = parse(subSchema.extend({ title: z.string().trim().min(1).max(500) }), req.body);
   if (d.assignee_id) await assertAssignable({ query }, task.project_id, d.assignee_id, req.user.id);
   const sub = await tx(async (c) => {
@@ -704,10 +796,15 @@ router.patch('/:id/subtasks/:subId', ah(async (req, res) => {
   if (cur.access !== 'edit' && !(onlyDone && (cur.assignee_id === req.user.id || cur.access === 'work'))) {
     throw new HttpError(403, 'Você só pode concluir as etapas que estão com você.');
   }
-  const { rows: [task] } = await query('SELECT id, title, project_id, section_id, created_by, assignee_id FROM tasks WHERE id = $1', [id]);
+  const { rows: [task] } = await query(
+    `SELECT t.id, t.title, t.project_id, t.section_id, t.created_by, t.assignee_id, t.completed_at, ws.category
+       FROM tasks t LEFT JOIN workflow_statuses ws ON ws.id = t.status_id WHERE t.id = $1`, [id]
+  );
+  await assertTaskOpen(task);
   if (d.assignee_id !== undefined && d.assignee_id !== cur.assignee_id) await assertAssignable({ query }, task.project_id, d.assignee_id, req.user.id);
   const finishing = d.done === true && !cur.done;
-  if (finishing && cur.access !== 'edit') {
+  const ordered = await stepsOrdered({ query }, id);
+  if (finishing && ordered) {
     const turn = await currentStep({ query }, id);
     if (turn && turn.id !== subId) {
       throw new HttpError(409, `Ainda não é a vez desta etapa: aguarde ${turn.assignee_name || 'o responsável'} concluir "${turn.title}".`);
@@ -738,19 +835,23 @@ router.patch('/:id/subtasks/:subId', ah(async (req, res) => {
       }
       const next = await currentStep(c, id);
       const managers = await stepManagers(c, task);
-      const after = next ? `próxima: ${next.title}${next.assignee_name ? ` com ${next.assignee_name}` : ''}` : 'era a última etapa';
+      const after = !next
+        ? 'era a última etapa'
+        : ordered
+          ? `próxima: ${next.title}${next.assignee_name ? ` com ${next.assignee_name}` : ''}`
+          : 'as outras etapas seguem ao mesmo tempo';
       for (const uid of managers) {
         await notify(c, { userId: uid, actorId: req.user.id, type: 'step_done', taskId: id, projectId: task.project_id,
           title: `${req.user.name} concluiu a etapa ${row.title}`, body: `${task.title} — ${after}` });
       }
-      if (next && next.id !== before?.id) await notifyTurn(c, req.user, task, next);
+      if (ordered && next && next.id !== before?.id) await notifyTurn(c, req.user, task, next);
       if (!next) {
         for (const uid of managers) {
           await notify(c, { userId: uid, actorId: req.user.id, type: 'steps_done', taskId: id, projectId: task.project_id,
             title: `Todas as etapas de ${task.title} foram concluídas`, body: 'Pode seguir para a próxima fase.' });
         }
       }
-    } else if (d.done === false && cur.done) {
+    } else if (d.done === false && cur.done && ordered) {
       const now = await currentStep(c, id);
       if (now && now.id !== before?.id) await notifyTurn(c, req.user, task, now);
     }
@@ -761,7 +862,8 @@ router.patch('/:id/subtasks/:subId', ah(async (req, res) => {
 
 router.put('/:id/contacts', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireTaskEdit(req.user.id, id);
+  const cur = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(cur);
   const { contacts } = parse(z.object({ contacts: z.array(z.coerce.number().int().positive()).max(30) }), req.body);
   await tx(c => setContacts(c, id, contacts));
   res.json(await alignmentOf({ query }, id));
@@ -769,7 +871,8 @@ router.put('/:id/contacts', ah(async (req, res) => {
 
 router.put('/:id/alignment', ah(async (req, res) => {
   const id = intParam(req.params.id);
-  await requireTaskEdit(req.user.id, id);
+  const cur = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(cur);
   const { aligned_on } = parse(z.object({ aligned_on: dateOrNull }), req.body);
   await tx(c => setAlignedOn(c, id, aligned_on));
   res.json(await alignmentOf({ query }, id));
@@ -778,6 +881,7 @@ router.put('/:id/alignment', ah(async (req, res) => {
 router.put('/:id/subtasks/order', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const task = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(task);
   const { ids } = parse(z.object({ ids: z.array(z.number().int().positive()).min(1).max(100) }), req.body);
   await tx(async (c) => {
     const { rows } = await c.query('SELECT id FROM subtasks WHERE task_id = $1', [id]);
@@ -788,7 +892,7 @@ router.put('/:id/subtasks/order', ah(async (req, res) => {
       await c.query('UPDATE subtasks SET position = $1 WHERE id = $2 AND task_id = $3', [i, ids[i], id]);
     }
     const now = await currentStep(c, id);
-    if (now && now.id !== before?.id) await notifyTurn(c, req.user, task, now);
+    if (await stepsOrdered(c, id) && now && now.id !== before?.id) await notifyTurn(c, req.user, task, now);
   });
   res.json({ ok: true });
 }));
@@ -796,11 +900,12 @@ router.put('/:id/subtasks/order', ah(async (req, res) => {
 router.delete('/:id/subtasks/:subId', ah(async (req, res) => {
   const id = intParam(req.params.id);
   const task = await requireTaskEdit(req.user.id, id);
+  await assertTaskOpen(task);
   await tx(async (c) => {
     const before = await currentStep(c, id);
     await c.query('DELETE FROM subtasks WHERE id = $1 AND task_id = $2', [intParam(req.params.subId, 'subId'), id]);
     const now = await currentStep(c, id);
-    if (now && now.id !== before?.id) await notifyTurn(c, req.user, task, now);
+    if (await stepsOrdered(c, id) && now && now.id !== before?.id) await notifyTurn(c, req.user, task, now);
   });
   res.json({ ok: true });
 }));

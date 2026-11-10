@@ -5,7 +5,7 @@ const TASK_SELECT = `
          t.estimate_min, t.size, t.completed_at, t.position, t.is_private, t.blocked_reason, t.tags,
          t.created_at, t.updated_at,
          t.project_id, p.name AS project_name, p.color AS project_color, p.team_id,
-         t.section_id, sec.name AS section_name,
+         t.section_id, sec.name AS section_name, sec.completed_at AS section_completed_at,
          tph.phase_id, sph.name AS phase_name, sph.color AS phase_color,
          t.status_id, ws.name AS status_name, ws.color AS status_color,
          COALESCE(ws.category, CASE WHEN t.completed_at IS NOT NULL THEN 'done' ELSE 'todo' END) AS status_category,
@@ -62,7 +62,7 @@ function formatTask(r) {
     blocked_reason: r.blocked_reason || null,
     tags: r.tags || [],
     project: r.project_id ? { id: r.project_id, name: r.project_name, color: r.project_color, team_id: r.team_id, team_name: r.team_name } : null,
-    section: r.section_id ? { id: r.section_id, name: r.section_name } : null,
+    section: r.section_id ? { id: r.section_id, name: r.section_name, completed_at: r.section_completed_at || null } : null,
     phase: r.phase_id ? { id: r.phase_id, name: r.phase_name, color: r.phase_color } : null,
     status: {
       id: r.status_id || null,
@@ -82,7 +82,18 @@ function formatTask(r) {
     my_steps: r.my_steps || [],
     created_at: r.created_at,
     updated_at: r.updated_at,
+    ...(r.steps === undefined ? {} : { steps: formatSteps(r.steps) }),
   };
+}
+
+function formatSteps(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list.map(s => ({
+    id: s.id,
+    title: s.title,
+    done: s.done === true || s.done === 1 || s.done === '1',
+    assignee_name: s.assignee_name || null,
+  }));
 }
 
 async function loadTask(run, userId, taskId) {

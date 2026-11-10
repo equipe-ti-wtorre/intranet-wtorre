@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { ApiService, errorMessage } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
 import { DataService } from '../core/data.service';
@@ -32,7 +33,7 @@ import { PersonPickerComponent } from '../shared/person-picker.component';
                 <div class="trow" [class.selected]="selected()?.id === t.id" (click)="select(t.id)">
                   <span class="dot" style="width:9px;height:9px;border-radius:3px" [style.background]="t.color"></span>
                   <span class="t-title">{{ t.name }}</span>
-                  <span class="muted small">{{ t.members_count }}</span>
+                  <span class="muted small" [title]="countTitle(t)">{{ t.people_count ?? t.members_count }}</span>
                 </div>
               }
             </div>
@@ -54,26 +55,49 @@ import { PersonPickerComponent } from '../shared/person-picker.component';
                 <button class="btn btn-sm btn-danger" (click)="deleting.set(t)">Excluir</button>
               }
             </div>
+            <div class="muted small team-counts">{{ countLine(t) }}</div>
             @if (t.description) { <p class="muted" style="margin-bottom:12px">{{ t.description }}</p> }
 
-            <div class="block-title" style="margin-top:16px">Gestores da equipe</div>
-            <div class="row" style="flex-wrap:wrap;gap:6px;margin:6px 0 4px">
-              @for (m of t.managers || []; track m.id) {
-                <span class="pill"><app-avatar [person]="m" />{{ m.name }}
-                  @if (t.can_edit && (t.managers?.length || 0) > 1) { <button (click)="removeManager(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button> }</span>
-              }
-              @if (t.can_edit) {
-                <app-person-picker class="pp-toolbar" [people]="managerCandidates()" placeholder="Adicionar gestor…" (picked)="addManager($event ?? 0)" />
-              }
-            </div>
+            <section class="team-block">
+              <h3 class="team-block__title">Quem gerencia</h3>
 
-            <div class="block-title" style="margin-top:18px">Membros</div>
+              <div class="team-block__sub">Gestores da equipe</div>
+              <div class="muted small">Veem e editam todos os projetos e tarefas desta equipe.</div>
+              <div class="row" style="flex-wrap:wrap;gap:6px;margin:8px 0 4px">
+                @for (m of t.managers || []; track m.id) {
+                  <span class="pill"><app-avatar [person]="m" />{{ m.name }}
+                    @if (t.can_edit && (t.managers?.length || 0) > 1) { <button (click)="removeManager(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button> }</span>
+                }
+                @if (t.can_edit) {
+                  <app-person-picker class="pp-toolbar" [people]="managerCandidates()" placeholder="Adicionar gestor…" (picked)="addManager($event ?? 0)" />
+                }
+              </div>
+
+              @if (t.sector_managers?.length) {
+                <div class="team-block__sub" style="margin-top:14px">Gestores do setor {{ t.sector_name }}</div>
+                <div class="muted small">Mandam em todas as equipes do setor. Para mudar, use Administração › Setores.</div>
+                <div class="row" style="flex-wrap:wrap;gap:6px;margin:8px 0 4px">
+                  @for (m of t.sector_managers; track m.id) {
+                    <span class="pill"><app-avatar [person]="m" />{{ m.name }}</span>
+                  }
+                </div>
+              }
+            </section>
+
+            <section class="team-block">
+              <h3 class="team-block__title">Quem trabalha</h3>
+              <div class="muted small">Veem só os projetos em que estão e as próprias tarefas. Podem ser escolhidos como responsáveis.</div>
+              @if (t.can_edit && managersOutside().length) {
+                <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" (click)="addManagersAsMembers()">
+                  <app-icon name="plus" [size]="14" />Incluir os gestores como membros ({{ managersOutside().length }})
+                </button>
+              }
             <div class="table-scroll"><table class="table">
               <thead><tr><th>Pessoa</th><th>Cargo</th><th></th></tr></thead>
               <tbody>
                 @for (m of t.members || []; track m.id) {
                   <tr>
-                    <td><div class="row"><app-avatar [person]="m" />{{ m.name }} @if (m.is_manager) { <span class="muted small">gestor</span> }</div></td>
+                    <td><div class="row"><app-avatar [person]="m" />{{ m.name }} @if (m.is_manager) { <span class="muted small">também gestor</span> }</div></td>
                     <td class="muted">{{ m.job_title }}</td>
                     <td class="num">@if (t.can_edit) { <button class="btn btn-ghost btn-sm btn-icon" (click)="removeMember(m.id)" aria-label="Tirar da equipe"><app-icon name="x" [size]="14" /></button> }</td>
                   </tr>
@@ -86,10 +110,11 @@ import { PersonPickerComponent } from '../shared/person-picker.component';
                 <app-person-picker class="grow" [people]="memberCandidates()" [placeholder]="'Adicionar pessoa do setor ' + t.sector_name + '…'"
                                    [subOf]="alsoIn" (picked)="addMember($event)" />
               </div>
-              <div class="muted small" style="margin-top:6px">Aparecem as pessoas do setor. A mesma pessoa pode estar em várias equipes; quem é da equipe vê e cria os projetos dela.</div>
+              <div class="muted small" style="margin-top:6px">Aparecem as pessoas do setor. A mesma pessoa pode estar em várias equipes.</div>
             }
+            </section>
 
-            <div class="block-title" style="margin-top:22px">Projetos da equipe</div>
+            <h3 class="team-block__title team-block">Projetos da equipe</h3>
             <div class="tlist">
               <a class="trow" [routerLink]="['/ti/taskhub/kanban/equipes', t.id]">
                 <span class="dot" style="width:8px;height:8px;border-radius:3px" [style.background]="t.color"></span>
@@ -202,6 +227,28 @@ export class TeamsPage implements OnInit {
       },
       error: e => { this.removing.set(false); this.toast.error(errorMessage(e)); },
     });
+  }
+
+  managersOutside = computed(() => {
+    const t = this.selected(); if (!t) return [];
+    const members = new Set((t.members || []).map(m => m.id));
+    return (t.managers || []).filter(m => !members.has(m.id));
+  });
+  addManagersAsMembers() {
+    const t = this.selected(); const list = this.managersOutside();
+    if (!t || !list.length) return;
+    forkJoin(list.map(m => this.api.setTeamMember(t.id, m.id, 'membro'))).subscribe({
+      next: () => { this.reload(); this.toast.show(list.length === 1 ? 'Gestor incluído como membro.' : 'Gestores incluídos como membros.'); },
+      error: e => { this.toast.error(errorMessage(e)); this.reload(); },
+    });
+  }
+  countLine(t: Team) {
+    const g = t.managers?.length || 0; const m = t.members?.length ?? t.members_count ?? 0; const p = t.projects_count || 0;
+    return `${g} ${g === 1 ? 'gestor' : 'gestores'} · ${m} ${m === 1 ? 'membro' : 'membros'} · ${p} ${p === 1 ? 'projeto em andamento' : 'projetos em andamento'}`;
+  }
+  countTitle(t: Team) {
+    const g = t.managers?.length || 0; const m = t.members_count || 0;
+    return `${g} ${g === 1 ? 'gestor' : 'gestores'} · ${m} ${m === 1 ? 'membro' : 'membros'}`;
   }
 
   alsoIn = (p: Person) => [p.team_name ? `também em ${p.team_name}` : '', p.department || ''].filter(Boolean).join(' · ');

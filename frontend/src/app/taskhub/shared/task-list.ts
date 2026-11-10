@@ -32,7 +32,20 @@ const PHASE_STATE_LABEL: Record<PhaseState, string> = { past: 'Fase anterior', c
         </div>
       }
       @if (isOpen(g)) {
-      <div class="tlist" [class.phase-current-list]="g.state === 'current'">
+      <div class="tlist tlist-cols" [class.no-proj]="!showProject()" [class.no-status]="groupBy() === 'status'" [class.phase-current-list]="g.state === 'current'">
+        @if (head() && g.tasks.length) {
+          <div class="trow thead">
+            <span class="tick"></span>
+            <span class="prio-gap"></span>
+            <span class="t-main"><span class="t-title">Tarefa</span></span>
+            <span class="meta">
+              @if (showProject()) { <span class="col-proj">Projeto</span> }
+              @if (groupBy() !== 'status') { <span class="col-status">Status</span> }
+              <span class="col-due">Prazo</span>
+              <span class="col-who">Responsável</span>
+            </span>
+          </div>
+        }
         @for (t of g.tasks; track t.id) {
           <app-task-row [task]="t" [showProject]="showProject()" [showStatus]="groupBy() !== 'status'"
                         (open)="ui.openTask($event.id)" (toggle)="toggle.emit($event)" />
@@ -61,6 +74,8 @@ export class TaskListComponent {
   phases = input<Phase[]>([]);
   currentPhaseId = input<number | null>(null);
   showProject = input(true);
+  /** Linha de títulos. Só a página de tarefas liga isso. */
+  head = input(false);
   stateLabel = PHASE_STATE_LABEL;
   private opened = signal<Record<string, boolean>>({});
   isOpen(g: Group) { return this.opened()[g.key] ?? g.state !== 'past'; }
