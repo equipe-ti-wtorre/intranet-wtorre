@@ -17,9 +17,13 @@ SET @q2 = IF(
 );
 PREPARE stmt2 FROM @q2; EXECUTE stmt2; DEALLOCATE PREPARE stmt2;
 
+-- A 055 troca esta chave pela uk_followup_rm_filial_tipo_pc. No reexecute do migrate
+-- a chave antiga já não existe e há RM+filial repetidos; não recriar se a nova já está lá.
 SET @q3 = IF(
   (SELECT COUNT(*) FROM information_schema.statistics
-   WHERE table_schema=@dbname AND table_name='followup_solicitacoes' AND index_name='uk_followup_rm_filial') = 0,
+   WHERE table_schema=@dbname AND table_name='followup_solicitacoes' AND index_name='uk_followup_rm_filial') = 0
+  AND (SELECT COUNT(*) FROM information_schema.statistics
+   WHERE table_schema=@dbname AND table_name='followup_solicitacoes' AND index_name='uk_followup_rm_filial_tipo_pc') = 0,
   'ALTER TABLE followup_solicitacoes ADD UNIQUE KEY uk_followup_rm_filial (n_requisicao, cod_filial)',
   'SELECT 1'
 );

@@ -464,7 +464,7 @@ select.inline { appearance: none; cursor: pointer; }
 .tlist-cols .col-status,
 .tlist-cols .col-due,
 .tlist-cols .col-who { width: auto; flex: none; }
-.tlist-cols .col-proj { grid-column: 1; }
+.tlist-cols .col-proj { grid-column: 1; padding-left: 64px; }
 .tlist-cols .col-status { grid-column: 3; }
 .tlist-cols .col-due { grid-column: 4; }
 .tlist-cols .col-who { grid-column: 5; }
@@ -1170,6 +1170,7 @@ div.td-kpi { cursor: default; }
   .tlist-cols .col-who { grid-column: auto; }
   .tlist-cols { padding-right: 0; }
   .tlist-cols:not(.no-proj) .col-status,
+  .tlist-cols .col-proj,
   .tlist-cols .col-due,
   .tlist-cols .col-who { padding-left: 0; }
   .qa-fields, .qa-modal .qa-fields { grid-template-columns: minmax(0, 1fr); }
