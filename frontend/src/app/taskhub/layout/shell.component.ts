@@ -27,7 +27,7 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
       <aside class="side wt-sidebar" aria-label="Menu principal">
         <div class="brand">
           <img class="brand-logo" [src]="ui.logoFullSrc()" [alt]="ui.logoAlt()" />
-          <a href="/inicio" class="small" style="margin-left: auto">Intranet</a>
+          <a href="/inicio" class="side-intranet" style="margin-left: auto" title="Voltar para a Intranet"><app-icon name="back" [size]="13" />Intranet</a>
         </div>
         <div class="side-actions">
           <button class="btn btn-sm" (click)="ui.openQuickAdd(quickDefaults())"><app-icon name="plus" [size]="14" />Nova tarefa<kbd class="kbd-hint">Q</kbd></button>

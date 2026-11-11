@@ -1,21 +1,24 @@
 import { Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, computed, signal } from '@angular/core';
 import { DeckSlide } from './day-deck';
+import { DeckTheme, ensureBrandFonts, stripeRects } from './deck-theme';
 
 // Apresentação em tela cheia dos slides montados (← → navegam, Esc sai).
 @Component({
   selector: 'app-deck-viewer',
   standalone: true,
   template: `
-    <div class="pv" role="dialog" aria-modal="true" [attr.aria-label]="'Apresentação: ' + (slides[0]?.title || '')">
+    <div class="pv" [class.pv--np]="theme === 'nubank-parque'" [class.pv--wt]="theme === 'wtorre'" role="dialog" aria-modal="true" [attr.aria-label]="'Apresentação: ' + (slides[0]?.title || '')">
       <div class="pv-stage">
         @if (cur(); as s) {
           @switch (s.kind) {
             @case ('cover') {
               <div class="pv-slide pv-cover">
-                <div class="pv-cover__brand">TaskHub</div>
+                @if (theme === 'nubank-parque') { <svg class="pv-stripes" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">@for (r of stripes; track $index) { <rect [attr.x]="r.x" [attr.y]="r.y" [attr.width]="r.w" [attr.height]="r.h" /> }</svg> }
+                @else { <div class="pv-wt" aria-hidden="true">@for (n of [1, 2, 3, 4, 5]; track n) { <span>WT WT</span> }</div> }
+                <div class="pv-cover__brand">{{ theme === 'nubank-parque' ? 'Nubank Parque' : 'WTorre' }}</div>
                 <h1 class="pv-cover__title">{{ $any(s).title }}</h1>
                 <div class="pv-cover__meta">{{ $any(s).subtitle }}</div>
-                <div class="pv-cover__meta" style="color:#fff">{{ $any(s).meta }}</div>
+                <div class="pv-cover__meta pv-cover__meta--strong">{{ $any(s).meta }}</div>
               </div>
             }
             @case ('kpis') {
@@ -81,12 +84,14 @@ import { DeckSlide } from './day-deck';
 export class DeckViewerComponent implements OnInit, OnDestroy {
   @Input({ required: true }) slides: DeckSlide[] = [];
   @Input() footer = 'TaskHub';
+  @Input() theme: DeckTheme = 'nubank-parque';
+  stripes = stripeRects();
   @Output() close = new EventEmitter<void>();
   index = signal(0);
   cur = computed(() => this.slides[this.index()]);
   private wasFull = false;
 
-  ngOnInit() { document.documentElement.requestFullscreen?.().catch(() => {}); }
+  ngOnInit() { ensureBrandFonts(); document.documentElement.requestFullscreen?.().catch(() => {}); }
   ngOnDestroy() { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); }
   prev() { this.index.update(i => Math.max(0, i - 1)); }
   next() { this.index.update(i => Math.min(this.slides.length - 1, i + 1)); }
