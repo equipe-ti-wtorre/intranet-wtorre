@@ -8,13 +8,14 @@ import { relativeTime } from '../core/format';
 import { HEALTH_LABEL, SLIDES, SlideKey, defaultSelection, fmtDate, weekLabel } from './slides';
 import { PresentationViewerComponent } from './viewer.component';
 import { downloadWorkPptx } from './pptx';
+import { DeckTheme, DeckThemePickerComponent, readDeckTheme } from './deck-theme';
 
 // Dashboard do trabalho (aba Dashboard dentro do trabalho) e a apresentação dele,
 // dentro do sistema ou em PowerPoint, escolhendo quais slides entram.
 @Component({
   selector: 'app-work-dashboard',
   standalone: true,
-  imports: [FormsModule, PresentationViewerComponent],
+  imports: [FormsModule, PresentationViewerComponent, DeckThemePickerComponent],
   template: `
     <div class="pd">
       @if (d(); as d) {
@@ -98,6 +99,7 @@ import { downloadWorkPptx } from './pptx';
           <div class="modal-head">Apresentação do projeto<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.subject?.project_name }} › {{ d()?.subject?.name }} · escolha os slides e como apresentar</div></div>
           <div class="modal-body">
             <div class="field"><label class="form-label" for="pt">Título</label><input id="pt" class="form-field" [(ngModel)]="ptitle" /></div>
+            <app-deck-theme-picker [value]="theme()" (valueChange)="theme.set($event)" />
             <div class="row" style="justify-content: space-between">
               <span class="form-label">Slides ({{ picked().length }} de {{ slides.length }})</span>
               <span class="row small"><button type="button" class="link-btn" (click)="picked.set(allKeys)">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
@@ -119,7 +121,7 @@ import { downloadWorkPptx } from './pptx';
       </div>
     }
 
-    @if (presenting() && d()) { <app-presentation-viewer [d]="d()!" [keys]="picked()" [title]="ptitle" (close)="presenting.set(false)" /> }
+    @if (presenting() && d()) { <app-presentation-viewer [d]="d()!" [keys]="picked()" [title]="ptitle" [theme]="theme()" (close)="presenting.set(false)" /> }
   `,
 })
 export class WorkDashboardComponent implements OnChanges {
@@ -134,6 +136,7 @@ export class WorkDashboardComponent implements OnChanges {
   exporting = signal(false);
   picked = signal<SlideKey[]>([]);
   ptitle = '';
+  theme = signal<DeckTheme>('nubank-parque');
   slides = SLIDES;
   allKeys = SLIDES.map(s => s.key);
   health = HEALTH_LABEL;
@@ -169,6 +172,7 @@ export class WorkDashboardComponent implements OnChanges {
     const d = this.d(); if (!d) return;
     if (!this.picked().length) this.picked.set(defaultSelection(d));
     this.ptitle = this.ptitle || `Status · ${d.subject.name}`;
+    this.theme.set(readDeckTheme(this.ui.palette()));
     this.choosing.set(true);
   }
   toggle(k: SlideKey) { this.picked.update(l => (l.includes(k) ? l.filter(x => x !== k) : [...l, k])); }
@@ -178,7 +182,7 @@ export class WorkDashboardComponent implements OnChanges {
     const d = this.d(); if (!d) return;
     this.exporting.set(true);
     try {
-      await downloadWorkPptx(d, this.picked(), this.ui.palette(), this.ptitle.trim() || `Status · ${d.subject.name}`);
+      await downloadWorkPptx(d, this.picked(), this.theme(), this.ptitle.trim() || `Status · ${d.subject.name}`);
       this.toast.show('PowerPoint gerado. O arquivo foi baixado.');
       this.choosing.set(false);
     } catch {

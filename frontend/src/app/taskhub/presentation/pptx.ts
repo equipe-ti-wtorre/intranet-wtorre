@@ -1,38 +1,34 @@
 import pptxgen from 'pptxgenjs';
 import { DashItem, WorkDashboard } from '../core/models';
 import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from './slides';
+import { DeckTheme, PPTX_THEMES, PptxTheme, stripeRects } from './deck-theme';
 
-// Cores por paleta (hex sem "#", como o PowerPoint exige).
-const PALETTES = {
-  wtorre: { brand: '1D54E6', brandSoft: 'E8EEFD', dark: '0E1626', dark2: '121D33' },
-  'nubank-parque': { brand: '8D0DE3', brandSoft: 'ECDFFF', dark: '2E0348', dark2: '420465' },
-} as const;
-const INK = '0F172A'; const MUTED = '64748B'; const LINE = 'E2E8F0'; const SURF = 'F8FAFC';
-const RED = 'E11D48'; const AMBER = 'B45309'; const GREEN = '13A36B';
-const FONT = 'Segoe UI';
+const RED = 'E11D48'; const AMBER = 'B45309';
 const W = 13.333; const H = 7.5; const MX = 0.6;
 
 const hex = (c: string | null | undefined, fb = '94A3B8') => (c || '').replace('#', '').slice(0, 6).toUpperCase() || fb;
 
 // Gera e baixa o .pptx com os slides escolhidos.
-export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palette: keyof typeof PALETTES, title: string) {
-  const C = PALETTES[palette] || PALETTES.wtorre;
+export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], theme: DeckTheme, title: string) {
+  const C = PPTX_THEMES[theme] || PPTX_THEMES.wtorre;
+  const INK = C.ink; const MUTED = C.muted; const LINE = C.line; const FONT = C.font; const GREEN = C.done;
+  const np = theme === 'nubank-parque';
   const pres = new pptxgen();
   pres.layout = 'LAYOUT_WIDE';
   pres.title = title;
   pres.subject = `Status do projeto ${d.subject.name}`;
   pres.author = 'TaskHub';
-  pres.theme = { headFontFace: FONT, bodyFontFace: FONT };
+  pres.theme = { headFontFace: C.headFont, bodyFontFace: FONT };
 
   // Layouts: capa escura e conteúdo claro (título, rodapé e número da página ficam no layout).
-  pres.defineSlideMaster({ title: 'CAPA', background: { color: C.dark } });
+  pres.defineSlideMaster({ title: 'CAPA', background: { color: C.coverBg } });
   pres.defineSlideMaster({
     title: 'CONTEUDO',
     background: { color: 'FFFFFF' },
     objects: [
-      { rect: { x: 0, y: 0, w: W, h: 0.12, fill: { color: C.brand } } },
-      { placeholder: { options: { name: 'title', type: 'title', x: MX, y: 0.35, w: W - 2 * MX, h: 0.75, fontFace: FONT, fontSize: 28, bold: true, color: INK, margin: 0, align: 'left', valign: 'middle' }, text: '' } },
-      { text: { text: `TaskHub · ${d.subject.project_name} › ${d.subject.name}`, options: { x: MX, y: H - 0.45, w: 8, h: 0.3, fontFace: FONT, fontSize: 10, color: MUTED, margin: 0 } } },
+      ...(contentTop(C, np) || []),
+      { placeholder: { options: { name: 'title', type: 'title', x: MX, y: 0.35, w: W - 2 * MX, h: 0.75, fontFace: C.headFont, fontSize: np ? 32 : 28, bold: C.titleBold, color: C.title, margin: 0, align: 'left', valign: 'middle' }, text: '' } },
+      { text: { text: `${C.mark} · TaskHub · ${d.subject.project_name} › ${d.subject.name}`, options: { x: MX, y: H - 0.45, w: 8, h: 0.3, fontFace: FONT, fontSize: 10, color: MUTED, margin: 0 } } },
     ],
     slideNumber: { x: W - MX - 0.6, y: H - 0.45, w: 0.6, h: 0.3, fontFace: FONT, fontSize: 10, color: MUTED, align: 'right' },
   });
@@ -44,7 +40,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
   };
   const empty = (s: pptxgen.Slide, text: string) =>
     s.addText(text, { x: MX, y: 3.2, w: W - 2 * MX, h: 0.8, fontFace: FONT, fontSize: 18, color: MUTED, align: 'center', isTextBox: true });
-  const head = (labels: string[]) => labels.map(t => ({ text: t, options: { bold: true, color: MUTED, fill: { color: SURF }, fontSize: 12 } }));
+  const head = (labels: string[]) => labels.map(t => ({ text: t, options: { bold: true, color: C.headInk, fill: { color: C.head }, fontSize: 12 } }));
   const tableOpts = (colW: number[], y = 1.35) => ({
     x: MX, y, w: colW.reduce((a, b) => a + b, 0), colW, fontFace: FONT, fontSize: 13, color: INK,
     border: { type: 'solid' as const, color: LINE, pt: 0.75 }, rowH: 0.42, valign: 'middle' as const, margin: 0.08,
@@ -58,14 +54,18 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
   for (const key of SLIDES.map(s => s.key).filter(x => keys.includes(x))) {
     if (key === 'capa') {
       const s = pres.addSlide({ masterName: 'CAPA' });
-      s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.25, h: H, fill: { color: C.brand } });
-      s.addText('TaskHub', { x: 1, y: 0.8, w: 6, h: 0.5, fontFace: FONT, fontSize: 16, bold: true, color: 'FFFFFF', margin: 0, isTextBox: true });
-      s.addText(title, { x: 1, y: 2.3, w: 11, h: 1.6, fontFace: FONT, fontSize: 44, bold: true, color: 'FFFFFF', margin: 0, valign: 'bottom', isTextBox: true });
+      coverDecor(pres, s, C);
+      const tw = C.stripes ? 9.2 : 11;
+      s.addText(C.mark, { x: 1, y: 0.8, w: 6, h: 0.5, fontFace: C.headFont, fontSize: 16, bold: C.titleBold, color: C.coverText, margin: 0, isTextBox: true });
+      s.addText(title, { x: 1, y: 1.9, w: tw, h: 2.0, fontFace: C.headFont, fontSize: np ? 50 : 44, bold: C.titleBold, color: C.coverTitle, margin: 0, valign: 'bottom', isTextBox: true });
       s.addText([linkPhrase(p), `Projeto ${p.project_name}`, p.owner_name ? `Responsável: ${p.owner_name}` : null, p.end_date ? `Prazo ${fmtDate(p.end_date)}` : null].filter(Boolean).join('  ·  '),
-        { x: 1, y: 4.05, w: 11, h: 0.5, fontFace: FONT, fontSize: 18, color: 'AAB2C8', margin: 0, isTextBox: true });
-      s.addShape(pres.ShapeType.roundRect, { x: 1, y: 4.9, w: 2.1, h: 0.5, rectRadius: 0.1, fill: { color: p.health === 'no_prazo' || p.health === 'concluido' ? GREEN : p.health === 'em_risco' ? AMBER : RED } });
-      s.addText(HEALTH_LABEL[p.health], { x: 1, y: 4.9, w: 2.1, h: 0.5, fontFace: FONT, fontSize: 14, bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', margin: 0, isTextBox: true });
-      s.addText(date, { x: 1, y: H - 1, w: 6, h: 0.4, fontFace: FONT, fontSize: 14, color: 'AAB2C8', margin: 0, isTextBox: true });
+        { x: 1, y: 4.05, w: tw, h: 0.5, fontFace: FONT, fontSize: 18, color: C.coverMeta, margin: 0, isTextBox: true });
+      const ok = p.health === 'no_prazo' || p.health === 'concluido';
+      const pill = np ? (ok ? { bg: 'C9E2BF', fg: '174006' } : p.health === 'em_risco' ? { bg: 'ECDFFF', fg: '420465' } : { bg: 'FFFFFF', fg: RED })
+        : { bg: ok ? C.brand : p.health === 'em_risco' ? AMBER : RED, fg: 'FFFFFF' };
+      s.addShape(pres.ShapeType.roundRect, { x: 1, y: 4.9, w: 2.1, h: 0.5, rectRadius: np ? 0.25 : 0.1, fill: { color: pill.bg } });
+      s.addText(HEALTH_LABEL[p.health], { x: 1, y: 4.9, w: 2.1, h: 0.5, fontFace: FONT, fontSize: 14, bold: true, color: pill.fg, align: 'center', valign: 'middle', margin: 0, isTextBox: true });
+      s.addText(date, { x: 1, y: H - 1, w: 6, h: 0.4, fontFace: C.detailFont, italic: !np, fontSize: 14, color: C.coverMeta, margin: 0, isTextBox: true });
       s.addNotes(`Status do projeto ${p.name} (${p.project_name}) em ${date}.`);
     }
 
@@ -81,19 +81,19 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
       cards.forEach(([label, value, sub], i) => {
         const x = MX + i * (cw + 0.3);
         const warn = (label === 'Atrasadas' || label === 'Bloqueadas') && value !== '0';
-        s.addShape(pres.ShapeType.roundRect, { x, y: 1.4, w: cw, h: 1.9, rectRadius: 0.12, fill: { color: warn ? 'FFF1F2' : SURF }, line: { color: warn ? 'FECDD3' : LINE, width: 1 } });
-        s.addText(label, { x: x + 0.25, y: 1.55, w: cw - 0.5, h: 0.35, fontFace: FONT, fontSize: 13, color: warn ? 'BE123C' : MUTED, bold: true, margin: 0, isTextBox: true });
+        s.addShape(pres.ShapeType.roundRect, { x, y: 1.4, w: cw, h: 1.9, rectRadius: 0.12, fill: { color: warn ? 'FFF1F2' : C.card }, line: { color: warn ? 'FECDD3' : C.cardLine, width: 1 } });
+        s.addText(label, { x: x + 0.25, y: 1.55, w: cw - 0.5, h: 0.35, fontFace: FONT, fontSize: 13, color: warn ? 'BE123C' : (np ? C.brand : MUTED), bold: true, margin: 0, isTextBox: true });
         s.addText(value, { x: x + 0.25, y: 1.95, w: cw - 0.5, h: 0.8, fontFace: FONT, fontSize: 40, bold: true, color: warn ? 'BE123C' : INK, margin: 0, isTextBox: true });
         s.addText(sub, { x: x + 0.25, y: 2.8, w: cw - 0.5, h: 0.35, fontFace: FONT, fontSize: 12, color: MUTED, margin: 0, isTextBox: true });
       });
       const bar = (y: number, label: string, pct: number, color: string) => {
         s.addText(`${label} · ${pct}%`, { x: MX, y, w: 6, h: 0.35, fontFace: FONT, fontSize: 14, color: INK, bold: true, margin: 0, isTextBox: true });
-        s.addShape(pres.ShapeType.roundRect, { x: MX, y: y + 0.45, w: W - 2 * MX, h: 0.28, rectRadius: 0.14, fill: { color: LINE } });
+        s.addShape(pres.ShapeType.roundRect, { x: MX, y: y + 0.45, w: W - 2 * MX, h: 0.28, rectRadius: 0.14, fill: { color: C.track } });
         if (pct > 0) s.addShape(pres.ShapeType.roundRect, { x: MX, y: y + 0.45, w: Math.max(0.3, (W - 2 * MX) * pct / 100), h: 0.28, rectRadius: 0.14, fill: { color } });
       };
       bar(3.75, 'Tarefas concluídas', k.pct, C.brand);
       if (k.time_pct !== null) {
-        bar(4.85, 'Tempo decorrido até o prazo', k.time_pct, '94A3B8');
+        bar(4.85, 'Tempo decorrido até o prazo', k.time_pct, C.timeBar);
         const gap = k.time_pct - k.pct;
         s.addText(gap > 10 ? `O ritmo está ${gap} pontos abaixo do calendário.` : 'O ritmo acompanha o prazo do projeto.',
           { x: MX, y: 5.95, w: W - 2 * MX, h: 0.4, fontFace: FONT, fontSize: 14, color: gap > 10 ? 'BE123C' : MUTED, margin: 0, isTextBox: true });
@@ -119,7 +119,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
           showValue: true, showPercent: false, dataLabelColor: 'FFFFFF', dataLabelFontSize: 13, dataLabelFontFace: FONT,
           showTitle: false,
         });
-        s.addText(`${k.total}`, { x: 8.2, y: 2.5, w: 4.5, h: 1.2, fontFace: FONT, fontSize: 60, bold: true, color: INK, margin: 0, isTextBox: true });
+        s.addText(`${k.total}`, { x: 8.2, y: 2.5, w: 4.5, h: 1.2, fontSize: 60, bold: C.titleBold, fontFace: C.headFont, color: INK, margin: 0, isTextBox: true });
         s.addText('tarefas no total', { x: 8.2, y: 3.7, w: 4.5, h: 0.5, fontFace: FONT, fontSize: 16, color: MUTED, margin: 0, isTextBox: true });
         s.addText(`${k.open} abertas · ${k.done} concluídas`, { x: 8.2, y: 4.3, w: 4.5, h: 0.5, fontFace: FONT, fontSize: 16, color: MUTED, margin: 0, isTextBox: true });
       }
@@ -134,7 +134,7 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
         { name: 'Concluídas', labels, values: d.weekly.map(w => w.done) },
       ], {
         x: MX, y: 1.3, w: W - 2 * MX, h: 5.4, barDir: 'col', barGrouping: 'clustered', barGapWidthPct: 60,
-        chartColors: ['CBD5E1', C.brand], showLegend: true, legendPos: 't', legendFontFace: FONT, legendFontSize: 13, legendColor: INK,
+        chartColors: [C.chartA, C.chartB], showLegend: true, legendPos: 't', legendFontFace: FONT, legendFontSize: 13, legendColor: INK,
         showValue: true, dataLabelPosition: 'outEnd', dataLabelFontSize: 11, dataLabelColor: MUTED, dataLabelFontFace: FONT,
         catAxisLabelColor: MUTED, catAxisLabelFontFace: FONT, catAxisLabelFontSize: 12,
         valAxisLabelColor: MUTED, valAxisLabelFontFace: FONT, valAxisLabelFontSize: 11,
@@ -185,4 +185,25 @@ export async function downloadWorkPptx(d: WorkDashboard, keys: SlideKey[], palet
 
   const safe = `${d.subject.project_name}-${d.subject.name}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
   await pres.writeFile({ fileName: `status-${safe || 'projeto'}-${new Date().toISOString().slice(0, 10)}.pptx` });
+}
+
+// Topo dos slides de conteúdo. WTorre: ponto em Azul 03 e linha Cinza, como os títulos de seção do guia.
+export function contentTop(C: PptxTheme, np: boolean): pptxgen.SlideMasterProps['objects'] {
+  if (np) return [{ rect: { x: MX, y: 0, w: 0.8, h: 0.07, fill: { color: C.brand } } }];
+  return [
+    { rect: { x: MX, y: 1.18, w: W - 2 * MX, h: 0.012, fill: { color: C.line } } },
+  ];
+}
+
+// Capa: faixa lateral (WTorre) ou o padrão de faixas do guia (Nubank Parque) na borda direita.
+export function coverDecor(pres: pptxgen, s: pptxgen.Slide, C: PptxTheme) {
+  if (C.wtPattern) {
+    // Padrão da marca: a sigla "WT" repetida, em blocos, na lateral direita.
+    s.addText(Array.from({ length: 5 }, () => 'WT WT').join('\n'), { x: W - 3.6, y: 0.5, w: 3.4, h: H - 1, fontFace: 'Montserrat Black', fontSize: 64, bold: true, color: C.wtPattern, align: 'right', valign: 'middle', margin: 0, lineSpacingMultiple: 0.95, isTextBox: true });
+    s.addShape(pres.ShapeType.rect, { x: 1, y: 1.38, w: 0.6, h: 0.05, fill: { color: C.brand }, line: { type: 'none' } });
+    return;
+  }
+  if (!C.stripes) { s.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.25, h: H, fill: { color: C.brand } }); return; }
+  const bw = 2.7; const bx = W - bw;
+  for (const r of stripeRects()) s.addShape(pres.ShapeType.rect, { x: bx + r.x * bw, y: r.y * H, w: r.w * bw, h: r.h * H, fill: { color: C.stripes }, line: { type: 'none' } });
 }

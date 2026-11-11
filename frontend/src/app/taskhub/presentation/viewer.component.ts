@@ -1,6 +1,7 @@
 import { Component, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, computed, signal } from '@angular/core';
 import { WorkDashboard } from '../core/models';
 import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from './slides';
+import { DeckTheme, ensureBrandFonts, stripeRects } from './deck-theme';
 
 // Apresentação dentro do sistema: tela cheia, um slide por vez (← → para navegar, Esc para sair).
 // Usa os mesmos slides e dados do PowerPoint.
@@ -8,12 +9,14 @@ import { HEALTH_LABEL, SLIDES, SlideKey, fmtDate, linkPhrase, weekLabel } from '
   selector: 'app-presentation-viewer',
   standalone: true,
   template: `
-    <div class="pv" role="dialog" aria-modal="true" [attr.aria-label]="'Apresentação: ' + title">
+    <div class="pv" [class.pv--np]="theme === 'nubank-parque'" [class.pv--wt]="theme === 'wtorre'" role="dialog" aria-modal="true" [attr.aria-label]="'Apresentação: ' + title">
       <div class="pv-stage">
         @switch (current()) {
           @case ('capa') {
             <div class="pv-slide pv-cover">
-              <div class="pv-cover__brand">TaskHub</div>
+              @if (theme === 'nubank-parque') { <svg class="pv-stripes" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">@for (r of stripes; track $index) { <rect [attr.x]="r.x" [attr.y]="r.y" [attr.width]="r.w" [attr.height]="r.h" /> }</svg> }
+              @else { <div class="pv-wt" aria-hidden="true">@for (n of [1, 2, 3, 4, 5]; track n) { <span>WT WT</span> }</div> }
+              <div class="pv-cover__brand">{{ theme === 'nubank-parque' ? 'Nubank Parque' : 'WTorre' }}</div>
               <h1 class="pv-cover__title">{{ title }}</h1>
               <div class="pv-cover__meta">{{ coverMeta() }}</div>
               <span class="pv-pill" [class]="'pv-pill pv-pill--' + d.subject.health">{{ health[d.subject.health] }}</span>
@@ -117,8 +120,10 @@ export class PresentationViewerComponent implements OnInit, OnDestroy {
   @Input({ required: true }) d!: WorkDashboard;
   @Input({ required: true }) keys: SlideKey[] = [];
   @Input() title = '';
+  @Input() theme: DeckTheme = 'nubank-parque';
   @Output() close = new EventEmitter<void>();
   health = HEALTH_LABEL;
+  stripes = stripeRects();
   today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   index = signal(0);
   slides = computed(() => SLIDES.filter(s => this.keys.includes(s.key)));
@@ -127,7 +132,7 @@ export class PresentationViewerComponent implements OnInit, OnDestroy {
   statuses = computed(() => this.d.by_status.filter(s => s.count > 0));
   private maxWeek = computed(() => Math.max(1, ...this.d.weekly.flatMap(w => [w.created, w.done])));
 
-  ngOnInit() { document.documentElement.requestFullscreen?.().catch(() => {}); }
+  ngOnInit() { ensureBrandFonts(); document.documentElement.requestFullscreen?.().catch(() => {}); }
   ngOnDestroy() { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); }
 
   coverMeta() {

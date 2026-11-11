@@ -11,6 +11,7 @@ import { TEAM_SLIDES, TeamSlideKey, buildTeamDeck, defaultTeamSlides } from '../
 import { DeckSlide } from '../presentation/day-deck';
 import { DeckViewerComponent } from '../presentation/deck-viewer.component';
 import { downloadDeckPptx } from '../presentation/deck-pptx';
+import { DeckTheme, DeckThemePickerComponent, readDeckTheme } from '../presentation/deck-theme';
 import { savePainelLast } from '../core/sector-nav';
 import { TeamBarComponent } from '../shared/team-bar.component';
 
@@ -22,7 +23,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
 @Component({
   selector: 'app-team-dashboard',
   standalone: true,
-  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent, TeamBarComponent],
+  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent, TeamBarComponent, DeckThemePickerComponent],
   template: `
     @if (d(); as d) {
       <div class="page td-page" [class.td-page--sector]="kind() === 'sector'">
@@ -281,9 +282,10 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
     @if (choosing()) {
       <div class="modal-scrim" (click)="choosing.set(false)">
         <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentar o painel">
-          <div class="modal-head">Apresentar<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.team?.name }} · escolha os slides</div></div>
+          <div class="modal-head">Apresentar<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.team?.name }} · escolha os slides e como apresentar</div></div>
           <div class="modal-body">
-            <div class="row" style="justify-content: space-between">
+            <app-deck-theme-picker [value]="theme()" (valueChange)="theme.set($event)" />
+                        <div class="row" style="justify-content: space-between">
               <span class="form-label">Slides ({{ picked().length }} de {{ slideOptions().length }})</span>
               <span class="row small"><button type="button" class="link-btn" (click)="picked.set(slideOptions().map(s => s.key))">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
             </div>
@@ -304,7 +306,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
       </div>
     }
     @if (presenting() && deck().length) {
-      <app-deck-viewer [slides]="deck()" [footer]="'TaskHub · ' + (d()?.team?.name || '')" (close)="presenting.set(false)" />
+      <app-deck-viewer [slides]="deck()" [theme]="theme()" [footer]="'TaskHub · ' + (d()?.team?.name || '')" (close)="presenting.set(false)" />
     }
   `,
 })
@@ -322,6 +324,7 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
   presenting = signal(false);
   exporting = signal(false);
   deck = signal<DeckSlide[]>([]);
+  theme = signal<DeckTheme>('nubank-parque');
   picked = signal<TeamSlideKey[]>([]);
   projectFilter = signal<ProjectFilter>('all');
   readonly Math = Math;
@@ -399,6 +402,7 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
     const d = this.d();
     if (!d) return;
     this.picked.set(defaultTeamSlides(d, this.kind() === 'sector'));
+    this.theme.set(readDeckTheme(this.ui.palette()));
     this.choosing.set(true);
   }
   togglePick(k: TeamSlideKey) {
@@ -419,7 +423,7 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
     try {
       const name = this.d()?.team.name || 'painel';
       const file = `painel-${name.replace(/[^\wÀ-ÿ-]+/g, '-').replace(/^-|-$/g, '') || 'painel'}`;
-      await downloadDeckPptx(this.buildDeck(), this.ui.palette(), `TaskHub · ${name}`, file);
+      await downloadDeckPptx(this.buildDeck(), this.theme(), `TaskHub · ${name}`, file);
       this.toast.show('PowerPoint gerado. O arquivo foi baixado.');
       this.choosing.set(false);
     } catch {

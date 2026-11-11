@@ -12,6 +12,7 @@ import { WeatherService } from '../core/weather.service';
 import { DAY_SLIDES, DaySlideKey, DeckSlide, buildDayDeck } from '../presentation/day-deck';
 import { DeckViewerComponent } from '../presentation/deck-viewer.component';
 import { downloadDeckPptx } from '../presentation/deck-pptx';
+import { DeckTheme, DeckThemePickerComponent, readDeckTheme } from '../presentation/deck-theme';
 import { askCloseTask } from '../core/confirm-open';
 
 type PlanTask = Task & { period: Period };
@@ -33,7 +34,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
 @Component({
   selector: 'app-my-day',
   standalone: true,
-  imports: [FormsModule, RouterLink, DeckViewerComponent],
+  imports: [FormsModule, RouterLink, DeckViewerComponent, DeckThemePickerComponent],
   template: `
     <div class="page day-line">
       <div class="page-head">
@@ -220,6 +221,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
           <div class="modal-head">Apresentação do dia<div class="muted small" style="font-weight:500;margin-top:2px">{{ dateLabel() }} · escolha os slides e como apresentar</div></div>
           <div class="modal-body">
             <div class="field"><label class="form-label" for="dp-t">Título</label><input id="dp-t" class="form-field" [(ngModel)]="ptitle" /></div>
+            <app-deck-theme-picker [value]="theme()" (valueChange)="theme.set($event)" />
             <div class="row" style="justify-content: space-between">
               <span class="form-label">Slides ({{ picked().length }} de {{ daySlides.length }})</span>
               <span class="row small"><button type="button" class="link-btn" (click)="picked.set(allSlides)">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
@@ -241,7 +243,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
       </div>
     }
 
-    @if (presenting()) { <app-deck-viewer [slides]="deck()" [footer]="'TaskHub · Meu Dia · ' + dateLabel()" (close)="presenting.set(false)" /> }
+    @if (presenting()) { <app-deck-viewer [slides]="deck()" [theme]="theme()" [footer]="'TaskHub · Meu Dia · ' + dateLabel()" (close)="presenting.set(false)" /> }
 
     @if (closing()) {
       <div class="modal-scrim" (click)="closing.set(false)">
@@ -313,6 +315,7 @@ export class MyDayPage implements OnInit, OnDestroy {
   exporting = signal(false);
   picked = signal<DaySlideKey[]>(DAY_SLIDES.map(x => x.key));
   ptitle = '';
+  theme = signal<DeckTheme>('nubank-parque');
   deck = signal<DeckSlide[]>([]);
 
   isToday = computed(() => this.date() === todayIso());
@@ -471,6 +474,7 @@ export class MyDayPage implements OnInit, OnDestroy {
 
   openPresent() {
     this.ptitle = `Meu dia · ${this.dateLabel()}`;
+    this.theme.set(readDeckTheme(this.ui.palette()));
     this.choosing.set(true);
   }
   togglePick(k: DaySlideKey) { this.picked.update(l => (l.includes(k) ? l.filter(x => x !== k) : [...l, k])); }
@@ -482,7 +486,7 @@ export class MyDayPage implements OnInit, OnDestroy {
   async downloadPptx() {
     this.exporting.set(true);
     try {
-      await downloadDeckPptx(this.buildDeck(), this.ui.palette(), `TaskHub · Meu Dia · ${this.dateLabel()}`, `meu-dia-${this.date()}`);
+      await downloadDeckPptx(this.buildDeck(), this.theme(), `TaskHub · Meu Dia · ${this.dateLabel()}`, `meu-dia-${this.date()}`);
       this.toast.show('PowerPoint gerado. O arquivo foi baixado.');
       this.choosing.set(false);
     } catch {
