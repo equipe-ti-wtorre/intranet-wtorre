@@ -66,5 +66,5 @@ FROM (
   WHERE parent_id IS NULL
 ) AS calc
 WHERE NOT EXISTS (
-  SELECT 1 FROM (SELECT id FROM menu_items WHERE url = '/cipa') AS chk
+  SELECT 1 FROM (SELECT id FROM menu_items WHERE url IN ('/cipa', '/agenda_rh')) AS chk
 );
