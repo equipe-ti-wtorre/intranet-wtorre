@@ -264,7 +264,7 @@ location / {
 | `Access denied` MySQL | Ajuste `DB_USER`/`DB_PASS` no aaPanel |
 | Upload retorna 413 | Ajuste `client_max_body_size` no Nginx e `MAX_UPLOAD_MB` no `.env` |
 | Erro de permissão no upload | `chown -R www:www backend/storage/` |
-| Tipo de arquivo rejeitado | Apenas pdf, docx, xlsx, pptx, png, jpg, jpeg, zip |
+| Tipo de arquivo rejeitado | Apenas pdf, docx, xlsx, pptx, png, jpg, jpeg, zip, eps, otf |
 
 ## 7. Fluxo de autenticação
 

@@ -1,7 +1,7 @@
 const path = require('path');
 const { env } = require('../config/env');
 
-const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg', 'zip'];
+const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg', 'zip', 'eps', 'otf'];
 
 const EXT_TO_MIMES = {
   pdf: ['application/pdf'],
@@ -12,6 +12,22 @@ const EXT_TO_MIMES = {
   jpg: ['image/jpeg'],
   jpeg: ['image/jpeg'],
   zip: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
+  eps: [
+    'application/postscript',
+    'application/eps',
+    'application/x-eps',
+    'image/eps',
+    'image/x-eps',
+    'application/octet-stream',
+  ],
+  otf: [
+    'font/otf',
+    'font/opentype',
+    'application/font-sfnt',
+    'application/x-font-otf',
+    'application/vnd.ms-opentype',
+    'application/octet-stream',
+  ],
 };
 
 const PREVIEWABLE_MIMES = new Set([

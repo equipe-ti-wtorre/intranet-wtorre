@@ -182,6 +182,6 @@ export interface CategoriaReorderItem {
   ordem: number;
 }
 
-export const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg', 'zip'];
+export const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg', 'zip', 'eps', 'otf'];
 export const MAX_UPLOAD_MB = 50;
 export const PREVIEWABLE_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg'];

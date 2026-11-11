@@ -963,7 +963,7 @@ export class DocumentosAdminComponent implements OnInit {
 
   fileIconClass(ext: string): string {
     const e = ext.toLowerCase();
-    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'zip'].includes(e)) {
+    if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'zip', 'eps', 'otf'].includes(e)) {
       return e;
     }
     return 'default';
