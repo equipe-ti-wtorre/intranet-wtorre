@@ -98,7 +98,7 @@ type KanbanSort = 'manual' | Sort;
           <app-project-timeline [projectId]="p.id" [board]="isBoard()" (changed)="load(); data.reloadProjects()" />
         } @else {
         <div class="wk-toolbar">
-          <input class="input" style="width: 240px; height: 36px" [placeholder]="'Buscar ' + t().one" [ngModel]="queryText" (ngModelChange)="search($event)" [attr.aria-label]="'Buscar ' + t().one" />
+          <input class="input" style="width: 240px; height: 36px" [placeholder]="'Buscar ' + t().one + ' ou #id'" [ngModel]="queryText" (ngModelChange)="search($event)" [attr.aria-label]="'Buscar ' + t().one" />
           <div class="wk-filter">
             <button type="button" class="btn btn-sm wk-filter-btn" [class.on]="filtersOpen()" [attr.aria-expanded]="filtersOpen()" (click)="filtersOpen.set(!filtersOpen())">
               <app-icon name="list" [size]="14" />Filtros
@@ -242,7 +242,7 @@ type KanbanSort = 'manual' | Sort;
                         <div class="wk-table__proj">
                           <span class="wk-table__sq" [style.background]="w.color"></span>
                           <span class="wk-table__txt">
-                            <b class="ellipsis">{{ w.name }}</b>
+                            <b class="ellipsis"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</b>
                             <span class="muted small ellipsis">{{ w.owners[0]?.name || w.owner_name || 'Sem responsável' }}</span>
                           </span>
                         </div>
@@ -303,7 +303,7 @@ type KanbanSort = 'manual' | Sort;
         <div class="row" style="gap: 10px">
           <span class="wk-ic" [style.background]="w.completed_at ? 'var(--text-subtle)' : w.color">{{ initials(w.name) }}</span>
           <div style="min-width: 0; flex: 1">
-            <a class="wk-name" [routerLink]="workLink(w)">{{ w.name }}</a>
+            <a class="wk-name" [routerLink]="workLink(w)"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</a>
             <div class="wk-meta">{{ w.description || 'Sem descrição' }}</div>
             @if (w.continues?.length || w.continued_by?.length) {
               <div class="wk-meta">@if (w.continues?.length) { Continua de {{ namesOf(w.continues) }} }@if (w.continues?.length && w.continued_by?.length) { · }@if (w.continued_by?.length) { Nova versão: {{ namesOf(w.continued_by) }} }</div>
@@ -313,6 +313,13 @@ type KanbanSort = 'manual' | Sort;
             <div class="wk-actions">
               <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="openEdit(w)" [attr.aria-label]="'Editar ' + t().one" [title]="'Editar ' + t().one"><app-icon name="gear" [size]="14" /></button>
               <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="toggleDone(w)" [attr.aria-label]="w.completed_at ? 'Reabrir ' + t().one : 'Marcar como concluído'" [title]="w.completed_at ? 'Reabrir ' + t().one : 'Marcar como concluído'"><app-icon name="check" [size]="14" /></button>
+              @if (!w.completed_at) {
+                @if (w.pause_start) {
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="resume(w)" [attr.aria-label]="'Retomar ' + t().one" [title]="'Retomar ' + t().one"><app-icon name="play" [size]="14" /></button>
+                } @else {
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="startPause(w)" [attr.aria-label]="'Pausar ' + t().one" [title]="'Pausar ' + t().one"><app-icon name="pause" [size]="14" /></button>
+                }
+              }
               @if (canCreate()) {
                 <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="deleting.set(w)" [attr.aria-label]="'Excluir ' + t().one" [title]="'Excluir ' + t().one"><app-icon name="trash" [size]="14" /></button>
               }
@@ -336,7 +343,8 @@ type KanbanSort = 'manual' | Sort;
           </div>
         }
         <div class="row wk-foot">
-          @if (pausedNow(w)) { <span class="wk-pause" [title]="'Em pausa de ' + fmtYear(w.pause_start!) + ' a ' + fmtYear(w.pause_end!)">Em pausa até {{ dmShort(w.pause_end!) }}</span> }
+          @if (pausedNow(w)) { <span class="wk-pause" [title]="pauseTitle(w)">{{ openPause(w) ? 'Em pausa' : 'Em pausa até ' + dmShort(w.pause_end!) }}</span> }
+          @else if (!w.completed_at && w.pause_start) { <span class="wk-pause" [title]="pauseTitle(w)">Pausa a partir de {{ dmShort(w.pause_start) }}</span> }
           @if (view() !== 'kanban' && w.phase_name) {
             <span class="phase-chip" [style.--phase]="w.phase_color">{{ w.phase_name }}</span>
           }
@@ -472,6 +480,41 @@ type KanbanSort = 'manual' | Sort;
       </div>
     }
 
+    @if (pausing(); as w) {
+      <div class="modal-scrim" (click)="pausing.set(null)">
+        <div class="modal" style="max-width: 460px" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="'Pausar ' + t().one">
+          <div class="modal-head">Pausar {{ t().one }}</div>
+          <div class="modal-body">
+            <p class="muted small" style="margin: 0 0 12px"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</p>
+            <div class="fields">
+              <div class="field"><label for="pz-s">Início da pausa</label><input id="pz-s" type="date" class="input" [min]="today" [(ngModel)]="pauseForm.start" /></div>
+              <div class="field"><label for="pz-e">Retomar em <span class="muted">(opcional)</span></label><input id="pz-e" type="date" class="input" [min]="pauseForm.start || today" [(ngModel)]="pauseForm.end" />
+                <span class="hint">{{ pauseForm.end ? 'Último dia da pausa.' : 'Sem data: fica pausado até alguém retomar.' }}</span></div>
+            </div>
+            <div class="field"><label for="pz-r">Motivo</label>
+              <textarea id="pz-r" class="textarea" style="min-height: 70px" maxlength="470" appAutofocus [(ngModel)]="pauseForm.reason" placeholder="Ex.: aguardando retorno do fornecedor"></textarea>
+              @if (pauseForm.reason.trim().length < 10) {
+                <span class="hint" style="color: var(--warn, #b45309)">Escreva pelo menos 10 letras · faltam {{ 10 - pauseForm.reason.trim().length }}</span>
+              } @else {
+                <span class="hint">Vai para o histórico de datas e para o aviso a responsáveis e solicitantes.</span>
+              }</div>
+            @if (w.due_date && pauseForm.end) {
+              <label class="check-label" style="align-items: flex-start">
+                <input type="checkbox" [(ngModel)]="pauseForm.push_due" />
+                <span>Adiar a previsão de entrega pelos dias úteis da pausa @if (pauseDays()) { <span class="muted">({{ pauseDays() }} {{ pauseDays() === 1 ? 'dia' : 'dias' }}; previsão atual {{ fmtYear(w.due_date) }})</span> }</span>
+              </label>
+            } @else if (w.due_date) {
+              <p class="hint" style="margin: 0">Sem data de retorno, a previsão de entrega não muda agora. Ao retomar, você escolhe se ela anda os dias úteis em que o {{ t().one }} ficou parado.</p>
+            }
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" (click)="pausing.set(null)">Cancelar</button>
+            <button class="btn btn-primary" [disabled]="pauseInvalid() || saving()" (click)="savePause(w)">Pausar</button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (deleting(); as w) {
       <app-confirm-delete [title]="'Excluir ' + t().one" [name]="w.name" [busy]="removing()" [message]="deleteMessage(w)"
                           (cancel)="deleting.set(null)" (confirm)="remove(w)" />
@@ -487,7 +530,7 @@ type KanbanSort = 'manual' | Sort;
           <div class="wk-detail__head">
             <span class="wk-table__sq wk-detail__sq" [style.background]="w.color"></span>
             <div class="grow">
-              <h2>{{ w.name }}</h2>
+              <h2><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</h2>
               <div class="wk-detail__badges">
                 @if (w.completed_at) { <span class="wk-badge wk-badge--ok">Concluído</span> }
                 @else if (w.phase_name) { <span class="wk-badge" [style.--wk-badge]="w.phase_color">{{ w.phase_name }}</span> }
@@ -645,6 +688,10 @@ export class ProjectWorksPage implements OnChanges {
   isBoard = computed(() => !!this.project()?.is_board);
   t = computed(() => termsFor());
   memberNames = computed(() => (this.team()?.members || []).map(m => m.name).join(', '));
+  // Pausa manual: período e motivo; a previsão anda os dias úteis da pausa se a pessoa quiser.
+  pausing = signal<Work | null>(null);
+  pauseForm = { start: '', end: '', reason: '', push_due: true };
+  readonly today = todayIso();
   deleting = signal<Work | null>(null);
   removing = signal(false);
   locked = computed(() => {
@@ -983,11 +1030,13 @@ export class ProjectWorksPage implements OnChanges {
   private matches = (w: Work, f: Filter) =>
     f === 'todos' || (f === 'responsavel' && (w.owners?.some(o => o.id === this.me()) || w.owner_id === this.me())) || (f === 'participo' && w.members.some(m => m.id === this.me()))
     || (f === 'atraso' && w.tasks_overdue > 0 && !w.completed_at);
+  // Busca pelo identificador: "#12" ou só "12".
+  private idMatch(w: Work, q: string) { const m = /^#?(\d+)$/.exec(q); return !!m && w.id === Number(m[1]); }
   private visible = computed(() => {
     const q = this.q().trim().toLowerCase();
     const ph = this.phaseFilter();
     const list = this.works().filter(w => this.matches(w, this.filter()) && (ph === null || this.phaseOf(w) === ph)
-      && (!q || w.name.toLowerCase().includes(q) || (w.description || '').toLowerCase().includes(q)));
+      && (!q || this.idMatch(w, q) || w.name.toLowerCase().includes(q) || (w.description || '').toLowerCase().includes(q)));
     return list;
   });
   totals = computed(() => this.works().reduce((t, w) => ({ total: t.total + w.tasks_total, done: t.done + w.tasks_done, overdue: t.overdue + w.tasks_overdue }), { total: 0, done: 0, overdue: 0 }));
@@ -1275,6 +1324,51 @@ export class ProjectWorksPage implements OnChanges {
     this.api.tasks({ project_id: w.project_id, section_id: w.id, status: 'open', with_steps: 1 }).subscribe({
       next: list => { if (confirmOpen(`o ${T.one}`, openWorkLines(list))) run(); },
       error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${T.one}.`)),
+    });
+  }
+
+  // Pausa sem data de retorno: o backend guarda o fim como 9999-12-31.
+  openPause(w: Work) { return !!w.pause_end && w.pause_end.startsWith('9999'); }
+  pauseTitle(w: Work) {
+    return this.openPause(w) ? `Em pausa desde ${this.fmtYear(w.pause_start!)}, sem data de retorno`
+      : `Pausa de ${this.fmtYear(w.pause_start!)} a ${this.fmtYear(w.pause_end!)}`;
+  }
+  startPause(w: Work) {
+    this.pauseForm = { start: this.today, end: '', reason: '', push_due: true };
+    this.pausing.set(w);
+  }
+  pauseDays() {
+    const { start, end } = this.pauseForm;
+    if (!start || !end || end < start) return 0;
+    let n = 0;
+    for (let d = new Date(start + 'T12:00:00'); d <= new Date(end + 'T12:00:00'); d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) n++;
+    }
+    return n;
+  }
+  pauseInvalid() {
+    const { start, end, reason } = this.pauseForm;
+    return !start || (!!end && (end < start || end < this.today)) || reason.trim().length < 10;
+  }
+  savePause(w: Work) {
+    const T = this.t();
+    this.saving.set(true);
+    this.api.pauseWork(w.id, { ...this.pauseForm, end: this.pauseForm.end || null, reason: this.pauseForm.reason.trim(), push_due: this.pauseForm.push_due && !!w.due_date && !!this.pauseForm.end }).subscribe({
+      next: () => { this.saving.set(false); this.pausing.set(null); this.load(); this.toast.show(`${T.One} pausado.`); },
+      error: e => { this.saving.set(false); this.toast.error(errorMessage(e, `Não foi possível pausar o ${T.one}.`)); },
+    });
+  }
+  resume(w: Work) {
+    const T = this.t();
+    let push = false;
+    const started = !!w.pause_start && w.pause_start.slice(0, 10) < this.today;
+    if (this.openPause(w) && started && w.due_date) {
+      if (!confirm(`Retomar ${w.name}?\nA pausa termina agora.`)) return;
+      push = confirm(`Adiar a previsão de entrega (${this.fmtYear(w.due_date)}) pelos dias úteis em que ${w.name} ficou pausado?\nOK adia; Cancelar mantém a data.`);
+    } else if (!confirm(`Retomar ${w.name}?\nA pausa termina agora. A previsão de entrega continua como está.`)) return;
+    this.api.resumeWork(w.id, push).subscribe({
+      next: () => { this.load(); this.toast.show(`${T.One} retomado.`); },
+      error: e => this.toast.error(errorMessage(e, `Não foi possível retomar o ${T.one}.`)),
     });
   }
 

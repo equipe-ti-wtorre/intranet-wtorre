@@ -12,7 +12,7 @@ import { AvatarComponent, EmptyComponent, IconComponent } from '../shared/ui';
   standalone: true,
   imports: [AvatarComponent, IconComponent, EmptyComponent],
   template: `
-    <div class="page" style="max-width:860px">
+    <div class="page">
       <div class="page-head">
         <div><h1>Caixa de entrada</h1><div class="sub">Atribuições, menções e prazos. Arquive ou exclua o que já tratou.</div></div>
         <div class="actions">

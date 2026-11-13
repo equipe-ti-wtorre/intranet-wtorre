@@ -155,7 +155,10 @@ const FUNCTIONS = [
       WHERE t.id = p_task;
      IF v_created IS NULL AND v_space IS NULL THEN RETURN NULL; END IF;
      IF v_space = 'pessoal' THEN
-       RETURN IF(v_created = p_user, 'edit', NULL);
+       IF v_created = p_user THEN RETURN 'edit'; END IF;
+       -- Etapa de tarefa individual com outra pessoa: ela vê a tarefa, comenta e conclui a etapa dela.
+       IF EXISTS (SELECT 1 FROM th_subtasks s WHERE s.task_id = p_task AND s.assignee_id = p_user) THEN RETURN 'comment'; END IF;
+       RETURN NULL;
      END IF;
      IF v_created = p_user THEN RETURN 'edit'; END IF;
      IF v_private = 1 AND NOT (v_assignee <=> p_user)

@@ -130,7 +130,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                   @if (draft()) { <span class="tl-grip" aria-hidden="true">⋮⋮</span> }
                   <span class="wk-dot" [style.background]="r.done ? 'var(--text-subtle)' : r.color"></span>
                   <div class="tl-label__text">
-                    <button type="button" class="tl-label__name" [title]="r.name" (click)="select(r.key); $event.stopPropagation()">{{ r.name }}</button>
+                    <button type="button" class="tl-label__name" [title]="r.name" (click)="select(r.key); $event.stopPropagation()">@if (r.work) { <span class="wk-id">#{{ r.work.id }}</span> }{{ r.name }}</button>
                     <div class="tl-label__dates">
                       @if (r.planned) { {{ fmt(r.planned.start) }} a {{ fmt(r.planned.end) }} }
                       @else if (r.cur) { <span class="muted">sem datas · {{ fmt(r.cur.start) }} a {{ fmt(r.cur.end) }}</span> }
@@ -277,7 +277,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                   }
                   @for (p of r.pauses; track $index) {
                     <dt>Pausa</dt>
-                    <dd>{{ fmt(p.start) }} a {{ fmt(p.end) }} · {{ businessSpan(p.start, p.end) }} dias úteis @if (p.cause_name) { <span class="muted">para {{ p.cause_name }}</span> }</dd>
+                    <dd>{{ fmt(p.start) }} @if (p.open) { até hoje, sem data de retorno } @else { a {{ fmt(p.end) }} } · {{ businessSpan(p.start, p.end) }} dias úteis @if (p.cause_name) { <span class="muted">para {{ p.cause_name }}</span> }</dd>
                   }
                   @if (r.work?.completed_at) { <dt>Concluído em</dt><dd>{{ fmt(r.work?.completed_at) }}</dd> }
                 </dl>

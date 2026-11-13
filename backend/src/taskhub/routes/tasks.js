@@ -232,7 +232,6 @@ router.post('/', ah(async (req, res) => {
   const steps = d.subtasks.map(s => (typeof s === 'string' ? { title: s } : s));
   for (const s of steps) {
     if (!s.assignee_id) continue;
-    if (space === 'pessoal' && s.assignee_id !== me) throw new HttpError(400, 'Em tarefas individuais as etapas ficam com você.');
     await assertAssignable({ query }, projectId, s.assignee_id, me);
   }
 
