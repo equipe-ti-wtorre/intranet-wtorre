@@ -25,6 +25,8 @@ const ICONS: Record<string, string> = {
   menu: '<path d="M2.5 4h11M2.5 8h11M2.5 12h11"/>',
   board: '<rect x="2" y="2.5" width="3.5" height="11" rx="1"/><rect x="6.3" y="2.5" width="3.5" height="7" rx="1"/><rect x="10.6" y="2.5" width="3.5" height="9" rx="1"/>',
   list: '<path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><circle cx="2.8" cy="4" r=".6"/><circle cx="2.8" cy="8" r=".6"/><circle cx="2.8" cy="12" r=".6"/>',
+  pause: '<path d="M6 3.8v8.4M10 3.8v8.4"/>',
+  play: '<path d="M5.5 3.6v8.8L12.5 8z"/>',
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/>',
   info: '<circle cx="8" cy="8" r="5.8"/><path d="M8 7.3v3.6M8 5.1v.1"/>',
   refresh: '<path d="M13 3.5v3h-3"/><path d="M12.7 6.5A5 5 0 103 8.5"/>',

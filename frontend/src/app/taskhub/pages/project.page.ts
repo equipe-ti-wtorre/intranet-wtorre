@@ -42,7 +42,7 @@ function savedView(): Tab {
             <div class="grow">
               <div class="row" style="gap:10px">
                 <span style="width:12px;height:12px;border-radius:4px" [style.background]="w.color"></span>
-                <h1>{{ w.name }}</h1>
+                <h1><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</h1>
                 <span class="health" [class]="'health ' + workHealth()"><i></i>{{ w.completed_at ? 'Concluído' : healthLabel[workHealth()] }}</span>
               </div>
               <div class="sub">
@@ -118,7 +118,7 @@ function savedView(): Tab {
                 </div>
                 @if (w.phase_changed_at) { <span class="hint">Desde {{ shortDate(w.phase_changed_at) }}.</span> }
                 @if (!w.completed_at && w.pause_start && w.pause_end) {
-                  <span class="wk-pause" style="align-self: flex-start">Em pausa de {{ w.pause_start.slice(8, 10) }}/{{ w.pause_start.slice(5, 7) }} a {{ w.pause_end.slice(8, 10) }}/{{ w.pause_end.slice(5, 7) }}</span>
+                  <span class="wk-pause" style="align-self: flex-start">Em pausa {{ w.pause_end.startsWith('9999') ? 'desde' : 'de' }} {{ w.pause_start.slice(8, 10) }}/{{ w.pause_start.slice(5, 7) }}@if (!w.pause_end.startsWith('9999')) { a {{ w.pause_end.slice(8, 10) }}/{{ w.pause_end.slice(5, 7) }} } @else { · sem data de retorno }</span>
                 }
               </div>
             </div>

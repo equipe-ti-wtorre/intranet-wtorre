@@ -46,7 +46,7 @@ export interface Task {
   space: Space;
   tags: string[];
   project: { id: number; name: string; color: string; team_id: number | null; team_name?: string | null } | null;
-  section: { id: number; name: string; completed_at?: string | null } | null;
+  section: { id: number; name: string; completed_at?: string | null; my_role?: 'manage' | 'view' | 'follow' | null } | null;
   phase?: { id: number; name: string; color: string } | null;
   status: { id: number | null; name: string; color: string; category: StatusCategory };
   assignee: Person | null;
@@ -138,7 +138,7 @@ export interface TimelineWork extends Work {
   planned_start: string | null; planned_due: string | null;
   pauses: WorkPause[];
 }
-export interface WorkPause { start: string; end: string; cause_name: string | null }
+export interface WorkPause { start: string; end: string; open?: boolean; cause_name: string | null }
 /** Histórico de datas: criação, mudança manual (com motivo), reajuste, pausa ou fases. */
 export interface WorkDateLog {
   id: number; kind: 'criacao' | 'manual' | 'reajuste' | 'pausa' | 'fases';
