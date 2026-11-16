@@ -60,13 +60,13 @@ const ACTIVITY_TEXT: Record<string, string> = {
       <div class="drawer-head">
         @if (task(); as t) {
           @if (t.project) {
-            @if (seesProject()) {
+            @if (seesWork()) {
               <a class="proj-tag" [routerLink]="t.section ? ['/ti/taskhub/projetos', t.project.id, 'trabalhos', t.section.id] : ['/ti/taskhub/projetos', t.project.id]" (click)="close()"><i [style.background]="t.project.color"></i>{{ t.project.name }}@if (t.section) { · {{ t.section.name }} }</a>
             } @else {
               <span class="proj-tag" title="Você participa desta tarefa, não do projeto inteiro"><i [style.background]="t.project.color"></i>{{ t.project.name }}</span>
             }
           } @else { <span class="muted small">Sem projeto</span> }
-          @if (t.space === 'pessoal') { <span class="space-chip">Individual · só você vê</span> }
+          @if (t.space === 'pessoal') { <span class="space-chip">Individual · {{ sharedSteps() ? 'você e quem tem etapa' : 'só você vê' }}</span> }
         }
         <span class="grow"></span>
         @if (task()) {
@@ -92,7 +92,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
             <div class="note-info">Você acompanha esta tarefa (só leitura).</div>
           } @else if (t.access === 'work') {
             <div class="note-info">Tarefa criada por {{ t.created_by?.name }}. Você atualiza o status, a estimativa, o bloqueio e as etapas, e pode comentar. O restante quem altera é o gestor.</div>
-          } @else if (!seesProject() && t.project) {
+          } @else if (!seesWork() && t.project) {
             <div class="note-info">
               @if (t.assignee?.id === me || t.created_by?.id === me) { Você está nesta tarefa, não no projeto inteiro: o resto do projeto continua visível só para os participantes. }
               @else { Você participa desta tarefa por uma etapa (destacada abaixo). Pode comentar e concluir a sua parte. }
@@ -257,13 +257,11 @@ const ACTIVITY_TEXT: Record<string, string> = {
                   <button class="btn btn-ghost btn-sm btn-icon" [disabled]="i === 0" (click)="moveSub(i, -1)" aria-label="Subir etapa" title="Subir"><app-icon name="chevron" [size]="12" class="rot-up" /></button>
                   <button class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveSub(i, 1)" aria-label="Descer etapa" title="Descer"><app-icon name="chevron" [size]="12" class="rot-down" /></button>
                 </span>
-                @if (t.space === 'profissional') {
                 <app-person-picker class="step-who" mode="single" variant="inline" [groups]="stepGroups()" [value]="s.assignee_id ?? null"
                                    [specials]="[{ value: null, label: 'Sem responsável' }]" [placeholder]="s.assignee_name || 'Responsável'"
                                    ariaLabel="Responsável da etapa" (picked)="setSub(s.id, { assignee_id: $event })" />
                 @if (s.assignee_id && s.assignee_id !== me) {
                   <label class="check-label step-notify" [title]="t.steps_ordered !== false ? 'Avisar a pessoa quando for a vez dela' : 'Avisar a pessoa sobre esta etapa'"><input type="checkbox" class="switch" role="switch" [checked]="s.notify !== false" (change)="setSub(s.id, { notify: s.notify === false })" /> avisar</label>
-                }
                 }
                 <input type="date" class="inline step-due" [ngModel]="s.due_date" (change)="setSub(s.id, { due_date: $any($event.target).value || null })" aria-label="Prazo da etapa" />
                 <button class="btn btn-ghost btn-sm btn-icon x" (click)="deleteSub(s.id)" aria-label="Remover etapa"><app-icon name="x" [size]="13" /></button>
@@ -512,6 +510,9 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
   me = this.auth.user()?.id ?? 0;
   terms = computed(() => termsFor());
   seesProject = computed(() => { const p = this.task()?.project; return !p || this.data.projects().some(x => x.id === p.id); });
+  // Vê o projeto da tarefa: pelo quadro inteiro ou por gerenciar/participar do projeto (trabalho).
+  seesWork = computed(() => this.seesProject() || ['manage', 'view'].includes(this.task()?.section?.my_role || ''));
+  sharedSteps = computed(() => (this.task()?.subtasks || []).some(s => !!s.assignee_id && s.assignee_id !== this.me));
   myOpenSteps = computed(() => (this.task()?.subtasks || []).filter(s => s.assignee_id === this.me && !s.done));
   isBoard = computed(() => !!this.data.projects().find(x => x.id === this.task()?.project?.id)?.is_board);
   contactCandidates = computed(() => {
@@ -587,7 +588,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
         this.savingEdit.set(false);
         this.touch();
         setTimeout(() => this.autosize());
-        if (!t.project) {
+        if (!t.project || t.space === 'pessoal') {
           this.api.directory().subscribe(p => this.people.set(p));
         } else {
           // Quem é de outro setor não lê o projeto; usa o diretório da empresa.

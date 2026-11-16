@@ -99,7 +99,14 @@ function formatSteps(value) {
 async function loadTask(run, userId, taskId) {
   const { rows } = await run.query(`${TASK_SELECT} WHERE t.id = $2`, [userId, taskId]);
   if (!rows[0] || !rows[0].access) return null;
-  return formatTask(rows[0]);
+  const task = formatTask(rows[0]);
+  // Papel no projeto (trabalho) da tarefa: quem gerencia ou participa vê o projeto inteiro,
+  // mesmo sem ser da equipe dona do quadro.
+  if (task.section) {
+    const { rows: [r] } = await run.query('SELECT th_work_role($1, $2) AS r', [userId, task.section.id]);
+    task.section.my_role = r?.r || null;
+  }
+  return task;
 }
 
 async function logActivity(run, taskId, userId, type, fromValue = null, toValue = null) {

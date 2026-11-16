@@ -123,14 +123,12 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                 <button type="button" class="step-grip" draggable="true" (dragstart)="stepDrag($event, i)" (dragend)="stepDragEnd()" aria-label="Arrastar etapa" title="Arrastar para reordenar"><span></span><span></span><span></span><span></span><span></span><span></span></button>
                 <span class="step-num">{{ i + 1 }}</span>
                 <textarea class="step-title" rows="1" [ngModel]="s.title" (ngModelChange)="editStep(i, { title: $event })" (input)="sizeStep($event)" (keydown.enter)="stepEnter($event)" [attr.aria-label]="'Etapa ' + (i + 1)"></textarea>
-                @if (workId()) {
                   <app-person-picker class="step-who" mode="single" variant="inline" [groups]="stepGroups()" [value]="s.assignee_id ?? null"
                                      [specials]="[{ value: null, label: 'Sem responsável' }]" placeholder="Responsável"
                                      ariaLabel="Responsável da etapa" (picked)="editStep(i, { assignee_id: $event })" />
                   @if (s.assignee_id && s.assignee_id !== me()) {
                     <label class="check-label step-notify" [title]="stepsOrdered ? 'Avisar a pessoa quando for a vez dela' : 'Avisar a pessoa sobre esta etapa'"><input type="checkbox" class="switch" role="switch" [ngModel]="s.notify" (ngModelChange)="editStep(i, { notify: $event })" /> avisar</label>
                   }
-                }
                 <input type="date" class="inline step-due" [ngModel]="s.due_date" (ngModelChange)="editStep(i, { due_date: $event || null })" aria-label="Prazo da etapa" />
                 <button type="button" class="btn btn-ghost btn-sm btn-icon x" (click)="removeStep(i)" [attr.aria-label]="'Remover etapa ' + (i + 1)"><app-icon name="x" [size]="13" /></button>
               </div>
@@ -261,9 +259,9 @@ export class QuickAddComponent implements OnInit, OnDestroy {
   pickWork(id: number | null) {
     this.workId.set(id);
     this.phases.set([]); this.phaseId.set(null);
-    this.steps.update(l => l.map(s => (id ? s : { ...s, assignee_id: null })));
     const w = this.current();
-    if (!w) { this.people.set([]); return; }
+    // Sem projeto, as etapas podem ir para qualquer pessoa da empresa.
+    if (!w) { this.api.directory().subscribe(p => this.people.set(p)); return; }
     this.api.projectPeople(w.project_id, w.id).subscribe(p => this.people.set(p));
     this.api.works(w.project_id).subscribe(r => {
       this.phases.set(r.phases || []);

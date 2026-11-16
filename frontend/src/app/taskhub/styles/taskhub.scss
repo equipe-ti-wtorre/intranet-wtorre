@@ -1649,6 +1649,7 @@ button.dl-title:hover { color: var(--brand); }
 .wk-impact .small { font-size: 12.5px; }
 .wk-impact__pause { color: var(--warn, #b45309); font-weight: 600; }
 .wk-impact p.wk-impact__sug { margin: 12px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wk-id { font-weight: 600; font-size: .82em; color: var(--text-subtle); margin-right: .4em; font-variant-numeric: tabular-nums; }
 .wk-pause { font-size: 11.5px; font-weight: 600; color: var(--warn, #b45309); background: color-mix(in srgb, var(--warn, #b45309) 12%, transparent); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
 .wk-col__body { display: flex; flex-direction: column; gap: 10px; padding: 4px 10px 12px; min-height: 90px; max-height: calc(100vh - 300px); max-height: calc(100dvh - 300px); overflow-y: auto; }
 .wk-col__empty { font-size: 12.5px; color: var(--text-muted); text-align: center; padding: 18px 6px; border: 1px dashed var(--app-border); border-radius: 10px; }

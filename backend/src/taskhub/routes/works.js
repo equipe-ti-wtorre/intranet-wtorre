@@ -1,10 +1,10 @@
-const { isRealDate } = require('../lib/dates');
+const { isRealDate, isoDate, addDays } = require('../lib/dates');
 const router = require('express').Router();
 const { z } = require('zod');
 const { query, tx } = require('../db');
 const { ah, parse, intParam, HttpError } = require('../lib/http');
 const { notify } = require('../lib/notify');
-const { DEFAULT_DURATION, computeTimeline, estimateDuration, businessDaysBetween, dayOf, ownerIdsOf: laneOwners, scheduleImpact } = require('../lib/timeline');
+const { DEFAULT_DURATION, computeTimeline, estimateDuration, businessDaysBetween, dayOf, endAfter, afterBusiness, ownerIdsOf: laneOwners, scheduleImpact } = require('../lib/timeline');
 const { projectTeam, projectPhases, assertProjectPhase, workPhase } = require('../lib/phases');
 const { readDates, logDates, setBaseline, notifyDates, datesChanged } = require('../lib/work-dates');
 const { canEdit: canEditPhases, canEditProject: canEditProjectPhases } = require('./phases');
@@ -652,6 +652,130 @@ router.delete('/works/:id', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---- Pausa manual -------------------------------------------------------------
+// Quem gerencia o projeto pausa com motivo; a data de retorno é opcional.
+// Com data de retorno, a previsão pode andar os dias úteis da pausa na hora.
+// Sem data, a pausa fica aberta (fim guardado como OPEN_END) e, ao retomar, a pessoa escolhe
+// se a previsão anda os dias úteis em que o projeto ficou parado.
+const OPEN_END = '9999-12-31';
+const isOpenEnd = (v) => dayOf(v) === OPEN_END;
+const pauseSchema = z.object({
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário'),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, 'Data inexistente no calendário').nullable().optional(),
+  reason: z.string().trim().max(470, 'Motivo com no máximo 470 letras'),
+  push_due: z.boolean().default(true),
+});
+
+// Responsáveis recebem a nova previsão; solicitantes só o período e o motivo.
+async function notifyPause(c, req, workId, projectId, title, body, devExtra = '') {
+  const { rows: devs } = await c.query(
+    `SELECT user_id FROM work_owners WHERE work_id = $1
+     UNION SELECT owner_id FROM project_sections WHERE id = $1 AND owner_id IS NOT NULL`, [workId]
+  );
+  const devIds = new Set(devs.map(r => r.user_id));
+  for (const uid of await followersOf(c, workId)) {
+    if (uid === req.user.id) continue;
+    await notify(c, { userId: uid, actorId: req.user.id, type: 'work_pause', projectId, title,
+      body: devIds.has(uid) ? body + devExtra : body });
+  }
+}
+
+router.post('/works/:id/pause', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  await requireWork(req.user, id, 'manage');
+  const d = parse(pauseSchema, req.body);
+  const reason = requireReason(d.reason);
+  const end = d.end || OPEN_END;
+  if (end < d.start) throw new HttpError(400, 'O fim da pausa deve ser igual ou depois do início.');
+  const today = isoDate();
+  if (end < today) throw new HttpError(400, 'A pausa precisa terminar hoje ou depois.');
+  await tx(async (c) => {
+    const { rows: [w] } = await c.query('SELECT name, project_id, completed_at FROM project_sections WHERE id = $1', [id]);
+    if (w.completed_at) throw new HttpError(400, 'Projeto concluído não pode ser pausado. Reabra antes.');
+    const { rows: [clash] } = await c.query(
+      'SELECT id FROM work_pauses WHERE work_id = $1 AND start_date <= $2 AND end_date >= $3 LIMIT 1', [id, end, d.start]
+    );
+    if (clash) throw new HttpError(400, 'Já existe uma pausa neste período. Retome a pausa atual antes de criar outra.');
+    const before = await readDates(c, id);
+    let after = before;
+    if (d.end && d.push_due && before.due && before.due >= d.start) {
+      const days = businessDaysBetween(d.start, d.end);
+      if (days > 0) {
+        const newDue = endAfter(afterBusiness(before.due), days);
+        await c.query('UPDATE project_sections SET due_date = $1 WHERE id = $2', [newDue, id]);
+        if (before.start) {
+          await c.query(
+            `INSERT INTO work_schedule (work_id, start_date, duration_days) VALUES ($1, $2, $3)
+             ON CONFLICT (work_id) DO UPDATE SET duration_days = EXCLUDED.duration_days`,
+            [id, before.start, Math.min(365, businessDaysBetween(before.start, newDue))]
+          );
+        }
+        after = await readDates(c, id);
+      }
+    }
+    await c.query(
+      'INSERT INTO work_pauses (work_id, start_date, end_date, cause_work_id, created_by) VALUES ($1, $2, $3, NULL, $4)',
+      [id, d.start, end, req.user.id]
+    );
+    const period = d.end ? `de ${dm(d.start)} a ${dm(d.end)}` : `a partir de ${dm(d.start)}, sem data de retorno`;
+    await c.query(
+      `INSERT INTO work_date_log (work_id, kind, old_start, new_start, old_due, new_due, reason, cause_work_id, created_by)
+       VALUES ($1, 'pausa', $2, $3, $4, $5, $6, NULL, $7)`,
+      [id, before.start, after.start, before.due, after.due, `Pausa ${period}: ${reason}`, req.user.id]
+    );
+    const moved = after.due !== before.due ? `\nNova previsão de entrega: ${dmy(after.due)}.` : '';
+    await notifyPause(c, req, id, w.project_id, `${req.user.name} pausou o projeto "${w.name}" ${period}`,
+      `Motivo: ${reason}`, moved);
+  });
+  const { rows } = await query(`${WORK_SELECT} WHERE s.id = $2`, [req.user.id, id]);
+  res.json(forViewer(rows[0]));
+}));
+
+// ?push_due=1: numa pausa sem data de retorno, a previsão anda os dias úteis em que ficou parado.
+router.delete('/works/:id/pause', ah(async (req, res) => {
+  const id = intParam(req.params.id);
+  await requireWork(req.user, id, 'manage');
+  const pushDue = req.query.push_due === '1' || req.query.push_due === 'true';
+  const today = isoDate();
+  const yesterday = addDays(today, -1);
+  await tx(async (c) => {
+    const { rows: [w] } = await c.query('SELECT name, project_id FROM project_sections WHERE id = $1', [id]);
+    const { rows: [p] } = await c.query(
+      'SELECT id, start_date, end_date FROM work_pauses WHERE work_id = $1 AND end_date >= $2 ORDER BY start_date, id LIMIT 1', [id, today]
+    );
+    if (!p) throw new HttpError(400, 'Este projeto não está em pausa.');
+    const pStart = dayOf(p.start_date);
+    // Pausa que nem começou some; a que já está correndo termina ontem.
+    if (pStart >= today) await c.query('DELETE FROM work_pauses WHERE id = $1', [p.id]);
+    else await c.query('UPDATE work_pauses SET end_date = $1 WHERE id = $2', [yesterday, p.id]);
+    const before = await readDates(c, id);
+    let after = before;
+    const days = pStart < today ? businessDaysBetween(pStart, yesterday) : 0;
+    if (isOpenEnd(p.end_date) && pushDue && days > 0 && before.due && before.due >= pStart) {
+      const newDue = endAfter(afterBusiness(before.due), days);
+      await c.query('UPDATE project_sections SET due_date = $1 WHERE id = $2', [newDue, id]);
+      if (before.start) {
+        await c.query(
+          `INSERT INTO work_schedule (work_id, start_date, duration_days) VALUES ($1, $2, $3)
+           ON CONFLICT (work_id) DO UPDATE SET duration_days = EXCLUDED.duration_days`,
+          [id, before.start, Math.min(365, businessDaysBetween(before.start, newDue))]
+        );
+      }
+      after = await readDates(c, id);
+    }
+    const why = pStart < today ? `Retomado em ${dm(today)} após ${days} ${days === 1 ? 'dia útil' : 'dias úteis'} de pausa` : `Pausa de ${dm(pStart)} cancelada`;
+    await c.query(
+      `INSERT INTO work_date_log (work_id, kind, old_start, new_start, old_due, new_due, reason, cause_work_id, created_by)
+       VALUES ($1, 'pausa', $2, $3, $4, $5, $6, NULL, $7)`,
+      [id, before.start, after.start, before.due, after.due, why, req.user.id]
+    );
+    const moved = after.due !== before.due ? `\nNova previsão de entrega: ${dmy(after.due)}.` : '';
+    await notifyPause(c, req, id, w.project_id, `${req.user.name} retomou o projeto "${w.name}"`, w.name, moved);
+  });
+  const { rows } = await query(`${WORK_SELECT} WHERE s.id = $2`, [req.user.id, id]);
+  res.json(forViewer(rows[0]));
+}));
+
 // ---- Anexos do projeto --------------------------------------------------------
 // Removem também os anexos das tarefas do projeto, que saem junto com ele.
 async function workBlobs(workId) {
@@ -795,7 +919,12 @@ async function timelineData(userId, pid) {
          FROM work_pauses pz LEFT JOIN project_sections c ON c.id = pz.cause_work_id
         WHERE pz.work_id = ANY($1) ORDER BY pz.work_id, pz.start_date, pz.id`, [ids]
     );
-    for (const r of pz) (pausesBy[r.work_id] ||= []).push({ start: r.start_date, end: r.end_date, cause_name: r.cause_name });
+    const today = isoDate();
+    for (const r of pz) {
+      const open = isOpenEnd(r.end_date);
+      const start = dayOf(r.start_date);
+      (pausesBy[r.work_id] ||= []).push({ start, end: open ? (start > today ? start : today) : dayOf(r.end_date), open, cause_name: r.cause_name });
+    }
     const { rows: logs } = await query(
       `SELECT l.work_id, l.phase_id, ph.name AS phase_name, ph.color AS phase_color, l.changed_at
          FROM work_phase_log l

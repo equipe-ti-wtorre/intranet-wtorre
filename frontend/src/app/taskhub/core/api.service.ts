@@ -114,6 +114,8 @@ export class ApiService {
   workPhasesLog(id: number) { return this.http.get<WorkPhaseLog[]>(`${U}/works/${id}/phases-log`); }
   createWork(projectId: number, body: Record<string, unknown>) { return this.http.post<Work>(`${U}/projects/${projectId}/works`, body); }
   updateWork(id: number, body: Record<string, unknown>) { return this.http.patch<Work>(`${U}/works/${id}`, body); }
+  pauseWork(id: number, body: { start: string; end: string | null; reason: string; push_due: boolean }) { return this.http.post<Work>(`${U}/works/${id}/pause`, body); }
+  resumeWork(id: number, pushDue = false) { return this.http.delete<Work>(`${U}/works/${id}/pause`, { params: pushDue ? { push_due: '1' } : {} }); }
   deleteWork(id: number) { return this.http.delete(`${U}/works/${id}`); }
   projectTimeline(projectId: number) { return this.http.get<ProjectTimeline>(`${U}/projects/${projectId}/timeline`); }
   saveTimeline(projectId: number, body: { items: { id?: number; name?: string; color?: string; duration_days: number; start_date?: string | null }[]; remove: number[]; reason?: string }) {
