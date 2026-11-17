@@ -1,11 +1,17 @@
-import { map, Observable, of } from 'rxjs';
+import { map, Observable, of, switchMap } from 'rxjs';
 import { TaskDetail } from './models';
+import { ConfirmService } from './confirm.service';
 
 // Pergunta antes de concluir quando ainda há tarefa ou etapa aberta. Cancelar não grava.
-export function confirmOpen(what: string, lines: string[]) {
-  if (!lines.length) return true;
-  const body = lines.map(line => `• ${line}`).join('\n');
-  return confirm(`Ainda não foi concluído:\n\n${body}\n\nConcluir ${what} mesmo assim?`);
+export function confirmOpen(svc: ConfirmService, what: string, lines: string[]): Observable<boolean> {
+  if (!lines.length) return of(true);
+  return svc.confirm$({
+    title: `Concluir ${what} mesmo assim?`,
+    message: 'Ainda não foi concluído:',
+    lines,
+    confirmLabel: 'Concluir',
+    icon: 'check',
+  });
 }
 
 export function openWorkLines(tasks: { title: string; steps?: { title: string; done: boolean }[] }[]) {
@@ -17,9 +23,9 @@ export function openWorkLines(tasks: { title: string; steps?: { title: string; d
   return lines;
 }
 
-export function askCloseTask(load: Observable<TaskDetail>, task: { status: { category: string }; subtasks_total?: number; subtasks_done?: number; subtasks?: { title: string; done: boolean }[] }) {
+export function askCloseTask(svc: ConfirmService, load: Observable<TaskDetail>, task: { status: { category: string }; subtasks_total?: number; subtasks_done?: number; subtasks?: { title: string; done: boolean }[] }): Observable<boolean> {
   if (task.status.category === 'done' || task.status.category === 'canceled') return of(true);
-  if (task.subtasks) return of(confirmOpen('a tarefa', task.subtasks.filter(s => !s.done).map(s => s.title)));
+  if (task.subtasks) return confirmOpen(svc, 'a tarefa', task.subtasks.filter(s => !s.done).map(s => s.title));
   if ((task.subtasks_total || 0) <= (task.subtasks_done || 0)) return of(true);
-  return load.pipe(map(detail => confirmOpen('a tarefa', (detail.subtasks || []).filter(s => !s.done).map(s => s.title))));
+  return load.pipe(switchMap(detail => confirmOpen(svc, 'a tarefa', (detail.subtasks || []).filter(s => !s.done).map(s => s.title))));
 }

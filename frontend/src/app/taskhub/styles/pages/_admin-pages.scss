@@ -1,0 +1,57 @@
+// Estilos específicos (parcial importado por taskhub.scss, dentro de .taskhub-root).
+
+/* ---- Caixa de entrada ---- */
+.inbox-list { border-top: 1px solid var(--line); }
+.inbox-item__proj { margin-top: 4px; }
+
+/* ---- Equipes ---- */
+.teams-list__sector { padding: 12px 8px 4px; }
+.teams-list__row { display: flex; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--line); }
+.teams-list__row:focus-visible { outline: 2px solid var(--act); outline-offset: -2px; }
+.teams-list__row .dot { width: 9px; height: 9px; }
+.teams-detail__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.teams-detail__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; margin: 0; }
+.teams-detail__actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.teams-detail__desc { margin-bottom: 12px; }
+.teams-detail__people { margin: 8px 0 4px; }
+.teams-detail__sub-gap { margin-top: 14px; }
+.teams-detail__include { margin-top: 6px; }
+.teams-detail__add { max-width: 520px; }
+.teams-detail__add-hint { margin-top: 6px; }
+@media (max-width: 600px) {
+  .teams-detail__actions { margin-left: 0; width: 100%; }
+}
+
+/* ---- Pessoas ---- */
+.users-table__row--off td { opacity: .55; }
+.users-table tr.click:focus-visible { outline: 2px solid var(--act); outline-offset: -2px; }
+.users-photo { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.users-photo__acts { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.users-checks { display: flex; flex-direction: column; gap: 8px; }
+.users-checks--inline { flex-direction: row; flex-wrap: wrap; gap: 6px 16px; }
+.users-check--inherited { opacity: .75; }
+.users-temp-pass { font-size: 18px; letter-spacing: .5px; }
+.form-section__hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--mu2); margin-left: 6px; }
+@media (max-width: 860px) {
+  .users-table .users-table__user, .users-table .users-table__email, .users-table .users-table__seen { display: none; }
+  .users-table .users-table__name { position: sticky; left: 0; z-index: 1; background: var(--panel); min-width: 180px; }
+  .users-table th.users-table__name { background: color-mix(in srgb, var(--tx) 4%, var(--panel)); }
+  .users-table tr.click:hover td.users-table__name { background: var(--hover); }
+}
+
+/* ---- Administração ---- */
+.nowrap { white-space: nowrap; }
+.ap-card__main { min-width: 0; }
+.ap-desc { min-height: 72px; }
+.ap-note { margin-top: 0; }
+.ms-card { max-width: 720px; }
+.ms-card__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.ms-card__intro { margin-bottom: 14px; }
+.ms-card__tenant { margin-bottom: 16px; }
+.ms-card__note { margin-top: 12px; }
+
+/* ---- Lembretes ---- */
+.rem-loading { margin-top: 28px; }
+
+/* ---- Login: giro no botão largo (que não é .btn) ---- */
+.login-ms.btn--loading, .login-nubank__submit.btn--loading, .login-nubank__ms.btn--loading { position: relative; --btn-spin: #fff; }

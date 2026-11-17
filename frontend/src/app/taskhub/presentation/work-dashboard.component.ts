@@ -9,21 +9,23 @@ import { HEALTH_LABEL, SLIDES, SlideKey, defaultSelection, fmtDate, weekLabel } 
 import { PresentationViewerComponent } from './viewer.component';
 import { downloadWorkPptx } from './pptx';
 import { DeckTheme, DeckThemePickerComponent, readDeckTheme } from './deck-theme';
+import { IconComponent, LoadingComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 
 // Dashboard do trabalho (aba Dashboard dentro do trabalho) e a apresentação dele,
 // dentro do sistema ou em PowerPoint, escolhendo quais slides entram.
 @Component({
   selector: 'app-work-dashboard',
   standalone: true,
-  imports: [FormsModule, PresentationViewerComponent, DeckThemePickerComponent],
+  imports: [FormsModule, PresentationViewerComponent, DeckThemePickerComponent, IconComponent, LoadingComponent, DialogDirective],
   template: `
     <div class="pd">
       @if (d(); as d) {
         <div class="pd-top">
           <span class="muted small">Atualizado {{ rel(d.generated_at) }} · {{ health[d.subject.health] }}@if (d.subject.end_date) { · prazo {{ fmt(d.subject.end_date) }} }</span>
           <span class="grow"></span>
-          <button class="btn-action-secondary btn-sm" (click)="load()">Atualizar</button>
-          <button class="btn-action-primary btn-sm" (click)="openPresent()">Apresentação</button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="load()">Atualizar</button>
+          <button type="button" class="btn btn-primary btn-sm" (click)="openPresent()">Apresentação</button>
         </div>
 
         <div class="pd-kpis">
@@ -89,33 +91,33 @@ import { DeckTheme, DeckThemePickerComponent, readDeckTheme } from './deck-theme
           }
         </div>
       } @else {
-        <div class="muted" style="padding: 40px 0">Carregando o dashboard…</div>
+        <app-loading kind="cards" />
       }
     </div>
 
     @if (choosing()) {
       <div class="modal-scrim" (click)="choosing.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentação do projeto">
-          <div class="modal-head">Apresentação do projeto<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.subject?.project_name }} › {{ d()?.subject?.name }} · escolha os slides e como apresentar</div></div>
+        <div class="modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="choosing.set(false)">
+          <div class="modal-head"><h2>Apresentação do projeto<span class="modal-head__sub">{{ d()?.subject?.project_name }} › {{ d()?.subject?.name }} · escolha os slides e como apresentar</span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="choosing.set(false)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
             <div class="field"><label class="form-label" for="pt">Título</label><input id="pt" class="form-field" [(ngModel)]="ptitle" /></div>
             <app-deck-theme-picker [value]="theme()" (valueChange)="theme.set($event)" />
-            <div class="row" style="justify-content: space-between">
+            <div class="row row--between">
               <span class="form-label">Slides ({{ picked().length }} de {{ slides.length }})</span>
               <span class="row small"><button type="button" class="link-btn" (click)="picked.set(allKeys)">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
             </div>
             <div class="pd-pick">
               @for (s of slides; track s.key) {
-                <label class="check-label" style="align-items: flex-start">
-                  <input type="checkbox" style="margin-top: 3px" [checked]="picked().includes(s.key)" (change)="toggle(s.key)" />
+                <label class="check-label check-label--top">
+                  <input type="checkbox" [checked]="picked().includes(s.key)" (change)="toggle(s.key)" />
                   <span>{{ s.label }}<br /><span class="muted small">{{ s.hint }}</span></span>
                 </label>
               }
             </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn-action-secondary" [disabled]="!picked().length || exporting()" (click)="download()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
-            <button type="button" class="btn-action-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
+            <button type="button" class="btn" [disabled]="!picked().length || exporting()" (click)="download()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
+            <button type="button" class="btn btn-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
           </div>
         </div>
       </div>
@@ -136,7 +138,7 @@ export class WorkDashboardComponent implements OnChanges {
   exporting = signal(false);
   picked = signal<SlideKey[]>([]);
   ptitle = '';
-  theme = signal<DeckTheme>('nubank-parque');
+  theme = signal<DeckTheme>(readDeckTheme(this.ui.palette()));
   slides = SLIDES;
   allKeys = SLIDES.map(s => s.key);
   health = HEALTH_LABEL;

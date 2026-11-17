@@ -22,7 +22,7 @@ import { errorMessage } from '../core/api.service';
         <div class="field"><label for="r">Repita a nova senha</label>
           <input id="r" class="input" name="repeat" type="password" autocomplete="new-password" [(ngModel)]="repeat" required /></div>
         @if (error()) { <div class="error-text" role="alert">{{ error() }}</div> }
-        <button class="btn btn-primary" style="height:38px;justify-content:center" [disabled]="loading()">Salvar senha</button>
+        <button class="btn btn-primary" [disabled]="loading()" [class.btn--loading]="loading()">Salvar senha</button>
         <button type="button" class="btn btn-ghost" (click)="forced() ? auth.logout() : back()">{{ forced() ? 'Sair' : 'Voltar' }}</button>
       </form>
     </div>

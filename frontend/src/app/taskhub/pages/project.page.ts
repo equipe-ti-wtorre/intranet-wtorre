@@ -10,7 +10,7 @@ import { Person, Phase, PhaseScope, Project, SchedulePreview, Status, StatusCate
 import { CATEGORY_LABEL, dueLabel, dueTone, todayIso } from '../core/format';
 import { businessSpan, DEFAULT_DURATION, endAfter, sumPhaseDays } from '../core/timeline';
 import { GroupBy, SortBy, TaskListComponent } from '../shared/task-list';
-import { AvatarComponent, IconComponent, PrioComponent, AutofocusDirective } from '../shared/ui';
+import { AvatarComponent, IconComponent, PrioComponent, AutofocusDirective, LoadingComponent, ErrorComponent, SearchComponent } from '../shared/ui';
 import { WorkDashboardComponent } from '../presentation/work-dashboard.component';
 import { PhaseColumns } from '../shared/phase-columns';
 import { ConfirmDeleteComponent } from '../shared/confirm-delete.component';
@@ -20,6 +20,8 @@ import { ScheduleImpactComponent, noneAccepted } from '../shared/schedule-impact
 import { termsFor } from '../core/format';
 import { askCloseTask, confirmOpen, openWorkLines } from '../core/confirm-open';
 import { DateLogComponent } from '../shared/date-log.component';
+import { ConfirmService } from '../core/confirm.service';
+import { colorName } from '../core/colors';
 
 type Tab = 'kanban' | 'lista' | 'dashboard' | 'config';
 const VIEW_KEY = 'taskhub_project_view';
@@ -32,16 +34,16 @@ function savedView(): Tab {
 @Component({
   selector: 'app-project',
   standalone: true,
-  imports: [RouterLink, WorkDashboardComponent, AutofocusDirective, FormsModule, TaskListComponent, AvatarComponent, IconComponent, PrioComponent, ConfirmDeleteComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent, DateLogComponent],
+  imports: [RouterLink, WorkDashboardComponent, AutofocusDirective, FormsModule, TaskListComponent, AvatarComponent, IconComponent, PrioComponent, ConfirmDeleteComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent, DateLogComponent, LoadingComponent, ErrorComponent, SearchComponent],
   template: `
     <div class="page">
       @if (project(); as p) {
         @if (work(); as w) {
-          <div class="crumb"><a [routerLink]="backLink()">‹ {{ p.name }}</a> · todos os {{ t().many }}</div>
-          <div class="page-head" style="margin-bottom:12px">
-            <div class="grow">
-              <div class="row" style="gap:10px">
-                <span style="width:12px;height:12px;border-radius:4px" [style.background]="w.color"></span>
+          <div class="page-head page-head--work">
+            <div class="page-head__text">
+              <div class="crumb"><a [routerLink]="backLink()">‹ {{ p.name }}</a> · todos os {{ t().many }}</div>
+              <div class="page-head__title">
+                <span class="dot dot--md" [style.background]="w.color"></span>
                 <h1><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</h1>
                 <span class="health" [class]="'health ' + workHealth()"><i></i>{{ w.completed_at ? 'Concluído' : healthLabel[workHealth()] }}</span>
               </div>
@@ -65,10 +67,10 @@ function savedView(): Tab {
             </div>
             <div class="actions">
               @if (canCreate()) {
-                <button type="button" class="btn-action-secondary btn-sm" (click)="toggleWorkDone()">{{ w.completed_at ? 'Reabrir' : 'Concluir' }}</button>
+                <button type="button" class="btn" (click)="toggleWorkDone()">{{ w.completed_at ? 'Reabrir' : 'Concluir' }}</button>
                 @if (otherWorkPhases().length) {
                   <div class="act-phase">
-                    <button type="button" class="btn-action-secondary btn-sm" (click)="phaseMenu.set(!phaseMenu())">Jogar para outra fase</button>
+                    <button type="button" class="btn" (click)="phaseMenu.set(!phaseMenu())" [attr.aria-expanded]="phaseMenu()">Jogar para outra fase</button>
                     @if (phaseMenu()) {
                       <div class="act-phase-menu">
                         @for (f of otherWorkPhases(); track f.id) {
@@ -78,7 +80,7 @@ function savedView(): Tab {
                     }
                   </div>
                 }
-                <button class="btn btn-primary btn-sm" (click)="ui.openQuickAdd({ project_id: p.id, section_id: w.id })"><app-icon name="plus" [size]="14" />Nova tarefa</button>
+                <button class="btn btn-primary" (click)="ui.openQuickAdd({ project_id: p.id, section_id: w.id })"><app-icon name="plus" [size]="14" />Nova tarefa</button>
               }
             </div>
           </div>
@@ -91,11 +93,11 @@ function savedView(): Tab {
             </div>
           }
         } @else {
-          <div class="crumb"><a [routerLink]="backLink()">‹ {{ p.name }}</a> · {{ t().many }}</div>
-          <div class="page-head" style="margin-bottom:12px">
-            <div class="grow">
-              <div class="row" style="gap:10px">
-                <span style="width:12px;height:12px;border-radius:4px" [style.background]="p.color"></span>
+          <div class="page-head page-head--work">
+            <div class="page-head__text">
+              <div class="crumb"><a [routerLink]="backLink()">‹ {{ p.name }}</a> · {{ t().many }}</div>
+              <div class="page-head__title">
+                <span class="dot dot--md" [style.background]="p.color"></span>
                 <h1>{{ p.is_board ? 'Status das tarefas da equipe' : 'Configurações do projeto' }}</h1>
               </div>
               <div class="sub">{{ p.name }} · {{ p.is_board ? 'os status valem para as tarefas de todos os projetos da equipe' : 'status do Kanban, participantes e detalhes valem para todos os projetos do quadro' }}</div>
@@ -105,20 +107,20 @@ function savedView(): Tab {
 
         @if (following() && work(); as w) {
           <div class="follow-panel">
-            <div class="hint" style="margin-bottom: 12px">Você acompanha este projeto como solicitante. Avisamos você a cada mudança de fase e quando ele for concluído.</div>
+            <div class="hint follow-panel__hint">Você acompanha este projeto como solicitante. Avisamos você a cada mudança de fase e quando ele for concluído.</div>
             <div class="settings-section">
               <div><h2>Fase atual</h2><p class="desc">Onde o projeto está agora.</p></div>
               <div class="stack">
                 @if (w.completed_at) { <span class="wk-ok">Concluído em {{ shortDate(w.completed_at) }}</span> }
-                <div class="row" style="flex-wrap: wrap; gap: 6px">
+                <div class="pills">
                   @for (ph of w.phases; track ph.id; let i = $index) {
-                    <span class="phase-chip" [style.opacity]="phaseState(i) === 'future' ? 0.5 : 1" [style.--phase]="ph.color"
-                          [style.fontWeight]="phaseState(i) === 'current' ? 700 : 400">{{ ph.name }}@if (phaseState(i) === 'current') { · atual }</span>
+                    <span class="phase-chip" [class.phase-chip--future]="phaseState(i) === 'future'" [class.phase-chip--current]="phaseState(i) === 'current'"
+                          [style.--phase]="ph.color">{{ ph.name }}@if (phaseState(i) === 'current') { · atual }</span>
                   }
                 </div>
                 @if (w.phase_changed_at) { <span class="hint">Desde {{ shortDate(w.phase_changed_at) }}.</span> }
                 @if (!w.completed_at && w.pause_start && w.pause_end) {
-                  <span class="wk-pause" style="align-self: flex-start">Em pausa {{ w.pause_end.startsWith('9999') ? 'desde' : 'de' }} {{ w.pause_start.slice(8, 10) }}/{{ w.pause_start.slice(5, 7) }}@if (!w.pause_end.startsWith('9999')) { a {{ w.pause_end.slice(8, 10) }}/{{ w.pause_end.slice(5, 7) }} } @else { · sem data de retorno }</span>
+                  <span class="wk-pause wk-pause--self">Em pausa {{ w.pause_end.startsWith('9999') ? 'desde' : 'de' }} {{ w.pause_start.slice(8, 10) }}/{{ w.pause_start.slice(5, 7) }}@if (!w.pause_end.startsWith('9999')) { a {{ w.pause_end.slice(8, 10) }}/{{ w.pause_end.slice(5, 7) }} } @else { · sem data de retorno }</span>
                 }
               </div>
             </div>
@@ -157,21 +159,21 @@ function savedView(): Tab {
 
         @if (work() && !following() && (tab() === 'kanban' || tab() === 'lista')) {
           <div class="toolbar">
-            <input class="input" style="width:220px;height:30px" placeholder="Filtrar por título" [ngModel]="text()" (ngModelChange)="text.set($event)" aria-label="Filtrar" />
+            <app-search [value]="text()" (valueChange)="text.set($event)" placeholder="Filtrar por título" />
             <app-person-picker class="pp-toolbar" mode="single" [people]="people()" [value]="who()" ariaLabel="Responsável"
                                [specials]="[{ value: 0, label: 'Todos os responsáveis' }, { value: -1, label: 'Sem responsável' }]"
                                (picked)="who.set($event ?? 0)" />
             @if (tab() === 'lista') {
-              <select class="select" style="width:150px;height:30px" [ngModel]="groupBy()" (ngModelChange)="groupBy.set($event)" aria-label="Agrupar">
+              <select class="select toolbar-input" [ngModel]="groupBy()" (ngModelChange)="groupBy.set($event)" aria-label="Agrupar">
                 @if (work()?.phases?.length) { <option value="phase">Por fase</option> }
                 <option value="status">Por status</option>
                 <option value="due">Por prazo</option><option value="assignee">Por responsável</option><option value="none">Sem grupo</option>
               </select>
-              <select class="select" style="width:140px;height:30px" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)" aria-label="Ordenar">
+              <select class="select toolbar-input" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)" aria-label="Ordenar">
                 <option value="manual">Ordem manual</option><option value="due">Por prazo</option><option value="priority">Por prioridade</option>
               </select>
             }
-            <label class="check-label" style="margin-left:auto"><input type="checkbox" class="switch" role="switch" [ngModel]="showClosed()" (ngModelChange)="showClosed.set($event); load()" /> Mostrar concluídas</label>
+            <label class="check-label ml-auto"><input type="checkbox" class="switch" role="switch" [ngModel]="showClosed()" (ngModelChange)="showClosed.set($event); load()" /> Mostrar concluídas</label>
           </div>
         }
 
@@ -185,11 +187,11 @@ function savedView(): Tab {
         @if (work() && !following() && tab() === 'kanban') {
           <div class="board">
             @for (col of phaseColumns(); track col.key) {
-              <section [class]="'bcol phase-col phase-col--' + col.state" [style.--phase]="col.phase?.color || '#8b93a1'" [attr.aria-label]="col.phase?.name || 'Sem fase'">
+              <section [class]="'bcol phase-col phase-col--' + col.state" [style.--phase]="col.phase?.color || 'var(--text-subtle)'" [attr.aria-label]="col.phase?.name || 'Sem fase'">
                 <div class="bcol-head" [class.open]="!!col.phase && cols.colMenu() === col.phase.id">
-                  <span class="bcol-dot" [style.background]="col.phase?.color || '#8b93a1'"></span>
+                  <span class="bcol-dot" [style.background]="col.phase?.color || 'var(--text-subtle)'"></span>
                   @if (!col.phase) {
-                    <span class="ellipsis">Sem fase</span>
+                    <span class="ellipsis" title="Sem fase">Sem fase</span>
                   } @else if (cols.renaming() === col.phase.id) {
                     <input class="inline grow" appAutofocus maxlength="60" [ngModel]="col.phase.name" aria-label="Nome da fase"
                            (blur)="cols.finishRename(col.phase, $any($event.target).value)" (keydown.enter)="$any($event.target).blur()"
@@ -197,7 +199,7 @@ function savedView(): Tab {
                   } @else if (editPhases()) {
                     <button type="button" class="bcol-name ellipsis" (click)="cols.startRename(col.phase)" title="Renomear fase">{{ col.phase.name }}</button>
                   } @else {
-                    <span class="ellipsis">{{ col.phase.name }}</span>
+                    <span class="ellipsis" [title]="col.phase.name">{{ col.phase.name }}</span>
                   }
                   @if (col.phase) { <span class="wk-col__dur" [title]="'Previsto: ' + (col.phase.duration_days ?? 0) + ' dias úteis'">{{ col.phase.duration_days ?? 0 }} d</span> }
                   @if (col.state === 'current') { <span class="phase-col__tag">Fase atual</span> }
@@ -207,9 +209,10 @@ function savedView(): Tab {
                     @if (cols.colMenu() === col.phase.id) {
                       <div class="bcol-menu" [style.top.px]="cols.menuPos()?.top" [style.left.px]="cols.menuPos()?.left" (click)="$event.stopPropagation()">
                         <button type="button" (click)="cols.startRename(col.phase)"><app-icon name="pencil" [size]="14" /> Renomear</button>
-                        <div class="bcol-swatches">
+                        <div class="bcol-swatches" role="radiogroup" aria-label="Cor da fase">
                           @for (c of cols.colors; track c) {
-                            <button type="button" [style.background]="c" [class.on]="col.phase.color.toLowerCase() === c" (click)="cols.paint(col.phase, c)" [attr.aria-label]="'Cor ' + c"></button>
+                            <button type="button" role="radio" [style.background]="c" [class.on]="col.phase.color.toLowerCase() === c" [attr.aria-checked]="col.phase.color.toLowerCase() === c"
+                                    (click)="cols.paint(col.phase, c)" [attr.aria-label]="colorName(c)" [title]="colorName(c)"></button>
                           }
                         </div>
                         <label class="bcol-menu-field">Dias úteis previstos
@@ -266,13 +269,13 @@ function savedView(): Tab {
                 <div class="field"><label for="ws">Data inicial</label><input id="ws" type="date" class="input" [disabled]="w.my_role !== 'manage'" [ngModel]="wform.start_date" (ngModelChange)="onWStart($event)" /></div>
                 <div class="field"><label for="wp">Previsão de entrega</label><input id="wp" type="date" class="input" [disabled]="w.my_role !== 'manage'" [min]="wform.start_date || ''" [ngModel]="wform.due_date" (ngModelChange)="onWDue($event)" /></div>
               </div>
-              @if (wformSpanError()) { <span class="hint" style="color: var(--danger)">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
+              @if (wformSpanError()) { <span class="hint hint--danger">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
               @else if (wform.start_date && wform.due_date) { <span class="hint">{{ wformSpan() }} {{ wformSpan() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo responsável faz um por vez e a fila dele é reajustada.</span> }
               @if (wNeedsReason()) {
                 <div class="field">
                   <label for="w-reason">Motivo da alteração das datas <span class="wk-late">*</span></label>
                   <textarea id="w-reason" class="textarea" rows="2" maxlength="500" [(ngModel)]="wDateReason" placeholder="Ex.: cliente pediu para adiar a entrega"></textarea>
-                  @if (wDateReason.trim().length < 10) { <span class="hint" style="color: var(--danger)">Informe o motivo (pelo menos 10 letras). Ele fica no histórico de datas e as novas datas viram o planejado.</span> }
+                  @if (wDateReason.trim().length < 10) { <span class="hint hint--danger">Informe o motivo (pelo menos 10 letras). Ele fica no histórico de datas e as novas datas viram o planejado.</span> }
                   @else { <span class="hint">Fica no histórico de datas. As novas datas viram o planejado.</span> }
                 </div>
               }
@@ -280,7 +283,7 @@ function savedView(): Tab {
               <div class="field"><label for="wd">Descrição/Escopo</label><textarea id="wd" class="textarea" [disabled]="w.my_role !== 'manage'" [(ngModel)]="wform.description"></textarea></div>
               <div class="field">
                 <label>Responsáveis</label>
-                <div class="row" style="flex-wrap: wrap; gap: 6px">
+                <div class="pills">
                   @for (m of chosenWorkOwners(); track m.id) {
                     <span class="pill"><app-avatar [person]="m" />{{ m.name }}@if (w.my_role === 'manage') {<button type="button" (click)="toggleWorkOwner(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button>}</span>
                   }
@@ -288,15 +291,15 @@ function savedView(): Tab {
                 @if (w.my_role === 'manage') {
                   <app-person-picker [people]="workOwnerCandidates()" placeholder="Adicionar responsável…" (picked)="toggleWorkOwner($event ?? 0)" />
                 }
-                @if (!wOwnerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um responsável.</span> }
+                @if (!wOwnerIds().length) { <span class="hint hint--danger">Escolha pelo menos um responsável.</span> }
               </div>
               @if (w.my_role === 'manage') {
                 <div class="row">
                   @if (wImpact()?.conflicts?.length) {
                     <button class="btn btn-sm" (click)="applyWSuggested()">Usar data sugerida</button>
-                    <button class="btn btn-primary btn-sm" [disabled]="wformSpanError() || !wOwnerIds().length || wReasonMissing()" (click)="saveWork(true)">{{ noneAccepted(wImpact()) ? 'Salvar (ficam juntos)' : 'Salvar e reajustar' }}</button>
+                    <button class="btn btn-primary btn-sm" [disabled]="saving() || wformSpanError() || !wOwnerIds().length || wReasonMissing()" [class.btn--loading]="saving()" (click)="saveWork(true)">{{ noneAccepted(wImpact()) ? 'Salvar (ficam juntos)' : 'Salvar e reajustar' }}</button>
                   } @else {
-                    <button class="btn btn-primary btn-sm" [disabled]="wformSpanError() || !wOwnerIds().length || wReasonMissing()" (click)="saveWork()">Salvar</button>
+                    <button class="btn btn-primary btn-sm" [disabled]="saving() || wformSpanError() || !wOwnerIds().length || wReasonMissing()" [class.btn--loading]="saving()" (click)="saveWork()">Salvar</button>
                   }
                   <button class="btn btn-sm" (click)="toggleWorkDone()">{{ w.completed_at ? 'Reabrir ' + t().one : 'Marcar como concluído' }}</button>
                 </div>
@@ -367,10 +370,10 @@ function savedView(): Tab {
                 <div class="field"><label for="pe">Entrega</label><input id="pe" type="date" class="input" [disabled]="!canManage()" [(ngModel)]="form.end_date" /></div>
               </div>
               @if (p.space === 'profissional' && form.sector_id && !settingsTeams().length) {
-                <div class="note-info" style="margin-top:0">Este setor ainda não tem equipe.</div>
+                <div class="note-info note-info--flush">Este setor ainda não tem equipe.</div>
               }
               <div class="field"><label for="pd">Objetivo</label><textarea id="pd" class="textarea" [disabled]="!canManage()" [(ngModel)]="form.description"></textarea></div>
-              @if (canManage()) { <div><button class="btn btn-primary btn-sm" (click)="saveDetails()">Salvar detalhes</button></div> }
+              @if (canManage()) { <div><button class="btn btn-primary btn-sm" [disabled]="saving()" [class.btn--loading]="saving()" (click)="saveDetails()">Salvar detalhes</button></div> }
             </div>
           </div>
           }
@@ -385,19 +388,22 @@ function savedView(): Tab {
                   <select class="inline" [disabled]="!canManage()" [ngModel]="s.category" (ngModelChange)="updateStatus(s, { category: $event })" aria-label="Categoria">
                     @for (c of categories; track c) { <option [ngValue]="c">{{ categoryLabel[c] }}</option> }
                   </select>
-                  <input class="inline" style="width:80px" type="number" min="1" placeholder="limite" [disabled]="!canManage()" [ngModel]="s.wip_limit"
+                  <input class="inline status-row__limit" type="number" min="1" placeholder="limite" [disabled]="!canManage()" [ngModel]="s.wip_limit"
                          (change)="updateStatus(s, { wip_limit: $any($event.target).value ? +$any($event.target).value : null })" aria-label="Limite" title="Limite de tarefas na coluna" />
                   @if (canManage()) {
-                    <button class="btn btn-ghost btn-sm btn-icon" [disabled]="i === 0" (click)="moveStatus(i, -1)" aria-label="Subir">↑</button>
-                    <button class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveStatus(i, 1)" aria-label="Descer">↓</button>
-                    <button class="btn btn-ghost btn-sm btn-icon" (click)="deleteStatus(s)" aria-label="Excluir status"><app-icon name="trash" [size]="14" /></button>
+                    <button class="btn btn-ghost btn-sm btn-icon" [disabled]="i === 0" (click)="moveStatus(i, -1)" aria-label="Subir" title="Subir"><app-icon name="arrow-up" [size]="14" /></button>
+                    <button class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveStatus(i, 1)" aria-label="Descer" title="Descer"><app-icon name="arrow-down" [size]="14" /></button>
+                    <button class="btn btn-ghost btn-sm btn-icon" (click)="deleteStatus(s)" aria-label="Excluir status" title="Excluir status"><app-icon name="trash" [size]="14" /></button>
                   }
                 </div>
+              }
+              @if (inlineSaved()) {
+                <span class="hint" role="status" aria-live="polite">{{ inlineSaved() === 'saving' ? 'Salvando…' : 'Salvo' }}</span>
               }
               @if (canManage()) {
                 <div class="mini-form">
                   <input class="input" [(ngModel)]="newStatus" placeholder="Novo status, ex.: Homologação" (keydown.enter)="addStatus()" />
-                  <select class="select" style="width:160px" [(ngModel)]="newStatusCat">
+                  <select class="select toolbar-input" [(ngModel)]="newStatusCat" aria-label="Categoria do novo status">
                     @for (c of categories; track c) { <option [ngValue]="c">{{ categoryLabel[c] }}</option> }
                   </select>
                   <button class="btn btn-sm" (click)="addStatus()">Adicionar</button>
@@ -453,8 +459,8 @@ function savedView(): Tab {
                               (cancel)="deleting.set(null)" (confirm)="remove()" />
         }
       } @else if (error()) {
-        <div class="error-text">{{ error() }}</div>
-      } @else { <div class="muted">Carregando…</div> }
+        <app-error [text]="error()" (retry)="load()" />
+      } @else { <app-loading /> }
     </div>
 
     @if (cols.rescheduleScope(); as sc) {
@@ -587,6 +593,17 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   private toast = inject(ToastService);
   private data = inject(DataService);
   private router = inject(Router);
+  private confirmSvc = inject(ConfirmService);
+
+  saving = signal(false);
+  inlineSaved = signal<'saving' | 'saved' | null>(null);
+  private inlineTimer: ReturnType<typeof setTimeout> | null = null;
+  private flashSaved(state: 'saving' | 'saved') {
+    if (this.inlineTimer) clearTimeout(this.inlineTimer);
+    this.inlineSaved.set(state);
+    if (state === 'saved') this.inlineTimer = setTimeout(() => this.inlineSaved.set(null), 1500);
+  }
+  colorName = colorName;
 
   project = signal<Project | null>(null);
   tasks = signal<Task[]>([]);
@@ -608,6 +625,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
   cols = new PhaseColumns({
     api: this.api, toast: this.toast, phases: () => this.work()?.phases || [], scope: () => this.phaseScope(),
     saved: phases => { this.work.update(w => (w ? { ...w, phases } : w)); this.reloadWork(); this.loadTasks(); },
+    confirm: this.confirmSvc,
   });
 
   categories: StatusCategory[] = ['todo', 'doing', 'blocked', 'done', 'canceled'];
@@ -797,9 +815,11 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     this.commitWork(w.id, body);
   }
   private commitWork(id: number, body: Record<string, unknown>) {
+    this.saving.set(true);
     this.api.updateWork(id, body).subscribe({
-      next: () => { this.wImpact.set(null); this.reloadWork(); this.dateLogVersion.update(v => v + 1); this.toast.show(`${this.t().One} atualizado.`); },
+      next: () => { this.saving.set(false); this.wImpact.set(null); this.reloadWork(); this.dateLogVersion.update(v => v + 1); this.toast.show(`${this.t().One} atualizado.`); },
       error: e => {
+        this.saving.set(false);
         if (e?.status === 409 && e?.error?.conflicts) { this.wImpact.set(e.error); return; }
         this.toast.error(errorMessage(e, `Não foi possível salvar o ${this.t().one}.`));
       },
@@ -818,7 +838,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     });
     if (!closing) { run(); return; }
     this.api.tasks({ project_id: w.project.id, section_id: w.id, status: 'open', with_steps: 1 }).subscribe({
-      next: list => { if (confirmOpen(`o ${this.t().one}`, openWorkLines(list))) run(); },
+      next: list => confirmOpen(this.confirmSvc, `o ${this.t().one}`, openWorkLines(list)).subscribe(ok => { if (ok) run(); }),
       error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${this.t().one}.`)),
     });
   }
@@ -877,7 +897,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
       error: e => this.toast.error(errorMessage(e)),
     });
     if (!done) { run(); return; }
-    askCloseTask(this.api.task(t.id), t).subscribe({
+    askCloseTask(this.confirmSvc, this.api.task(t.id), t).subscribe({
       next: ok => { if (ok) run(); },
       error: e => this.toast.error(errorMessage(e)),
     });
@@ -939,13 +959,18 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
       this.toast.error('Este setor ainda não tem equipe.');
       return;
     }
+    this.saving.set(true);
     this.api.updateProject(this.pid(), body).subscribe({
-      next: () => { this.toast.show('Projeto atualizado.'); this.refresh(); this.data.reloadProjects(); },
-      error: e => this.toast.error(errorMessage(e)),
+      next: () => { this.saving.set(false); this.toast.show('Projeto atualizado.'); this.refresh(); this.data.reloadProjects(); },
+      error: e => { this.saving.set(false); this.toast.error(errorMessage(e)); },
     });
   }
   updateStatus(s: Status, body: Partial<Status>) {
-    this.api.updateStatus(this.pid(), s.id, body).subscribe({ next: () => { this.refresh(); this.loadTasks(); }, error: e => this.toast.error(errorMessage(e)) });
+    this.flashSaved('saving');
+    this.api.updateStatus(this.pid(), s.id, body).subscribe({
+      next: () => { this.flashSaved('saved'); this.refresh(); this.loadTasks(); },
+      error: e => { this.inlineSaved.set(null); this.toast.error(errorMessage(e)); },
+    });
   }
   rename(s: Status, name: string) { if (name.trim() && name.trim() !== s.name) this.updateStatus(s, { name: name.trim() }); }
   moveStatus(i: number, dir: number) {
@@ -960,7 +985,7 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
       next: () => { this.newStatus = ''; this.refresh(); }, error: e => this.toast.error(errorMessage(e)),
     });
   }
-  deleteStatus(s: Status) {
+  async deleteStatus(s: Status) {
     const others = (this.project()?.statuses || []).filter(x => x.id !== s.id);
     if (!others.some(x => x.category === 'todo') || !others.some(x => x.category === 'done')) {
       this.toast.error('O quadro precisa manter ao menos uma coluna A fazer e uma Concluído.');
@@ -969,7 +994,11 @@ export class ProjectPage implements OnInit, OnChanges, OnDestroy {
     const target = others.find(x => x.category === s.category) || others.find(x => x.category === 'todo');
     if (!target) return;
     const count = this.tasks().filter(t => t.status.id === s.id).length;
-    if (count && !confirm(`${count} tarefa(s) em "${s.name}" vão para "${target.name}". Continuar?`)) return;
+    if (count && !(await this.confirmSvc.confirm({
+      title: `Mover tarefas de "${s.name}" para "${target.name}"?`,
+      message: `${count} ${count === 1 ? 'tarefa' : 'tarefas'} em "${s.name}" ${count === 1 ? 'vai' : 'vão'} para "${target.name}" e o status será excluído.`,
+      confirmLabel: 'Continuar',
+    }))) return;
     this.api.deleteStatus(this.pid(), s.id, target.id).subscribe({ next: () => { this.refresh(); this.loadTasks(); }, error: e => this.toast.error(errorMessage(e)) });
   }
   setMember(userId: number, role: string) {

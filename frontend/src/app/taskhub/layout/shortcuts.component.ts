@@ -1,13 +1,19 @@
 import { Component, inject } from '@angular/core';
 import { UiService } from '../core/ui.service';
+import { IconComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 
 @Component({
   selector: 'app-shortcuts',
   standalone: true,
+  imports: [IconComponent, DialogDirective],
   template: `
     <div class="modal-scrim" (click)="ui.helpOpen.set(false)">
-      <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Atalhos de teclado">
-        <div class="modal-head">Atalhos de teclado</div>
+      <div class="modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="ui.helpOpen.set(false)">
+        <div class="modal-head">
+          <h2>Atalhos de teclado</h2>
+          <button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="ui.helpOpen.set(false)"><app-icon name="x" [size]="16" /></button>
+        </div>
         <div class="modal-body shortcuts">
           <span><kbd>Ctrl</kbd> <kbd>K</kbd></span><span>Buscar e comandos</span>
           <span><kbd>Q</kbd></span><span>Nova tarefa (no projeto aberto, nasce nele)</span>
@@ -21,7 +27,7 @@ import { UiService } from '../core/ui.service';
           <span><kbd>Esc</kbd></span><span>Fechar painel ou janela</span>
           <span><kbd>?</kbd></span><span>Mostrar esta lista</span>
         </div>
-        <div class="modal-foot"><button class="btn" (click)="ui.helpOpen.set(false)">Fechar</button></div>
+        <div class="modal-foot"><button type="button" class="btn" (click)="ui.helpOpen.set(false)">Fechar</button></div>
       </div>
     </div>
   `,

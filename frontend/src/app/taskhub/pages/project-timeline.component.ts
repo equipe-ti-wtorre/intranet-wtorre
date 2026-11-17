@@ -1,11 +1,13 @@
 import { Component, ElementRef, OnChanges, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { WORK_COLORS as COLORS } from '../core/colors';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
 import { ProjectTimeline, Task, TimelineWork, WorkPause } from '../core/models';
 import { TimelineRow, addDays, businessDays, businessDiff, businessSpan, computeTimeline, dayOf, isBusiness, isoOf, parseIso } from '../core/timeline';
-import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { AutofocusDirective, AvatarComponent, IconComponent, EmptyComponent, LoadingComponent, ErrorComponent } from '../shared/ui';
+import { ConfirmService } from '../core/confirm.service';
 import { termsFor } from '../core/format';
 import { DateLogComponent } from '../shared/date-log.component';
 
@@ -26,7 +28,6 @@ interface PhaseCard {
 
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-const COLORS = ['#4c8dff', '#2fbf71', '#e11d48', '#f97316', '#a78bfa', '#14b8a6', '#c9a84c', '#ec4899'];
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const fmt = (iso: string | null | undefined) => { if (!iso) return '—'; const d = parseIso(iso.slice(0, 10)); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`; };
 const fmtYear = (iso: string) => { const d = parseIso(iso.slice(0, 10)); return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`; };
@@ -48,17 +49,18 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
 @Component({
   selector: 'app-project-timeline',
   standalone: true,
-  imports: [FormsModule, AutofocusDirective, AvatarComponent, IconComponent, DateLogComponent],
+  imports: [FormsModule, AutofocusDirective, AvatarComponent, IconComponent, DateLogComponent, EmptyComponent, LoadingComponent, ErrorComponent],
   template: `
     @if (data(); as d) {
       <div class="tl-toolbar">
-        <div class="wk-chips" role="group" aria-label="Escala da régua">
-          <button type="button" [class.on]="zoom() === 'semana'" (click)="zoom.set('semana')">Semana</button>
-          <button type="button" [class.on]="zoom() === 'mes'" (click)="zoom.set('mes')">Mês</button>
-          <button type="button" [class.on]="zoom() === 'anual'" (click)="zoom.set('anual')">Anual</button>
+        <div class="chips" role="group" aria-label="Escala da régua">
+          <button type="button" [class.on]="zoom() === 'semana'" [attr.aria-pressed]="zoom() === 'semana'" (click)="zoom.set('semana')">Semana</button>
+          <button type="button" [class.on]="zoom() === 'mes'" [attr.aria-pressed]="zoom() === 'mes'" (click)="zoom.set('mes')">Mês</button>
+          <button type="button" [class.on]="zoom() === 'anual'" [attr.aria-pressed]="zoom() === 'anual'" (click)="zoom.set('anual')">Anual</button>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" (click)="scrollToToday()">Hoje</button>
         <span class="tl-legend"><i class="tl-legend__bar"></i>previsto <i class="tl-legend__late"></i>atrasado <i class="tl-legend__pause"></i>pausado</span>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="helpOpen.set(!helpOpen())" [attr.aria-expanded]="helpOpen()" aria-controls="tl-help"><app-icon name="info" [size]="14" />Como usar</button>
         <span class="grow"></span>
         @if (draft()) {
           <span class="tl-sim-tag">Simulação · nada foi gravado</span>
@@ -69,6 +71,21 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
           <button type="button" class="btn btn-sm" (click)="startSim()"><app-icon name="pencil" [size]="14" />Simular mudanças</button>
         }
       </div>
+
+      @if (helpOpen()) {
+        <div class="tl-help card" id="tl-help">
+          <div class="tl-help__head"><b>Como usar a linha do tempo</b><button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="helpOpen.set(false)" aria-label="Fechar ajuda" title="Fechar"><app-icon name="x" [size]="14" /></button></div>
+          <ol class="tl-help__steps">
+            <li>Clique num {{ t().one }} para ver datas, tarefas e informações.</li>
+            <li>O mesmo responsável faz um por vez e a fila dele é reajustada; pessoas diferentes andam em paralelo.</li>
+            @if (d.can_edit) {
+              <li>Em <b>Simular mudanças</b>, arraste as linhas para reordenar e a ponta da barra para mudar a duração.</li>
+              <li>Clique num {{ t().one }} para mudar a data inicial; <b>Inserir</b> acrescenta um novo à fila.</li>
+              <li>Nada é gravado até <b>Aplicar</b>. Se alguma data já combinada mudar, informe o motivo.</li>
+            }
+          </ol>
+        </div>
+      }
 
       @if (draft() && dirty()) {
         <div class="tl-reason">
@@ -84,13 +101,13 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
       @if (inserting; as f) {
         <div class="tl-insert">
           <div class="field"><label for="tl-in">Nome do {{ t().one }}</label><input id="tl-in" class="input" appAutofocus [(ngModel)]="f.name" placeholder="Ex.: Homologação" (keydown.enter)="confirmInsert()" /></div>
-          <div class="field" style="max-width: 130px"><label for="tl-id">Duração (dias úteis)</label><input id="tl-id" class="input" type="number" min="1" max="365" [(ngModel)]="f.duration" /></div>
-          <div class="field" style="min-width: 200px"><label for="tl-ia">Posição</label>
+          <div class="field tl-insert__dur"><label for="tl-id">Duração (dias úteis)</label><input id="tl-id" class="input" type="number" min="1" max="365" [(ngModel)]="f.duration" /></div>
+          <div class="field tl-insert__pos"><label for="tl-ia">Posição</label>
             <select id="tl-ia" class="select" [(ngModel)]="f.after">
               <option [ngValue]="-1">No início da fila</option>
               @for (r of draft() || []; track r.key; let i = $index) { @if (!r.removed) { <option [ngValue]="i">Depois de {{ r.name }}</option> } }
             </select></div>
-          <div class="row" style="gap: 6px; align-self: flex-end; padding-bottom: 2px">
+          <div class="tl-insert__actions">
             <button type="button" class="btn btn-ghost btn-sm" (click)="inserting = null">Cancelar</button>
             <button type="button" class="btn btn-primary btn-sm" [disabled]="(f.name || '').trim().length < 2" (click)="confirmInsert()">Inserir na simulação</button>
           </div>
@@ -98,7 +115,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
       }
 
       @if (!rows().length) {
-        <div class="tl-empty muted">{{ board() ? 'Nenhum projeto nesta equipe ainda.' : 'Nenhum projeto neste quadro ainda.' }} Crie o primeiro para montar a linha do tempo.</div>
+        <app-empty dashed icon="calendar" [title]="board() ? 'Nenhum projeto nesta equipe ainda' : 'Nenhum projeto neste quadro ainda'" text="Crie o primeiro para montar a linha do tempo." />
       } @else {
         <div class="tl-scroll" #scroller>
           <div class="tl-grid" [style.width.px]="labelWidth + days().length * dayW()">
@@ -128,7 +145,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                    (dragover)="dragOver($event, i)" (drop)="$event.preventDefault()">
                 <div class="tl-label" (click)="select(r.key)">
                   @if (draft()) { <span class="tl-grip" aria-hidden="true">⋮⋮</span> }
-                  <span class="wk-dot" [style.background]="r.done ? 'var(--text-subtle)' : r.color"></span>
+                  <span class="dot dot--md" [style.background]="r.done ? 'var(--text-subtle)' : r.color"></span>
                   <div class="tl-label__text">
                     <button type="button" class="tl-label__name" [title]="r.name" (click)="select(r.key); $event.stopPropagation()">@if (r.work) { <span class="wk-id">#{{ r.work.id }}</span> }{{ r.name }}</button>
                     <div class="tl-label__dates">
@@ -168,7 +185,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                     <button type="button" class="tl-bar" [class.tl-bar--done]="r.done" [class.tl-bar--late]="b.late && !r.done" [class.tl-bar--new]="r.isNew"
                             [class.tl-bar--sel]="selectedKey() === r.key" [class.tl-bar--phases]="selectedKey() === r.key && phasePlan(r).length"
                             [style.left.px]="x(b.start)" [style.width.px]="span(b)" [style.--c]="r.color"
-                            [title]="selectedKey() === r.key && phasePlan(r).length ? '' : r.name + ': ' + fmt(b.start) + ' a ' + fmt(b.end) + (b.late && !r.done ? ' (atrasado)' : '')"
+                            [title]="r.name + ': ' + fmt(b.start) + ' a ' + fmt(b.end) + (b.late && !r.done ? ' (atrasado)' : '')"
                             (click)="select(r.key)">
                       @if (selectedKey() === r.key && phasePlan(r).length) {
                         <span class="tl-bar__phases">
@@ -181,7 +198,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                         <span class="tl-bar__fill" [style.width.%]="pct(r.work)"></span>
                       }
                       <span class="tl-bar__label">{{ r.name }}</span>
-                      @if (draft() && !r.done) { <span class="tl-handle" (pointerdown)="resizeStart($event, r, b)" (click)="$event.stopPropagation()" title="Arraste para mudar a duração"></span> }
+                      @if (draft() && !r.done) { <span class="tl-handle" (pointerdown)="resizeStart($event, r, b)" (click)="$event.stopPropagation()" [attr.aria-label]="'Mudar a duração de ' + r.name" title="Arraste para mudar a duração"></span> }
                     </button>
                     <span class="tl-date tl-date--end" [style.left.px]="x(b.end) + dayW() + 4">
                       {{ fmt(b.end) }}
@@ -216,10 +233,10 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
         @if (selected(); as r) {
           <div class="tl-panel">
             <div class="tl-panel__head">
-              <span class="wk-dot" [style.background]="r.done ? 'var(--text-subtle)' : r.color"></span>
-              <div class="grow" style="min-width: 0">
+              <span class="dot dot--md" [style.background]="r.done ? 'var(--text-subtle)' : r.color"></span>
+              <div class="grow tl-panel__text">
                 <h3>{{ r.name }}</h3>
-                <div class="muted small row" style="gap: 6px">
+                <div class="muted small tl-panel__meta">
                   @if (r.work?.owner_name; as on) { <app-avatar [person]="{ name: on, initials: r.work?.owner_initials || '', color: r.work?.owner_color || '' }" />{{ on }} · }
                   <span [class]="'tl-status tl-status--' + statusOf(r).key">{{ statusOf(r).label }}</span>
                   @if (r.work?.phase_name; as ph) { <span class="phase-chip" [style.--phase]="r.work?.phase_color">{{ ph }}</span> }
@@ -282,7 +299,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                   @if (r.work?.completed_at) { <dt>Concluído em</dt><dd>{{ fmt(r.work?.completed_at) }}</dd> }
                 </dl>
                 @if (r.id && !r.isNew) {
-                  <h4 style="margin-top: 14px">Histórico de datas</h4>
+                  <h4 class="tl-panel__h4--gap">Histórico de datas</h4>
                   <app-date-log [workId]="r.id" />
                 }
                 @if (draft() && !r.removed && !r.done) {
@@ -291,7 +308,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                       <input id="tl-ps" type="date" class="input" [ngModel]="draftOf(r.key)?.start_date" (ngModelChange)="setStart(r.key, $event)" /></div>
                     <div class="field"><label for="tl-pd">Duração (dias úteis)</label>
                       <input id="tl-pd" type="number" min="1" max="365" class="input" [ngModel]="r.duration" (ngModelChange)="setDuration(r.key, $event)" /></div>
-                    <button type="button" class="btn btn-ghost btn-sm" style="align-self: flex-end" (click)="toggleRemove(r.key)"><app-icon name="trash" [size]="14" />Tirar da fila</button>
+                    <button type="button" class="btn btn-ghost btn-sm tl-panel__edit-btn" (click)="toggleRemove(r.key)"><app-icon name="trash" [size]="14" />Tirar da fila</button>
                   </div>
                 } @else if (draft() && r.removed) {
                   <button type="button" class="btn btn-sm" (click)="toggleRemove(r.key)"><app-icon name="back" [size]="14" />Voltar para a fila</button>
@@ -301,7 +318,7 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
               <section>
                 <h4>Tarefas @if (r.work) { <span class="muted">{{ r.work.tasks_total }}</span> }</h4>
                 @if (r.isNew) { <p class="muted small">{{ t().One }} novo da simulação, ainda sem tarefas.</p> }
-                @else if (tasksLoading()) { <p class="muted small">Carregando…</p> }
+                @else if (tasksLoading()) { <app-loading kind="lines" [rows]="3" /> }
                 @else if (!tasks().length) { <p class="muted small">Nenhuma tarefa neste {{ t().one }}.</p> }
                 @else {
                   <ul class="tl-tasks">
@@ -321,10 +338,10 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
 
               <section>
                 <h4>Informações</h4>
-                <p class="small" style="white-space: pre-wrap; margin: 0 0 8px">{{ r.work?.description || 'Sem descrição.' }}</p>
+                <p class="small tl-panel__desc">{{ r.work?.description || 'Sem descrição.' }}</p>
                 @if (r.work?.members?.length) {
-                  <div class="row small muted" style="gap: 4px; flex-wrap: wrap">Participantes:
-                    @for (m of r.work?.members || []; track m.id) { <span class="row" style="gap: 4px"><app-avatar [person]="m" />{{ m.name.split(' ')[0] }}</span> }
+                  <div class="small muted tl-panel__members">Participantes:
+                    @for (m of r.work?.members || []; track m.id) { <span class="tl-panel__member"><app-avatar [person]="m" />{{ m.name.split(' ')[0] }}</span> }
                   </div>
                 }
               </section>
@@ -347,18 +364,13 @@ const spansMeet = (a: Span[], b: Span[]) => a.some(x => b.some(y => x.start <= y
                 <strong [class.wk-late]="slack() < 0" [class.wk-ok]="slack() >= 0">{{ abs(slack()) }} {{ abs(slack()) === 1 ? 'dia útil' : 'dias úteis' }}</strong></div>
             }
             <div><span class="muted small">{{ t().Many }} atrasados</span><strong [class.wk-late]="lateCount() > 0">{{ lateCount() }}</strong></div>
-            <span class="grow"></span>
-            <span class="muted small tl-hint">
-              @if (draft()) { Arraste as linhas para reordenar e a ponta da barra para mudar a duração. Clique num {{ t().one }} para mudar a data inicial. }
-              @else { Clique num {{ t().one }} para ver datas, tarefas e informações. O mesmo responsável faz um por vez e a fila dele é reajustada; pessoas diferentes andam em paralelo. }
-            </span>
           </div>
         }
       }
     } @else if (error()) {
-      <div class="muted" style="padding: 30px 0">{{ error() }}</div>
+      <app-error [text]="error()" (retry)="load()" />
     } @else {
-      <div class="muted" style="padding: 30px 0">Carregando linha do tempo…</div>
+      <app-loading kind="lines" [rows]="6" text="Carregando linha do tempo…" />
     }
   `,
 })
@@ -370,6 +382,8 @@ export class ProjectTimelineComponent implements OnChanges {
   private api = inject(ApiService);
   private toast = inject(ToastService);
   private router = inject(Router);
+  private confirmSvc = inject(ConfirmService);
+  helpOpen = signal(false);
   private scroller = viewChild<ElementRef<HTMLElement>>('scroller');
 
   readonly labelWidth = 320;
@@ -707,14 +721,20 @@ export class ProjectTimelineComponent implements OnChanges {
     window.addEventListener('pointerup', up);
   }
 
-  apply() {
+  async apply() {
     const list = this.draft(); if (!list) return;
     const removed = list.filter(i => i.removed && i.id);
     if (removed.length) {
       const tasks = removed.reduce((n, i) => n + (i.work?.tasks_total || 0), 0);
       const names = removed.map(i => i.name).join(', ');
       const what = removed.length === 1 ? `O ${this.t().one}` : `${removed.length} ${this.t().many}`;
-      if (!confirm(`${what} ${names} ${removed.length === 1 ? 'será excluído' : 'serão excluídos'}${tasks ? ` com ${tasks} ${tasks === 1 ? 'tarefa' : 'tarefas'}` : ''}. Não dá para desfazer.\nAplicar a simulação?`)) return;
+      const ok = await this.confirmSvc.confirm({
+        title: 'Aplicar a simulação?',
+        message: `${what} ${names} ${removed.length === 1 ? 'será excluído' : 'serão excluídos'}${tasks ? ` com ${tasks} ${tasks === 1 ? 'tarefa' : 'tarefas'}` : ''}. Não dá para desfazer.`,
+        confirmLabel: 'Aplicar',
+        danger: true,
+      });
+      if (!ok) return;
     }
     const body = {
       items: list.filter(i => !i.removed).map(i => (i.id

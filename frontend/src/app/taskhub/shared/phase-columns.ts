@@ -1,10 +1,12 @@
 import { signal } from '@angular/core';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
+import { ConfirmService } from '../core/confirm.service';
 import { Phase, PhaseScope } from '../core/models';
 import { sumPhaseDays } from '../core/timeline';
 
-export const PHASE_COLORS = ['#8b93a1', '#3b82f6', '#a78bfa', '#14b8a6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#84cc16'];
+import { PHASE_COLORS } from '../core/colors';
+export { PHASE_COLORS };
 
 // Edição das colunas de fase (lista da equipe ou do projeto sem equipe), usada no Kanban de projetos e no de tarefas.
 // Toda edição envia a lista inteira e vale para todos os projetos do escopo.
@@ -23,6 +25,8 @@ export class PhaseColumns {
     phases: () => Phase[];
     scope: () => PhaseScope | null;
     saved: (phases: Phase[]) => void;
+    // Opcional: sem ele, cai no confirm() do navegador (quem chama deve passar o ConfirmService).
+    confirm?: ConfirmService;
   }) {}
 
   closeMenu() { this.colMenu.set(null); this.menuPos.set(null); }
@@ -69,10 +73,15 @@ export class PhaseColumns {
     [list[i], list[i + dir]] = [list[i + dir], list[i]];
     this.save(list);
   }
-  remove(ph: Phase) {
+  async remove(ph: Phase) {
     this.closeMenu();
     const where = this.o.scope()?.kind === 'project' ? 'deste projeto' : 'de todos os projetos da equipe';
-    if (!confirm(`Excluir a fase ${ph.name}?\nEla some do Kanban ${where}. As tarefas que estavam nela ficam sem fase.`)) return;
+    const title = `Excluir a fase ${ph.name}?`;
+    const message = `Ela some do Kanban ${where}. As tarefas que estavam nela ficam sem fase.`;
+    const ok = this.o.confirm
+      ? await this.o.confirm.confirm({ title, message, confirmLabel: 'Excluir', danger: true })
+      : window.confirm(`${title}\n${message}`);
+    if (!ok) return;
     this.save(this.o.phases().filter(p => p.id !== ph.id));
   }
   add() {

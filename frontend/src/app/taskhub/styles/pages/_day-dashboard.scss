@@ -1,0 +1,10 @@
+// Estilos específicos (parcial importado por taskhub.scss, dentro de .taskhub-root).
+
+// Meu Dia · cartões laterais ("Para escolher", "Amanhã").
+.dl-card__foot { display: block; margin-top: 8px; }
+.dl-card__note { margin-top: 6px; }
+// Cabeçalho de "Para escolher": Etapa/Projeto levam .dl-pick__cell só para sumir no celular.
+.dl-pick--head .dl-pick__cell { font-size: inherit; color: inherit; }
+
+// Apresentação em tela cheia · texto de "nada aqui" nas listas (unidade relativa ao palco).
+.pv-muted--sm { font-size: 1.6cqw; }

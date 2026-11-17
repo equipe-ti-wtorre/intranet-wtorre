@@ -4,7 +4,7 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
 import { Note, NoteColor } from '../core/models';
 import { relativeTime } from '../core/format';
-import { IconComponent } from '../shared/ui';
+import { EmptyComponent, IconComponent, LoadingComponent, SearchComponent } from '../shared/ui';
 
 const COLORS: { id: NoteColor; label: string }[] = [
   { id: 'none', label: 'Sem cor' },
@@ -19,41 +19,35 @@ const COLORS: { id: NoteColor; label: string }[] = [
 @Component({
   selector: 'app-notes',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, SearchComponent, LoadingComponent, EmptyComponent],
   template: `
     <div class="page notes-page">
       <div class="page-head">
-        <div>
+        <div class="page-head__text">
           <h1>Notas</h1>
           <div class="sub">Espaço Individual: só você vê. As alterações são salvas sozinhas.</div>
         </div>
         <div class="actions">
-          <input class="input notes-search" [ngModel]="q()" (ngModelChange)="q.set($event)" placeholder="Buscar nas notas" aria-label="Buscar nas notas" />
-          <button class="btn btn-primary" (click)="create()"><app-icon name="plus" [size]="14" /> Nova nota</button>
+          <app-search [value]="q()" (valueChange)="q.set($event)" placeholder="Buscar nas notas" />
+          <button type="button" class="btn btn-primary" (click)="create()"><app-icon name="plus" [size]="14" /> Nova nota</button>
         </div>
       </div>
 
       <div class="notes-split">
         <div class="notes-list">
           @if (!loaded()) {
-            <div class="muted small">Carregando…</div>
+            <app-loading [rows]="4" />
           } @else if (!notes().length) {
-            <div class="note-empty">
-              <b>Nenhuma nota</b>
-              <p>Anote ideias, decisões de reunião ou qualquer coisa para lembrar.</p>
-            </div>
+            <app-empty icon="note" [compact]="true" title="Nenhuma nota" text="Anote ideias, decisões de reunião ou qualquer coisa para lembrar." />
           } @else if (!shown().length) {
-            <div class="note-empty">
-              <b>Nenhuma nota</b>
-              <p>Nada com esse texto.</p>
-            </div>
+            <app-empty icon="search" [compact]="true" title="Nenhuma nota" text="Nada com esse texto." />
           } @else {
             @for (n of shown(); track n.id) {
               <button type="button" class="note-item" [class.on]="n.id === selectedId()" (click)="open(n.id)">
                 <span class="bar {{ n.color }}"></span>
                 <span class="grow">
-                  <b class="ellipsis">{{ n.title.trim() || 'Sem título' }}</b>
-                  <span class="preview ellipsis">{{ n.body.trim() || 'Sem conteúdo' }}</span>
+                  <b class="ellipsis" [title]="n.title.trim() || 'Sem título'">{{ n.title.trim() || 'Sem título' }}</b>
+                  <span class="preview ellipsis" [title]="n.body.trim() || 'Sem conteúdo'">{{ n.body.trim() || 'Sem conteúdo' }}</span>
                   <span class="when">{{ rel(n.updated_at) }}</span>
                 </span>
               </button>
@@ -64,17 +58,17 @@ const COLORS: { id: NoteColor; label: string }[] = [
         <div class="note-sheet">
           @if (current(); as n) {
             <div class="note-tools">
-              <div class="note-dots" role="group" aria-label="Cor da nota">
+              <div class="note-dots" role="radiogroup" aria-label="Cor da nota">
                 @for (c of colors; track c.id) {
-                  <button type="button" class="color-dot {{ c.id }}" [class.on]="n.color === c.id" [attr.aria-label]="c.label" [attr.aria-pressed]="n.color === c.id" (click)="setColor(c.id)"></button>
+                  <button type="button" class="color-dot {{ c.id }}" [class.on]="n.color === c.id" role="radio" [attr.aria-label]="c.label" [title]="c.label" [attr.aria-checked]="n.color === c.id" (click)="setColor(c.id)"></button>
                 }
               </div>
               <div class="note-tools-right">
-                <span class="muted small">{{ saveState() === 'saving' ? 'Salvando…' : 'Salvo' }}</span>
+                <span class="hint" role="status" aria-live="polite">{{ saveState() === 'saving' ? 'Salvando…' : 'Salvo' }}</span>
                 <button type="button" class="btn btn-ghost btn-sm" [class.on]="n.pinned" (click)="togglePin()" [attr.aria-pressed]="n.pinned">
                   <app-icon name="pin" [size]="14" /> Fixar no topo
                 </button>
-                <button type="button" class="btn btn-ghost btn-icon btn-danger" (click)="remove(n)" aria-label="Excluir nota"><app-icon name="trash" [size]="15" /></button>
+                <button type="button" class="btn btn-ghost btn-icon btn-danger" (click)="remove(n)" aria-label="Excluir nota" title="Excluir nota"><app-icon name="trash" [size]="15" /></button>
               </div>
             </div>
             <input #titleInput class="note-title" [ngModel]="n.title" (ngModelChange)="edit({ title: $event })" placeholder="Título" aria-label="Título" />

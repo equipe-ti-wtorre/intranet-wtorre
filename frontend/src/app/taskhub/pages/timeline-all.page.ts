@@ -4,18 +4,18 @@ import { AuthService } from '../core/auth.service';
 import { corpTeamLink } from '../core/corp-views';
 import { DataService } from '../core/data.service';
 import { buildSectorNav, saveKanbanTeam } from '../core/sector-nav';
-import { IconComponent } from '../shared/ui';
+import { EmptyComponent, IconComponent } from '../shared/ui';
 import { TeamBarComponent } from '../shared/team-bar.component';
 import { ProjectTimelineComponent } from './project-timeline.component';
 
 @Component({
   selector: 'app-timeline-all',
   standalone: true,
-  imports: [RouterLink, IconComponent, TeamBarComponent, ProjectTimelineComponent],
+  imports: [RouterLink, IconComponent, EmptyComponent, TeamBarComponent, ProjectTimelineComponent],
   template: `
     <div class="page works-page">
       <div class="page-head">
-        <div>
+        <div class="page-head__text">
           <h1>Linha do tempo</h1>
           <div class="sub">Projetos de todas as suas equipes</div>
         </div>
@@ -26,7 +26,7 @@ import { ProjectTimelineComponent } from './project-timeline.component';
       @for (tm of teams(); track tm.id) {
         <section class="tla-team" [class.tla-team--empty]="!tm.projects_count">
           <header class="tla-team__head">
-            <span class="wk-teambar__dot" [style.background]="tm.color"></span>
+            <span class="dot dot--md" [style.background]="tm.color"></span>
             <h2>{{ tm.name }}</h2>
             @if (multiSector()) { <span class="muted small">{{ tm.sector_name }}</span> }
             <span class="tla-team__n">
@@ -41,11 +41,7 @@ import { ProjectTimelineComponent } from './project-timeline.component';
           }
         </section>
       } @empty {
-        <div class="vp-empty">
-          <app-icon name="calendar" [size]="28" />
-          <b>Nenhuma equipe ainda</b>
-          <span>Quando um gestor incluir você numa equipe, a linha do tempo dela aparece aqui.</span>
-        </div>
+        <app-empty dashed icon="calendar" title="Nenhuma equipe ainda" text="Quando um gestor incluir você numa equipe, a linha do tempo dela aparece aqui." />
       }
     </div>
   `,

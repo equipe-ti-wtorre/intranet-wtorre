@@ -1,0 +1,13 @@
+// Estilos específicos (parcial importado por taskhub.scss, dentro de .taskhub-root).
+
+/* Nova tarefa */
+.qa-desc { min-height: 110px; }
+
+/* Novo projeto */
+.note-info--tight { margin-top: 0; }
+.np-objective { min-height: 70px; }
+.np-member { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.np-role { height: 22px; font-size: 12px; }
+
+/* Lista de tarefas: sinal de "+" da linha de adicionar */
+.add-row__plus { display: inline-block; width: 18px; text-align: center; flex-shrink: 0; }

@@ -12,6 +12,7 @@ import { PaletteComponent } from './palette.component';
 import { ToastsComponent } from './toasts.component';
 import { NewProjectComponent } from './new-project.component';
 import { ShortcutsComponent } from './shortcuts.component';
+import { ConfirmHostComponent } from '../shared/confirm-host.component';
 
 const SIDEBAR_HIDDEN_KEY = 'taskhub.sidebar.hidden';
 type NavGroup = 'corporativo' | 'individual' | 'organizacao';
@@ -21,13 +22,13 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
   selector: 'app-shell',
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, AvatarComponent, IconComponent, TaskDrawerComponent,
-    QuickAddComponent, PaletteComponent, ToastsComponent, NewProjectComponent, ShortcutsComponent],
+    QuickAddComponent, PaletteComponent, ToastsComponent, NewProjectComponent, ShortcutsComponent, ConfirmHostComponent],
   template: `
     <div class="app wt-layout" [class.menu-open]="menuOpen()" [class.side-hidden]="sideHidden()" [class.theme-nubank]="ui.palette() === 'nubank-parque'">
       <aside class="side wt-sidebar" aria-label="Menu principal">
         <div class="brand">
           <img class="brand-logo" [src]="ui.logoFullSrc()" [alt]="ui.logoAlt()" />
-          <a href="/inicio" class="side-intranet" style="margin-left: auto" title="Voltar para a Intranet"><app-icon name="back" [size]="13" />Intranet</a>
+          <a href="/inicio" class="side-intranet ml-auto" title="Voltar para a Intranet"><app-icon name="back" [size]="13" />Intranet</a>
         </div>
         <div class="side-actions">
           <button class="btn btn-sm" (click)="ui.openQuickAdd(quickDefaults())"><app-icon name="plus" [size]="14" />Nova tarefa<kbd class="kbd-hint">Q</kbd></button>
@@ -69,7 +70,7 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
                 @for (w of data.guestWorks(); track w.id) {
                   <a [routerLink]="['/ti/taskhub/equipes', w.team_id, 'projetos', w.id]" routerLinkActive="active" [title]="'Projeto da equipe ' + w.team_name">
                     <span class="dot" [style.background]="w.color"></span><span class="ellipsis">{{ w.name }}</span>
-                    <span class="muted small ellipsis" style="margin-left:auto;max-width:45%">{{ w.team_name }}</span>
+                    <span class="muted small ellipsis nav-side-note">{{ w.team_name }}</span>
                   </a>
                 }
               }
@@ -115,7 +116,7 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
           }
         </nav>
         <div class="side-foot">
-          <a routerLink="/ti/taskhub/perfil" class="row grow" style="gap:10px" title="Meu perfil">
+          <a routerLink="/ti/taskhub/perfil" class="row grow side-foot__me" title="Meu perfil">
             <app-avatar [person]="auth.user()" [large]="true" />
             <span class="who"><b class="ellipsis">{{ auth.user()?.name }}</b><span>{{ roleLabel() }}</span></span>
           </a>
@@ -124,13 +125,13 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
       <button type="button" class="side-toggle" (click)="toggleSide()" [attr.aria-expanded]="sideHidden() ? 'false' : 'true'" [attr.aria-label]="sideHidden() ? 'Mostrar menu' : 'Ocultar menu'">
         <app-icon name="chevron" [size]="14" />
       </button>
-      @if (menuOpen()) { <div class="scrim" style="z-index:44" (click)="menuOpen.set(false)"></div> }
+      @if (menuOpen()) { <div class="scrim scrim--menu" (click)="menuOpen.set(false)"></div> }
 
       <main class="main">
         <div class="mobile-bar">
           <button class="btn btn-ghost btn-icon" (click)="menuOpen.set(true)" aria-label="Abrir menu"><app-icon name="menu" /></button>
           <img class="mobile-logo" [src]="ui.logoMarkSrc()" [alt]="ui.logoAlt()" />
-          <button class="btn btn-sm" style="margin-left:auto" (click)="ui.openQuickAdd(quickDefaults())"><app-icon name="plus" [size]="14" />Tarefa</button>
+          <button class="btn btn-sm ml-auto" (click)="ui.openQuickAdd(quickDefaults())"><app-icon name="plus" [size]="14" />Tarefa</button>
         </div>
         <router-outlet />
       </main>
@@ -141,6 +142,7 @@ const NAV_GROUP_KEY = (g: NavGroup) => `taskhub.nav.${g}`;
     @if (ui.paletteOpen()) { <app-palette /> }
     @if (ui.newProjectOpen()) { <app-new-project /> }
     @if (ui.helpOpen()) { <app-shortcuts /> }
+    <app-confirm-host />
     <app-toasts />
   `,
 })
@@ -212,6 +214,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       e.preventDefault(); this.ui.paletteOpen.set(true); return;
     }
     if (e.key === 'Escape') {
+      // As janelas com appDialog tratam o próprio Esc; aqui só o que sobrou (foco fora da janela).
       if (this.ui.paletteOpen()) this.ui.paletteOpen.set(false);
       else if (this.ui.quickAdd()) this.ui.quickAdd.set(null);
       else if (this.ui.helpOpen()) this.ui.helpOpen.set(false);

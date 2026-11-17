@@ -8,6 +8,8 @@ import { DataService } from '../core/data.service';
 import { Task } from '../core/models';
 import { askCloseTask } from '../core/confirm-open';
 import { GroupBy, SortBy, TaskListComponent } from '../shared/task-list';
+import { ConfirmService } from '../core/confirm.service';
+import { LoadingComponent, ErrorComponent } from '../shared/ui';
 
 const DUE_LABEL: Record<string, string> = { overdue: 'atrasadas', today: 'com prazo hoje', week: 'com prazo nos próximos 7 dias', none: 'sem prazo' };
 const STATUS_LABEL: Record<string, string> = { blocked: 'bloqueadas', doing: 'em andamento', done: 'concluídas', todo: 'a fazer' };
@@ -15,31 +17,32 @@ const STATUS_LABEL: Record<string, string> = { blocked: 'bloqueadas', doing: 'em
 @Component({
   selector: 'app-tasks',
   standalone: true,
-  imports: [TaskListComponent],
+  imports: [TaskListComponent, LoadingComponent, ErrorComponent],
   template: `
     <div class="page">
       <div class="page-head">
-        <div><h1>{{ title() }}</h1><div class="sub">{{ subtitle() }}</div></div>
+        <div class="page-head__text"><h1>{{ title() }}</h1><div class="sub">{{ subtitle() }}</div></div>
         <div class="actions">
           <label class="label" for="g">Agrupar</label>
-          <select id="g" class="select" style="width:150px;height:30px" [value]="groupBy()" (change)="groupBy.set($any($event.target).value)">
+          <select id="g" class="select toolbar-input" [value]="groupBy()" (change)="groupBy.set($any($event.target).value)">
             <option value="due">Prazo</option><option value="project">Projeto</option>
             <option value="status">Status</option><option value="assignee">Responsável</option><option value="none">Sem grupo</option>
           </select>
-          <select class="select" style="width:140px;height:30px" [value]="sortBy()" (change)="sortBy.set($any($event.target).value)" aria-label="Ordenar">
+          <select class="select toolbar-input" [value]="sortBy()" (change)="sortBy.set($any($event.target).value)" aria-label="Ordenar">
             <option value="manual">Ordem padrão</option><option value="due">Por prazo</option>
             <option value="priority">Por prioridade</option><option value="title">Por título</option>
           </select>
           @if (!fixedStatus()) {
-            <button class="btn btn-sm" [class.btn-primary]="showDone()" (click)="showDone.set(!showDone()); load()">Concluídas recentes</button>
+            <button class="btn btn-sm" [class.on]="showDone()" [attr.aria-pressed]="showDone()" (click)="showDone.set(!showDone()); load()">Concluídas recentes</button>
           }
         </div>
       </div>
-      @if (error()) { <div class="error-text">{{ error() }}</div> }
-      @if (loaded()) {
+      @if (error()) {
+        <app-error [text]="error()" (retry)="load()" />
+      } @else if (loaded()) {
         <app-task-list [tasks]="tasks()" [groupBy]="groupBy()" [sortBy]="sortBy()" [head]="true" (toggle)="toggle($event)"
                        [emptyTitle]="emptyTitle()" [emptyText]="emptyText()" />
-      } @else { <div class="muted">Carregando…</div> }
+      } @else { <app-loading /> }
     </div>
   `,
 })
@@ -49,6 +52,7 @@ export class TasksPage implements OnInit, OnDestroy {
   private ui = inject(UiService);
   private toast = inject(ToastService);
   private data = inject(DataService);
+  private confirmSvc = inject(ConfirmService);
 
   tasks = signal<Task[]>([]);
   loaded = signal(false);
@@ -115,7 +119,7 @@ export class TasksPage implements OnInit, OnDestroy {
       error: e => this.toast.error(errorMessage(e)),
     });
     if (!done) { run(); return; }
-    askCloseTask(this.api.task(t.id), t).subscribe({
+    askCloseTask(this.confirmSvc, this.api.task(t.id), t).subscribe({
       next: ok => { if (ok) run(); },
       error: e => this.toast.error(errorMessage(e)),
     });

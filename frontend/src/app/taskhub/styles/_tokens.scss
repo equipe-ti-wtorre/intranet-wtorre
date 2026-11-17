@@ -13,12 +13,53 @@
   --font-body: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
   --form-field-height: 42px;
   --form-radius: 0.75rem;
-  --radius-card: 1rem;
   --surface: #ffffff;
   --app-surface: #ffffff;
   --app-surface-2: #f8fafc;
-  --text-subtle: #94a3b8;
+  --text-subtle: #7c8aa0;
+  --on-brand: #ffffff;
+  --state-pause: #94a3b8;
+  --disabled-bg: #e5e7eb;
+  --disabled-fg: #6b7280;
+  --disabled-ghost-fg: #9ca3af;
+  --note-yellow: #eab308;
+  --note-blue: #3b82f6;
+  --note-green: #22c55e;
+  --note-purple: #a78bfa;
+  --note-orange: #f97316;
+  --note-red: #ef4444;
+  --ms-red: #f25022;
+  --ms-green: #7fba00;
+  --ms-blue: #00a4ef;
+  --ms-yellow: #ffb900;
   --shadow-pop: 0 20px 48px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.08);
+
+  /* Escala tipográfica */
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+
+  /* Camadas (z-index). Do fundo para a frente. */
+  --z-menu-scrim: 5;
+  --z-menu: 6;
+  --z-pop: 8;
+  --z-side-toggle: 30;
+  --z-scrim: 40;
+  --z-task: 41;
+  --z-side-mobile: 45;
+  --z-modal: 50;
+  --z-present: 80;
+  --z-picker: 200;
+  --z-toast: 300;
+  --z-fullscreen: 1000;
+
+  /* Cartões */
+  --card-pad: 16px 18px;
+  --hit: 36px;
   color-scheme: light;
 }
 
@@ -43,7 +84,7 @@
   --menu-active: var(--brand);
   --menu-label-inactive: #aab2c8;
   --menu-icon-inactive: #aab2c8;
-  --menu-section: #5d6883;
+  --menu-section: #8a95b0;
   --menu-label-active: #ffffff;
   --menu-status: #13a36b;
   --menu-line: color-mix(in srgb, #ffffff 7%, transparent);
@@ -110,4 +151,5 @@
   --font-num: var(--font-body);
   --r: 8px;
   --r-lg: 12px;
+  --radius-card: var(--r-lg);
 }

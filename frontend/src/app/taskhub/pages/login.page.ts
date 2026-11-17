@@ -68,20 +68,20 @@ import { AutofocusDirective } from '../shared/ui';
           </div>
           <h1 [class]="nubank() ? 'login-nubank__title' : 'login-card__title'">Entrar no TaskHub</h1>
           <p [class]="nubank() ? 'login-nubank__sub' : 'login-card__sub'">Tarefas, projetos e o seu dia de trabalho em um só lugar.</p>
-          <p class="small" style="margin: 0 0 12px"><a href="/inicio">Voltar à intranet</a></p>
+          <p class="small login-back"><a href="/inicio">Voltar à intranet</a></p>
 
           @if (notice()) { <div [class]="msg(noticeKind())" role="status">{{ notice() }}</div> }
 
-          <button type="button" [class]="nubank() ? 'login-nubank__ms' : 'login-ms'" [disabled]="loading()" (click)="microsoft()">
+          <button type="button" [class]="nubank() ? 'login-nubank__ms' : 'login-ms'" [class.btn--loading]="loading()" [disabled]="loading()" (click)="microsoft()">
             <span [class]="nubank() ? 'login-nubank__chip' : 'login-chip'" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
             Entrar com Microsoft
           </button>
 
-          <button type="button" class="login-toggle" (click)="showLocal.set(!showLocal())">{{ showLocal() ? 'Ocultar login admin' : 'Login sem Microsoft' }}</button>
+          <button type="button" class="login-toggle" [attr.aria-expanded]="showLocal()" aria-controls="login-local" (click)="showLocal.set(!showLocal())">{{ showLocal() ? 'Ocultar' : 'Entrar com usuário e senha' }}</button>
 
           @if (showLocal()) {
             <div [class]="nubank() ? 'login-nubank__divider' : 'login-divider'">ou</div>
-            <form class="stack" [formGroup]="form" (ngSubmit)="submit()">
+            <form class="stack" id="login-local" [formGroup]="form" (ngSubmit)="submit()">
               <div class="field">
                 <label class="form-label" for="l">Usuário ou e-mail</label>
                 <input id="l" [class]="nubank() ? 'form-field login-nubank__input' : 'form-field'" formControlName="login" autocomplete="username" appAutofocus />
@@ -91,7 +91,7 @@ import { AutofocusDirective } from '../shared/ui';
                 <input id="p" [class]="nubank() ? 'form-field login-nubank__input' : 'form-field'" type="password" formControlName="password" autocomplete="current-password" />
               </div>
               @if (error()) { <div [class]="msg('error')" role="alert">{{ error() }}</div> }
-              <button type="submit" [class]="nubank() ? 'login-nubank__submit' : 'login-ms'" [disabled]="loading()">{{ loading() ? 'Processando...' : 'Entrar' }}</button>
+              <button type="submit" [class]="nubank() ? 'login-nubank__submit' : 'login-ms'" [class.btn--loading]="loading()" [disabled]="loading()">{{ loading() ? 'Processando...' : 'Entrar' }}</button>
             </form>
             @if (!demo) {
               <span class="login-foot">Esqueceu a senha? Peça ao administrador uma senha temporária.</span>

@@ -1,0 +1,35 @@
+// Estilos específicos (parcial importado por taskhub.scss, dentro de .taskhub-root).
+
+/* Cabeçalho da página de projetos: ponto de cor + título + saúde + avatares na mesma linha */
+.wk-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.wk-desc { max-width: 760px; margin: -6px 0 14px; white-space: pre-wrap; }
+
+/* Cartão de projeto */
+.wk-card__top { gap: 10px; }
+.wk-owner { gap: 6px; }
+
+/* Modal de criar/editar e de pausar */
+.wk-form-phase { margin-left: 8px; vertical-align: middle; }
+.wk-ta { min-height: 80px; }
+.modal.wk-pause-modal { max-width: 460px; }
+
+/* Kanban sem barras de rolagem: as colunas dividem a largura e, se não couberem, quebram para a linha de baixo */
+.wk-kanban__cols {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; align-items: start;
+  overflow: visible; padding-bottom: 0;
+}
+.wk-col, .wk-col-new { width: auto; min-width: 0; }
+.wk-col__body { max-height: none; overflow: visible; }
+.wk-kanban--present .wk-col__body { max-height: none; }
+.works-page, .wk-kanban--present { scrollbar-width: none; -ms-overflow-style: none; }
+.works-page::-webkit-scrollbar, .wk-kanban--present::-webkit-scrollbar { display: none; }
+
+/* Cartão: nada passa da borda; o que não cabe quebra de linha ou corta com reticências */
+.wk-card { min-width: 0; overflow: hidden; }
+.wk-card__top > .grow { min-width: 0; }
+.wk-meta, .wk-name { max-width: 100%; }
+.wk-progress-head { flex-wrap: wrap; row-gap: 2px; }
+.wk-foot { flex-wrap: wrap; row-gap: 6px; min-width: 0; }
+.wk-foot .wk-owner { min-width: 0; max-width: 100%; flex-wrap: wrap; row-gap: 0; }
+.wk-foot .wk-owner .muted { white-space: nowrap; }
+.wk-foot .grow { flex: 1 1 0; min-width: 0; }

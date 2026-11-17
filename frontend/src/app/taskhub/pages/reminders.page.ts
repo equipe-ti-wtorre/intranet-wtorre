@@ -4,7 +4,7 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
 import { Reminder, ReminderRepeat } from '../core/models';
 import { dueLabel, todayIso } from '../core/format';
-import { IconComponent } from '../shared/ui';
+import { EmptyComponent, IconComponent, LoadingComponent } from '../shared/ui';
 
 const REPEATS: { id: ReminderRepeat; label: string }[] = [
   { id: 'none', label: 'Não repete' },
@@ -23,17 +23,17 @@ function nextHour(): string {
 @Component({
   selector: 'app-reminders',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, LoadingComponent, EmptyComponent],
   template: `
     <div class="page reminders-page">
       <div class="page-head">
-        <div>
+        <div class="page-head__text">
           <h1>Lembretes</h1>
           <div class="sub">Espaço Individual: só você vê. Na hora marcada o aviso chega na Caixa de entrada.</div>
         </div>
         <div class="actions">
-          <button class="btn" [class.on]="showDone()" (click)="showDone.set(!showDone())">Concluídos</button>
-          <button class="btn btn-primary" (click)="focusNew()"><app-icon name="plus" [size]="14" /> Novo lembrete</button>
+          <button type="button" class="btn" [class.on]="showDone()" [attr.aria-pressed]="showDone()" (click)="showDone.set(!showDone())"><app-icon name="check" [size]="14" /> Concluídos</button>
+          <button type="button" class="btn" (click)="focusNew()"><app-icon name="plus" [size]="14" /> Novo lembrete</button>
         </div>
       </div>
 
@@ -44,16 +44,14 @@ function nextHour(): string {
         <select class="select" [(ngModel)]="draftRepeat" aria-label="Repetição">
           @for (r of repeats; track r.id) { <option [value]="r.id">{{ r.label }}</option> }
         </select>
-        <button class="btn" (click)="add()" [disabled]="!draftTitle.trim()">Adicionar</button>
+        <button type="button" class="btn btn-primary" (click)="add()" [disabled]="!draftTitle.trim() || adding()" [class.btn--loading]="adding()">Adicionar</button>
       </div>
 
       @if (!loaded()) {
-        <div class="muted" style="margin-top:28px">Carregando…</div>
+        <div class="rem-loading"><app-loading [rows]="4" /></div>
       } @else if (!groups().length) {
-        <div class="rem-empty">
-          <b>{{ showDone() ? 'Nenhum lembrete concluído' : 'Nenhum lembrete' }}</b>
-          <p>{{ showDone() ? 'Os que você concluir aparecem aqui.' : 'Crie lembretes pessoais com data, hora e repetição.' }}</p>
-        </div>
+        <app-empty icon="bell" [dashed]="true" [title]="showDone() ? 'Nenhum lembrete concluído' : 'Nenhum lembrete'"
+                   [text]="showDone() ? 'Os que você concluir aparecem aqui.' : 'Crie lembretes pessoais com data, hora e repetição.'" />
       } @else {
         @for (g of groups(); track g.date) {
           <section class="rem-block">
@@ -62,11 +60,11 @@ function nextHour(): string {
               <div class="rem-row" [class.done]="r.done">
                 <button type="button" class="tick" [class.on]="r.done" (click)="toggle(r)" [attr.aria-label]="r.done ? 'Reabrir' : 'Concluir'"></button>
                 <span class="rem-when">{{ g.label }} · {{ r.time }}</span>
-                <span class="rem-title ellipsis">{{ r.title }}</span>
+                <span class="rem-title ellipsis" [title]="r.title">{{ r.title }}</span>
                 @if (r.repeat !== 'none') {
                   <span class="rem-repeat"><app-icon name="clock" [size]="13" /> {{ repeatLabel(r.repeat) }}</span>
                 }
-                <button type="button" class="btn btn-ghost btn-icon btn-sm btn-danger" (click)="remove(r)" aria-label="Excluir lembrete"><app-icon name="trash" [size]="14" /></button>
+                <button type="button" class="btn btn-ghost btn-icon btn-sm btn-danger" (click)="remove(r)" aria-label="Excluir lembrete" title="Excluir lembrete"><app-icon name="trash" [size]="14" /></button>
               </div>
             }
           </section>
@@ -84,6 +82,7 @@ export class RemindersPage implements OnInit {
   items = signal<Reminder[]>([]);
   showDone = signal(false);
   loaded = signal(false);
+  adding = signal(false);
   draftTitle = '';
   draftDate = todayIso();
   draftTime = nextHour();
@@ -118,15 +117,17 @@ export class RemindersPage implements OnInit {
 
   add() {
     const title = this.draftTitle.trim();
-    if (!title || !this.draftDate || !this.draftTime) return;
+    if (!title || !this.draftDate || !this.draftTime || this.adding()) return;
+    this.adding.set(true);
     this.api.addReminder({ date: this.draftDate, time: this.draftTime, title, repeat: this.draftRepeat }).subscribe({
       next: r => {
+        this.adding.set(false);
         this.items.update(list => [...list, { ...r, repeat: r.repeat || 'none' }]);
         this.draftTitle = '';
         this.showDone.set(false);
         this.toast.show('Lembrete criado.');
       },
-      error: e => this.toast.error(errorMessage(e)),
+      error: e => { this.adding.set(false); this.toast.error(errorMessage(e)); },
     });
   }
 

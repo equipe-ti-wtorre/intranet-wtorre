@@ -14,6 +14,9 @@ import { DeckViewerComponent } from '../presentation/deck-viewer.component';
 import { downloadDeckPptx } from '../presentation/deck-pptx';
 import { DeckTheme, DeckThemePickerComponent, readDeckTheme } from '../presentation/deck-theme';
 import { askCloseTask } from '../core/confirm-open';
+import { ConfirmService } from '../core/confirm.service';
+import { EmptyComponent, IconComponent, LoadingComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 
 type PlanTask = Task & { period: Period };
 type Line =
@@ -34,25 +37,25 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
 @Component({
   selector: 'app-my-day',
   standalone: true,
-  imports: [FormsModule, RouterLink, DeckViewerComponent, DeckThemePickerComponent],
+  imports: [FormsModule, RouterLink, DeckViewerComponent, DeckThemePickerComponent, EmptyComponent, IconComponent, LoadingComponent, DialogDirective],
   template: `
     <div class="page day-line">
       <div class="page-head">
-        <div>
-          <div class="sub">{{ dateLabel() }}@if (weather(); as w) { · <span class="day-weather">{{ w.temp }}°</span>@if (w.place) { {{ w.place }} } } @if (!isToday()) { · <button class="link-btn" (click)="goToday()">voltar para hoje</button> }</div>
+        <div class="page-head__text">
           <h1>{{ greeting() }}</h1>
+          <div class="sub">{{ dateLabel() }}@if (weather(); as w) { · <span class="day-weather">{{ w.temp }}°</span>@if (w.place) { {{ w.place }} } } @if (!isToday()) { · <button type="button" class="link-btn" (click)="goToday()">voltar para hoje</button> }</div>
         </div>
         <div class="actions">
-          <button class="btn btn-ghost btn-icon" (click)="shift(-1)" aria-label="Dia anterior" title="Dia anterior">‹</button>
-          <button class="btn btn-ghost btn-icon" (click)="shift(1)" aria-label="Próximo dia" title="Próximo dia">›</button>
+          <button type="button" class="btn btn-ghost btn-icon" (click)="shift(-1)" aria-label="Dia anterior" title="Dia anterior"><app-icon name="chevron-left" [size]="16" /></button>
+          <button type="button" class="btn btn-ghost btn-icon" (click)="shift(1)" aria-label="Próximo dia" title="Próximo dia"><app-icon name="chevron-right" [size]="16" /></button>
           <div class="seg" role="group" aria-label="Espaço">
-            <button [class.on]="space() === 'todos'" (click)="space.set('todos')">Tudo</button>
-            <button [class.on]="space() === 'profissional'" (click)="space.set('profissional')">Corporativo</button>
-            <button [class.on]="space() === 'pessoal'" (click)="space.set('pessoal')">Individual</button>
+            <button type="button" [class.on]="space() === 'todos'" [attr.aria-pressed]="space() === 'todos'" (click)="space.set('todos')">Tudo</button>
+            <button type="button" [class.on]="space() === 'profissional'" [attr.aria-pressed]="space() === 'profissional'" (click)="space.set('profissional')">Corporativo</button>
+            <button type="button" [class.on]="space() === 'pessoal'" [attr.aria-pressed]="space() === 'pessoal'" (click)="space.set('pessoal')">Individual</button>
           </div>
-          <button class="btn-action-secondary" (click)="distribute()" [disabled]="!d()">Distribuir pelo dia</button>
-          <button class="btn-action-secondary" (click)="openPresent()" [disabled]="!d()">Apresentação</button>
-          <button class="btn-action-primary" (click)="openClose()" [disabled]="!d()">Encerrar o dia</button>
+          <button class="btn" (click)="distribute()" [disabled]="!d()">Distribuir pelo dia</button>
+          <button class="btn" (click)="openPresent()" [disabled]="!d()">Apresentação</button>
+          <button class="btn btn-primary" (click)="openClose()" [disabled]="!d()">Encerrar o dia</button>
         </div>
       </div>
 
@@ -60,7 +63,7 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
         <!-- Resumo: progresso por período e o que pede atenção -->
         <section class="card dl-summary">
           <div class="dl-progress">
-            <div class="row" style="justify-content: space-between"><b>Seu dia</b><span class="muted small">{{ doneCount() }} de {{ totalCount() }} itens feitos</span></div>
+            <div class="row row--between"><b>Seu dia</b><span class="muted small">{{ doneCount() }} de {{ totalCount() }} itens feitos</span></div>
             <div class="dl-bars">
               @for (p of periodView(); track p.key) {
                 <div>
@@ -135,11 +138,11 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
                     </div>
                   }
                 } @empty {
-                  <div class="dl-empty">Nada aqui ainda. Arraste uma tarefa ou adicione abaixo.</div>
+                  <app-empty compact text="Nada aqui ainda. Arraste uma tarefa ou adicione abaixo." />
                 }
                 <div class="dl-add">
-                  <button (click)="ui.openQuickAdd({ plan_today: true, plan_period: p.key, space: quickSpace() })">+ Tarefa</button>
-                  <button (click)="openRoutine(p.key)">+ Rotina</button>
+                  <button type="button" (click)="ui.openQuickAdd({ plan_today: true, plan_period: p.key, space: quickSpace() })">+ Tarefa</button>
+                  <button type="button" (click)="openRoutine(p.key)">+ Rotina</button>
                 </div>
               </div>
             }
@@ -148,15 +151,15 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
           <!-- Lateral -->
           <aside class="dl-side">
             <section class="card dl-card">
-              <div class="row" style="justify-content: space-between"><b>Para escolher</b><span class="muted small">{{ pick().length }}</span></div>
-              <div class="dl-filters" role="group" aria-label="Filtrar sugestões">
+              <div class="row row--between"><b>Para escolher</b><span class="muted small">{{ pick().length }}</span></div>
+              <div class="chips" role="group" aria-label="Filtrar sugestões">
                 @for (f of filters; track f.key) {
-                  <button [class.on]="filter() === f.key" (click)="filter.set(f.key)">{{ f.label }} @if (f.key !== 'all') { {{ countOf(f.key) }} }</button>
+                  <button type="button" [class.on]="filter() === f.key" [attr.aria-pressed]="filter() === f.key" (click)="filter.set(f.key)">{{ f.label }} @if (f.key !== 'all') { {{ countOf(f.key) }} }</button>
                 }
               </div>
               @if (pick().length) {
                 <div class="dl-pick dl-pick--head">
-                  <span></span><span>Tarefa</span><span>Etapa</span><span>Projeto</span><span>Prazo</span><span></span>
+                  <span></span><span>Tarefa</span><span class="dl-pick__cell">Etapa</span><span class="dl-pick__cell">Projeto</span><span>Prazo</span><span></span>
                 </div>
               }
               @for (t of pick().slice(0, 8); track t.id) {
@@ -168,25 +171,25 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
                   @if (dueText(t); as dt) { <span class="dl-due" [class]="'dl-due dl-due--' + dt.tone">{{ dt.text }}</span> } @else { <span></span> }
                   <button class="dl-plus" (click)="addToPlan(t, d.current_period || 'manha')" [attr.aria-label]="'Adicionar ' + t.title + ' ao plano'" title="Adicionar ao período atual">+</button>
                 </div>
-              } @empty { <div class="muted small" style="padding: 6px 0">Nada pendente aqui.</div> }
-              @if (pick().length > 8) { <a class="small" routerLink="/ti/taskhub/tarefas" [queryParams]="{ v: 'minhas', space: 'profissional' }">Ver todas</a> }
-              <div class="muted small" style="margin-top: 8px">Arraste para um período ou use o +.</div>
+              } @empty { <app-empty compact text="Nada pendente aqui." /> }
+              @if (pick().length > 8) { <a class="small" routerLink="/ti/taskhub/tarefas" [queryParams]="{ v: 'minhas', space: 'profissional' }">Ver todas ({{ pick().length }})</a> }
+              <div class="hint dl-card__foot">Arraste para um período ou use o +.</div>
             </section>
 
             <section class="card dl-card" id="dl-waiting">
               <b>Esperando</b>
               @for (w of d.waiting.for_me; track w.task_id) {
-                <button class="dl-wait" (click)="ui.openTask(w.task_id)"><span class="dl-wait__tag">por você</span><span>{{ w.from ? w.from + ' pediu: ' : '' }}{{ w.step }}</span></button>
+                <button type="button" class="dl-wait" (click)="ui.openTask(w.task_id)"><span class="dl-wait__tag">por você</span><span>{{ w.from ? w.from + ' pediu: ' : '' }}{{ w.step }}</span></button>
               }
               @for (w of d.waiting.by_me; track w.id) {
-                <button class="dl-wait" (click)="ui.openTask(w.task_id)"><span class="dl-wait__tag dl-wait__tag--out">por outros</span><span>{{ w.person }}: {{ w.step }}@if (w.days > 1) { <span class="dl-due dl-due--today"> · {{ w.days }} dias</span> }</span></button>
+                <button type="button" class="dl-wait" (click)="ui.openTask(w.task_id)"><span class="dl-wait__tag dl-wait__tag--out">por outros</span><span>{{ w.person }}: {{ w.step }}@if (w.days > 1) { <span class="dl-due dl-due--today"> · {{ w.days }} dias</span> }</span></button>
               }
-              @if (!d.waiting.for_me.length && !d.waiting.by_me.length) { <div class="muted small" style="margin-top: 6px">Ninguém esperando por você, e você não está esperando ninguém.</div> }
+              @if (!d.waiting.for_me.length && !d.waiting.by_me.length) { <app-empty compact ok icon="check" text="Ninguém esperando por você, e você não está esperando ninguém." /> }
             </section>
 
             <section class="card dl-card">
-              <div class="row" style="justify-content: space-between"><b>Amanhã</b><a class="small" routerLink="/ti/taskhub/lembretes">Lembretes</a></div>
-              <div class="muted small" style="margin-top: 6px">
+              <div class="row row--between"><b>Amanhã</b><a class="small" routerLink="/ti/taskhub/lembretes">Lembretes</a></div>
+              <div class="muted small dl-card__note">
                 {{ d.tomorrow.planned ? d.tomorrow.planned + (d.tomorrow.planned === 1 ? ' tarefa já planejada' : ' tarefas já planejadas') : 'Nada planejado ainda' }}
                 @if (d.tomorrow.due) { · {{ d.tomorrow.due }} {{ d.tomorrow.due === 1 ? 'vence' : 'vencem' }} amanhã }
               </div>
@@ -194,22 +197,21 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
           </aside>
         </div>
       } @else {
-        <div class="muted" style="padding: 40px 0">Carregando seu dia…</div>
+        <app-loading />
       }
     </div>
 
     @if (routineFor(); as period) {
       <div class="modal-scrim" (click)="routineFor.set(null)">
-        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Nova rotina">
-          <div class="modal-head">Nova rotina</div>
+        <div class="modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="routineFor.set(null)">
+          <div class="modal-head"><h2>Nova rotina<span class="modal-head__sub">Repete toda {{ weekdayName() }}, no período {{ periodLabel(period) }}.</span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="routineFor.set(null)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
-            <div class="muted small">Repete toda {{ weekdayName() }}, no período {{ periodLabel(period) }}.</div>
             <div class="field"><label class="form-label" for="rt-label">O que fazer</label>
               <input id="rt-label" class="form-field" [(ngModel)]="routineLabel" (keydown.enter)="saveRoutine()" placeholder="Ex.: Daily da equipe" /></div>
           </div>
           <div class="modal-foot">
-            <button class="btn-action-secondary" (click)="routineFor.set(null)">Cancelar</button>
-            <button class="btn-action-primary" [disabled]="!routineLabel.trim()" (click)="saveRoutine()">Criar rotina</button>
+            <button type="button" class="btn" (click)="routineFor.set(null)">Cancelar</button>
+            <button type="button" class="btn btn-primary" [disabled]="!routineLabel.trim()" (click)="saveRoutine()">Criar rotina</button>
           </div>
         </div>
       </div>
@@ -217,27 +219,27 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
 
     @if (choosing()) {
       <div class="modal-scrim" (click)="choosing.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentação do dia">
-          <div class="modal-head">Apresentação do dia<div class="muted small" style="font-weight:500;margin-top:2px">{{ dateLabel() }} · escolha os slides e como apresentar</div></div>
+        <div class="modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="choosing.set(false)">
+          <div class="modal-head"><h2>Apresentação do dia<span class="modal-head__sub">{{ dateLabel() }} · escolha os slides e como apresentar</span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="choosing.set(false)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
             <div class="field"><label class="form-label" for="dp-t">Título</label><input id="dp-t" class="form-field" [(ngModel)]="ptitle" /></div>
             <app-deck-theme-picker [value]="theme()" (valueChange)="theme.set($event)" />
-            <div class="row" style="justify-content: space-between">
+            <div class="row row--between">
               <span class="form-label">Slides ({{ picked().length }} de {{ daySlides.length }})</span>
               <span class="row small"><button type="button" class="link-btn" (click)="picked.set(allSlides)">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
             </div>
             <div class="pd-pick">
               @for (sl of daySlides; track sl.key) {
-                <label class="check-label" style="align-items: flex-start">
-                  <input type="checkbox" style="margin-top: 3px" [checked]="picked().includes(sl.key)" (change)="togglePick(sl.key)" />
+                <label class="check-label check-label--top">
+                  <input type="checkbox" [checked]="picked().includes(sl.key)" (change)="togglePick(sl.key)" />
                   <span>{{ sl.label }}<br /><span class="muted small">{{ sl.hint }}</span></span>
                 </label>
               }
             </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn-action-secondary" [disabled]="!picked().length || exporting()" (click)="downloadPptx()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
-            <button type="button" class="btn-action-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
+            <button type="button" class="btn" [disabled]="!picked().length || exporting()" (click)="downloadPptx()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
+            <button type="button" class="btn btn-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
           </div>
         </div>
       </div>
@@ -247,10 +249,9 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
 
     @if (closing()) {
       <div class="modal-scrim" (click)="closing.set(false)">
-        <div class="modal wide" (click)="$event.stopPropagation()" role="dialog" aria-label="Encerrar o dia">
-          <div class="modal-head">Encerrar o dia</div>
+        <div class="modal wide" (click)="$event.stopPropagation()" appDialog (dialogClose)="closing.set(false)">
+          <div class="modal-head"><h2>Encerrar o dia<span class="modal-head__sub">{{ dateLabel() }}</span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="closing.set(false)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
-            <div class="muted small">{{ dateLabel() }}</div>
             @if (d(); as d) {
               <div class="dl-close-kpis">
                 <div class="dl-kpi dl-kpi--brand"><b>{{ doneTasks() }}</b><span>concluídas</span></div>
@@ -263,20 +264,20 @@ const PERIOD_TIME: Record<Period, string> = { manha: '09:00', tarde: '14:00', fi
                   <div class="dl-close-row">
                     <span class="grow">{{ t.title }}</span>
                     <div class="seg" role="group" [attr.aria-label]="'Destino de ' + t.title">
-                      <button [class.on]="closeActions[t.id] !== 'remover'" (click)="closeActions[t.id] = 'amanha'">Amanhã</button>
-                      <button [class.on]="closeActions[t.id] === 'remover'" (click)="closeActions[t.id] = 'remover'">Voltar para a fila</button>
+                      <button type="button" [class.on]="closeActions[t.id] !== 'remover'" [attr.aria-pressed]="closeActions[t.id] !== 'remover'" (click)="closeActions[t.id] = 'amanha'">Amanhã</button>
+                      <button type="button" [class.on]="closeActions[t.id] === 'remover'" [attr.aria-pressed]="closeActions[t.id] === 'remover'" (click)="closeActions[t.id] = 'remover'">Voltar para a fila</button>
                     </div>
                   </div>
                 }
               }
               <div class="field"><label class="form-label" for="dl-note">Algo travou? <span class="form-label__optional">opcional</span></label>
                 <textarea id="dl-note" class="form-field" [(ngModel)]="closeNote"></textarea></div>
-              <span class="muted small">O resumo fica só para você. O que for para amanhã entra na manhã do dia seguinte.</span>
+              <span class="hint">O resumo fica só para você. O que for para amanhã entra na manhã do dia seguinte.</span>
             }
           </div>
           <div class="modal-foot">
-            <button class="btn-action-secondary" (click)="closing.set(false)">Cancelar</button>
-            <button class="btn-action-primary" (click)="confirmClose()">Encerrar o dia</button>
+            <button type="button" class="btn" (click)="closing.set(false)">Cancelar</button>
+            <button type="button" class="btn btn-primary" (click)="confirmClose()">Encerrar o dia</button>
           </div>
         </div>
       </div>
@@ -289,6 +290,7 @@ export class MyDayPage implements OnInit, OnDestroy {
   private auth = inject(AuthService);
   private toast = inject(ToastService);
   private weatherSvc = inject(WeatherService);
+  private confirmSvc = inject(ConfirmService);
   weather = this.weatherSvc.local;
 
   periods = PERIODS;
@@ -315,7 +317,7 @@ export class MyDayPage implements OnInit, OnDestroy {
   exporting = signal(false);
   picked = signal<DaySlideKey[]>(DAY_SLIDES.map(x => x.key));
   ptitle = '';
-  theme = signal<DeckTheme>('nubank-parque');
+  theme = signal<DeckTheme>(readDeckTheme(this.ui.palette()));
   deck = signal<DeckSlide[]>([]);
 
   isToday = computed(() => this.date() === todayIso());
@@ -450,7 +452,7 @@ export class MyDayPage implements OnInit, OnDestroy {
       error: e => this.toast.error(errorMessage(e, 'Não foi possível atualizar a tarefa.')),
     });
     if (!done) { run(); return; }
-    askCloseTask(this.api.task(t.id), t).subscribe({
+    askCloseTask(this.confirmSvc, this.api.task(t.id), t).subscribe({
       next: ok => { if (ok) run(); },
       error: e => this.toast.error(errorMessage(e, 'Não foi possível atualizar a tarefa.')),
     });

@@ -10,7 +10,8 @@ import { PRIORITIES, SIZES, TASK_FILE_MAX, TASK_FILE_MAX_MB, TaskSize, dueLabel,
 import { parseQuickTask } from '../core/quick-parse';
 import { takeBulletLine } from '../core/steps-text';
 
-import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { AutofocusDirective, IconComponent, PersonChipComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 import { PersonPickerComponent, stepAssigneeGroups } from '../shared/person-picker.component';
 
 interface DraftStep { title: string; assignee_id: number | null; due_date: string | null; notify: boolean }
@@ -20,18 +21,18 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
 @Component({
   selector: 'app-quick-add',
   standalone: true,
-  imports: [AutofocusDirective, FormsModule, IconComponent, AvatarComponent, PersonPickerComponent],
+  imports: [AutofocusDirective, FormsModule, IconComponent, PersonChipComponent, PersonPickerComponent, DialogDirective],
   template: `
     <div class="modal-scrim" (click)="close()">
       <div class="modal wide qa-modal" (click)="$event.stopPropagation()" (keydown.control.enter)="save($event)" (keydown.meta.enter)="save($event)"
-           role="dialog" aria-labelledby="qa-head-title">
+           appDialog (dialogClose)="close()" aria-labelledby="qa-head-title">
         <div class="qa-head">
           <span class="qa-head-icon"><app-icon name="plus" [size]="16" /></span>
           <span id="qa-head-title" class="grow">Nova tarefa</span>
           @if (locked(); as w) {
             <span class="pill" [title]="'A tarefa será criada em ' + contextLabel(w)"><span class="dot" [style.background]="w.color"></span>{{ contextLabel(w) }}</span>
           }
-          <button type="button" class="btn btn-ghost btn-icon" aria-label="Fechar" (click)="close()"><app-icon name="x" /></button>
+          <button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="close()"><app-icon name="x" [size]="16" /></button>
         </div>
         <div class="qa-top">
           <div class="field">
@@ -48,8 +49,9 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
           @if (!locked()) {
             <div class="field span2">
               <label for="qa-w">Projeto</label>
-              <select id="qa-w" class="select" [ngModel]="workId()" (ngModelChange)="pickWork($event)">
-                <option [ngValue]="null">Sem projeto (individual)</option>
+              <select id="qa-w" class="select" [ngModel]="workId()" (ngModelChange)="pickWork($event)" [disabled]="worksLoading()">
+                @if (worksLoading()) { <option [ngValue]="null">Carregando…</option> }
+                @else { <option [ngValue]="null">Sem projeto (individual)</option> }
                 @for (g of groups(); track g.label) {
                   <optgroup [label]="g.label">
                     @for (w of g.works; track w.id) { <option [ngValue]="w.id">{{ w.name }}</option> }
@@ -60,11 +62,13 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
           }
           <div class="field">
             <span class="label">Alinhado com</span>
-            <div class="row" style="flex-wrap: wrap; gap: 6px">
-              @for (p of chosenContacts(); track p.id) {
-                <span class="pill"><app-avatar [person]="p" />{{ p.name }}<button type="button" (click)="toggleContact(p.id)" [attr.aria-label]="'Remover ' + p.name"><app-icon name="x" [size]="12" /></button></span>
-              }
-            </div>
+            @if (chosenContacts().length) {
+              <div class="pills">
+                @for (p of chosenContacts(); track p.id) {
+                  <app-person-chip [person]="p" (remove)="toggleContact(p.id)" />
+                }
+              </div>
+            }
             <app-person-picker [people]="contactCandidates()" ariaLabel="Adicionar pessoa com quem foi alinhado" (picked)="toggleContact($event ?? 0)" />
             <span class="hint">Quem participou ou pediu. Só registro: ninguém é avisado.</span>
           </div>
@@ -99,18 +103,18 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
             </div>
           </div>
           <div class="field span2">
-            <div class="row" style="justify-content: space-between; align-items: center">
+            <div class="row row--between">
               <label for="qa-desc">Descrição</label>
               <label class="check-label" title="Com o interruptor ligado, cada Enter vira etapa. Desligado, só a linha que começa com -.">
                 <input type="checkbox" class="switch" role="switch" [(ngModel)]="linesToStepsOn" /> Linhas viram etapas
               </label>
             </div>
-            <textarea #desc id="qa-desc" class="textarea" style="min-height: 110px" [(ngModel)]="description"
+            <textarea #desc id="qa-desc" class="textarea qa-desc" [(ngModel)]="description"
                       (keydown.enter)="descEnter($event, desc)"
                       [placeholder]="linesToStepsOn ? 'Cada Enter cria uma etapa. Ou comece a linha com -.' : 'Anotações, contexto, links…'"></textarea>
           </div>
           <div class="field span2">
-            <div class="row" style="justify-content: space-between; align-items: center">
+            <div class="row row--between">
               <span class="label">Etapas</span>
               <label class="check-label" title="Ligado: a próxima etapa só conclui depois da anterior. Desligado: as etapas andam ao mesmo tempo.">
                 <input type="checkbox" class="switch" role="switch" [(ngModel)]="stepsOrdered" /> Seguir prioridade
@@ -130,7 +134,7 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                     <label class="check-label step-notify" [title]="stepsOrdered ? 'Avisar a pessoa quando for a vez dela' : 'Avisar a pessoa sobre esta etapa'"><input type="checkbox" class="switch" role="switch" [ngModel]="s.notify" (ngModelChange)="editStep(i, { notify: $event })" /> avisar</label>
                   }
                 <input type="date" class="inline step-due" [ngModel]="s.due_date" (ngModelChange)="editStep(i, { due_date: $event || null })" aria-label="Prazo da etapa" />
-                <button type="button" class="btn btn-ghost btn-sm btn-icon x" (click)="removeStep(i)" [attr.aria-label]="'Remover etapa ' + (i + 1)"><app-icon name="x" [size]="13" /></button>
+                <button type="button" class="btn btn-ghost btn-sm btn-icon x" (click)="removeStep(i)" [attr.aria-label]="'Remover etapa ' + (i + 1)" [title]="'Remover etapa ' + (i + 1)"><app-icon name="x" [size]="13" /></button>
               </div>
             }
             <div class="subtask step-row">
@@ -149,7 +153,7 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
                   <app-icon name="paperclip" [size]="13" />
                   <span class="qa-file-name" [title]="f.name">{{ f.name }}</span>
                   <span class="muted small">{{ fileSize(f.size) }}</span>
-                  <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removePending($index)" [attr.aria-label]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removePending($index)" [attr.aria-label]="'Remover ' + f.name" [title]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
                 </span>
               }
               @if (pendingFiles().length < fileMax) {
@@ -165,8 +169,8 @@ interface DraftStep { title: string; assignee_id: number | null; due_date: strin
         </div>
         <div class="modal-foot">
           <label class="check-label left"><input type="checkbox" class="switch" role="switch" [(ngModel)]="planToday" /> Planejar para hoje</label>
-          <button class="btn btn-ghost" (click)="close()">Cancelar</button>
-          <button class="btn btn-primary" [disabled]="!parsed().title || saving()" (click)="save()" title="Ctrl+Enter">{{ saving() ? 'Salvando…' : 'Salvar' }}</button>
+          <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+          <button type="button" class="btn btn-primary" [disabled]="!parsed().title || saving()" [class.btn--loading]="saving()" (click)="save()" title="Ctrl+Enter">Salvar</button>
         </div>
       </div>
     </div>
@@ -200,6 +204,7 @@ export class QuickAddComponent implements OnInit, OnDestroy {
   private askedPhase = this.defaults.phase_id ?? null;
 
   works = signal<CreatableWork[]>([]);
+  worksLoading = signal(true);
   workId = signal<number | null>(null);
   phases = signal<Phase[]>([]);
   phaseId = signal<number | null>(null);
@@ -245,6 +250,7 @@ export class QuickAddComponent implements OnInit, OnDestroy {
     this.planToday = !!this.defaults.plan_today;
     this.api.creatableWorks().subscribe({
       next: list => {
+        this.worksLoading.set(false);
         this.works.set(list);
         const sid = this.defaults.section_id ?? null;
         const pid = this.defaults.project_id ?? null;
@@ -252,7 +258,7 @@ export class QuickAddComponent implements OnInit, OnDestroy {
           : pid ? (list.filter(w => w.project_id === pid).length === 1 ? list.find(w => w.project_id === pid)!.id : null) : null;
         this.pickWork(start);
       },
-      error: () => this.pickWork(null),
+      error: () => { this.worksLoading.set(false); this.pickWork(null); },
     });
   }
 

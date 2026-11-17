@@ -62,7 +62,7 @@ import { DeckTheme, ensureBrandFonts, stripeRects } from './deck-theme';
                   @for (l of $any(s).lists; track l.title) {
                     <div><h3 [class]="'pv-tone-' + l.tone">{{ l.title }}</h3>
                       @for (r of l.rows; track $index) { <div class="pv-li"><b>{{ r.main }}</b><span>{{ r.sub }}</span></div> }
-                      @empty { <p class="pv-muted" style="font-size: 1.6cqw">{{ l.empty }}</p> }
+                      @empty { <p class="pv-muted pv-muted--sm">{{ l.empty }}</p> }
                     </div>
                   }
                 </div>
@@ -73,10 +73,10 @@ import { DeckTheme, ensureBrandFonts, stripeRects } from './deck-theme';
         }
       </div>
       <div class="pv-bar">
-        <button (click)="prev()" [disabled]="index() === 0" aria-label="Slide anterior">‹</button>
+        <button type="button" (click)="prev()" [disabled]="index() === 0" aria-label="Slide anterior" title="Slide anterior">‹</button>
         <span>{{ index() + 1 }} de {{ slides.length }} · {{ cur()?.title }}</span>
-        <button (click)="next()" [disabled]="index() === slides.length - 1" aria-label="Próximo slide">›</button>
-        <button class="pv-exit" (click)="close.emit()">Sair (Esc)</button>
+        <button type="button" (click)="next()" [disabled]="index() === slides.length - 1" aria-label="Próximo slide" title="Próximo slide">›</button>
+        <button type="button" class="pv-exit" (click)="close.emit()" aria-label="Sair da apresentação (Esc)">Sair (Esc)</button>
       </div>
     </div>
   `,

@@ -31,6 +31,7 @@ type Row =
   | { kind: 'opt'; key: string; index: number; value: number | null; label: string; person: Person | null; sub: string; selected: boolean };
 
 const LIMIT = 50;
+let uidSeq = 0;
 const norm = (s: string | null | undefined) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 function awayLabel(p: Person) {
@@ -57,7 +58,7 @@ function defaultSub(p: Person) {
   template: `
     <button #trigger type="button" class="pp-trigger" [class.select]="variant() === 'field'" [class.inline]="variant() === 'inline'"
             [disabled]="disabled()" (click)="toggle()" (keydown)="onTriggerKey($event)"
-            [attr.aria-label]="ariaLabel() || placeholder()" aria-haspopup="listbox" [attr.aria-expanded]="open()" [title]="triggerTitle()">
+            [attr.aria-label]="ariaLabel() || placeholder()" aria-haspopup="listbox" [attr.aria-expanded]="open()" [attr.aria-controls]="listId" [title]="triggerTitle()">
       @if (selectedPerson(); as p) {
         <app-avatar [person]="p" /><span class="pp-trigger__text">{{ p.name }}</span>
       } @else {
@@ -68,14 +69,15 @@ function defaultSub(p: Person) {
       <div class="pp-search">
         <app-icon name="search" [size]="14" />
         <input #search class="pp-search__input" [value]="q()" (input)="onQuery(search.value)" placeholder="Buscar por nome, equipe ou área"
-               aria-label="Buscar pessoa" autocomplete="off" spellcheck="false" />
+               aria-label="Buscar pessoa" autocomplete="off" spellcheck="false"
+               role="combobox" aria-autocomplete="list" aria-expanded="true" [attr.aria-controls]="listId" [attr.aria-activedescendant]="activeId()" />
       </div>
-      <div #list class="pp-list" role="listbox" [attr.aria-label]="ariaLabel() || placeholder()">
+      <div #list class="pp-list" role="listbox" [id]="listId" [attr.aria-label]="ariaLabel() || placeholder()">
         @for (row of rows(); track row.key) {
           @if (row.kind === 'label') {
             <div class="pp-group">{{ row.label }}</div>
           } @else {
-            <button type="button" role="option" class="pp-opt" [class.pp-opt--active]="row.index === active()" [attr.aria-selected]="row.selected"
+            <button type="button" role="option" class="pp-opt" [id]="optId(row.index)" [class.pp-opt--active]="row.index === active()" [attr.aria-selected]="row.selected"
                     [attr.data-i]="row.index" (mouseenter)="active.set(row.index)" (click)="choose(row.value)">
               @if (row.person; as p) {
                 <app-avatar [person]="p" />
@@ -109,6 +111,10 @@ export class PersonPickerComponent implements OnDestroy {
   open = signal(false);
   q = signal('');
   active = signal(0);
+  readonly uid = ++uidSeq;
+  readonly listId = `pp-${this.uid}-list`;
+  optId(i: number) { return `pp-${this.uid}-${i}`; }
+  activeId = computed(() => (this.open() && this.optionCount() ? this.optId(this.active()) : null));
 
   private trigger = viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
   private panel = viewChild.required<ElementRef<HTMLElement>>('panel');

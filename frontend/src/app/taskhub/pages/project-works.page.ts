@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnChanges, SimpleChanges, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnChanges, SimpleChange, SimpleChanges, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgTemplateOutlet } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
@@ -12,7 +12,9 @@ import { ToastService } from '../core/toast.service';
 import { UiService } from '../core/ui.service';
 import { Person, Phase, PhaseScope, Project, SchedulePreview, Task, TaskFile, Team, Work, WorkPhaseLog } from '../core/models';
 import { TASK_FILE_MAX, TASK_FILE_MAX_MB, dueLabel, fileSize, isExternalFileDrag, taskFileError, termsFor, todayIso } from '../core/format';
-import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { AutofocusDirective, AvatarComponent, EmptyComponent, ErrorComponent, IconComponent, LoadingComponent, PersonChipComponent, SearchComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
+import { ConfirmService } from '../core/confirm.service';
 import { ProjectTimelineComponent } from './project-timeline.component';
 import { businessSpan, DEFAULT_DURATION, endAfter, parseIso, sumPhaseDays } from '../core/timeline';
 import { PhaseColumns } from '../shared/phase-columns';
@@ -21,8 +23,8 @@ import { PhaseRescheduleComponent } from '../shared/phase-reschedule.component';
 import { ScheduleImpactComponent, noneAccepted } from '../shared/schedule-impact.component';
 import { PersonPickerComponent } from '../shared/person-picker.component';
 import { confirmOpen, openWorkLines } from '../core/confirm-open';
+import { WORK_COLORS as COLORS, colorName } from '../core/colors';
 
-const COLORS = ['#4c8dff', '#2fbf71', '#e11d48', '#f97316', '#a78bfa', '#14b8a6', '#c9a84c', '#ec4899'];
 type Filter = 'todos' | 'responsavel' | 'participo' | 'atraso';
 type Sort = 'prazo' | 'nome' | 'progresso';
 type KanbanSort = 'manual' | Sort;
@@ -31,24 +33,24 @@ type KanbanSort = 'manual' | Sort;
 @Component({
   selector: 'app-project-works',
   standalone: true,
-  imports: [FormsModule, NgTemplateOutlet, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, ProjectTimelineComponent, ConfirmDeleteComponent, TeamBarComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent],
+  imports: [FormsModule, NgTemplateOutlet, RouterLink, AutofocusDirective, AvatarComponent, IconComponent, EmptyComponent, ErrorComponent, LoadingComponent, PersonChipComponent, SearchComponent, DialogDirective, ProjectTimelineComponent, ConfirmDeleteComponent, TeamBarComponent, PersonPickerComponent, PhaseRescheduleComponent, ScheduleImpactComponent],
   template: `
     <div class="page works-page">
       @if (project(); as p) {
-        <div class="crumb">
-          @if (personal() && locked(); as lv) {
-            {{ PERSONAL_VIEWS[lv].label }} › Individual
-          } @else if (locked(); as lv) {
-            <a [routerLink]="corpViewPath(lv)">{{ CORP_VIEWS[lv].label }}</a>
-            @if (team()?.sector_name || p.sector_name) { › {{ team()?.sector_name || p.sector_name }} }
-            › {{ team()?.name || p.name }}
-          } @else {
-            @if (p.sector_name) { <span>{{ p.sector_name }}</span> › } @if (isBoard()) { Equipe › } {{ p.name }}
-          }
-        </div>
         <div class="page-head">
-          <div class="grow">
-            <div class="row" style="gap: 10px">
+          <div class="page-head__text">
+            <div class="crumb">
+              @if (personal() && locked(); as lv) {
+                {{ PERSONAL_VIEWS[lv].label }} › Individual
+              } @else if (locked(); as lv) {
+                <a [routerLink]="corpViewPath(lv)">{{ CORP_VIEWS[lv].label }}</a>
+                @if (team()?.sector_name || p.sector_name) { › {{ team()?.sector_name || p.sector_name }} }
+                › {{ team()?.name || p.name }}
+              } @else {
+                @if (p.sector_name) { <span>{{ p.sector_name }}</span> › } @if (isBoard()) { Equipe › } {{ p.name }}
+              }
+            </div>
+            <div class="wk-title">
               <span class="wk-dot" [style.background]="p.color"></span>
               <h1>{{ personal() ? 'Individual' : p.name }}</h1>
               @if (!isBoard() && !personal()) { <span class="health" [class]="'health ' + p.health"><i></i>{{ healthLabel[p.health] }}</span> }
@@ -81,10 +83,10 @@ type KanbanSort = 'manual' | Sort;
             @if (canCreate()) { <button class="btn btn-primary btn-sm" (click)="openNew()"><app-icon name="plus" [size]="14" />{{ t().novo }}</button> }
           </div>
         </div>
-        @if (p.description && !isBoard() && !personal()) { <p class="muted" style="max-width: 760px; margin: -6px 0 14px; white-space: pre-wrap">{{ p.description }}</p> }
+        @if (p.description && !isBoard() && !personal()) { <p class="muted wk-desc">{{ p.description }}</p> }
 
         @if (!locked()) {
-          <div class="tl-tabs" role="tablist" aria-label="Visão do projeto">
+          <div class="tabs" role="tablist" aria-label="Visão do projeto">
             <button type="button" role="tab" [class.on]="view() === 'kanban'" [attr.aria-selected]="view() === 'kanban'" (click)="setView(null)"><app-icon name="board" [size]="14" />Kanban</button>
             <button type="button" role="tab" [class.on]="view() === 'cards'" [attr.aria-selected]="view() === 'cards'" (click)="setView('cards')"><app-icon name="folder" [size]="14" />{{ t().Many }}</button>
             <button type="button" role="tab" [class.on]="view() === 'linha'" [attr.aria-selected]="view() === 'linha'" (click)="setView('linha')"><app-icon name="calendar" [size]="14" />Linha do tempo</button>
@@ -98,7 +100,7 @@ type KanbanSort = 'manual' | Sort;
           <app-project-timeline [projectId]="p.id" [board]="isBoard()" (changed)="load(); data.reloadProjects()" />
         } @else {
         <div class="wk-toolbar">
-          <input class="input" style="width: 240px; height: 36px" [placeholder]="'Buscar ' + t().one + ' ou #id'" [ngModel]="queryText" (ngModelChange)="search($event)" [attr.aria-label]="'Buscar ' + t().one" />
+          <app-search [value]="queryText" (valueChange)="search($event)" [placeholder]="'Buscar ' + t().one + ' ou #id'" />
           <div class="wk-filter">
             <button type="button" class="btn btn-sm wk-filter-btn" [class.on]="filtersOpen()" [attr.aria-expanded]="filtersOpen()" (click)="filtersOpen.set(!filtersOpen())">
               <app-icon name="list" [size]="14" />Filtros
@@ -168,20 +170,20 @@ type KanbanSort = 'manual' | Sort;
                              (blur)="cols.finishRename(col.phase, $any($event.target).value)" (keydown.enter)="$any($event.target).blur()"
                              (keydown.escape)="cols.renaming.set(null)" />
                     } @else if (editCols()) {
-                      <button type="button" class="wk-col__name bcol-name" (click)="cols.startRename(col.phase)" title="Renomear fase">{{ col.phase.name }}</button>
+                      <button type="button" class="wk-col__name bcol-name" (click)="cols.startRename(col.phase)" [title]="'Renomear fase ' + col.phase.name">{{ col.phase.name }}</button>
                     } @else {
-                      <span class="wk-col__name">{{ col.phase.name }}</span>
+                      <span class="wk-col__name" [title]="col.phase.name">{{ col.phase.name }}</span>
                     }
                     <span class="wk-col__dur" [title]="'Previsto: ' + (col.phase.duration_days ?? 0) + ' dias úteis'">{{ col.phase.duration_days ?? 0 }} d</span>
                     <span class="wk-col__n">{{ col.works.length }}</span>
                     @if (editCols()) {
-                      <button type="button" class="bcol-more" (click)="cols.toggleMenu(col.phase.id, $event)" aria-label="Opções da fase"><app-icon name="more" [size]="16" /></button>
+                      <button type="button" class="bcol-more" (click)="cols.toggleMenu(col.phase.id, $event)" aria-label="Opções da fase" title="Opções da fase"><app-icon name="more" [size]="16" /></button>
                       @if (cols.colMenu() === col.phase.id) {
                         <div class="bcol-menu" [style.top.px]="cols.menuPos()?.top" [style.left.px]="cols.menuPos()?.left" (click)="$event.stopPropagation()">
                           <button type="button" (click)="cols.startRename(col.phase)"><app-icon name="pencil" [size]="14" /> Renomear</button>
-                          <div class="bcol-swatches">
+                          <div class="bcol-swatches" role="radiogroup" aria-label="Cor da fase">
                             @for (c of cols.colors; track c) {
-                              <button type="button" [style.background]="c" [class.on]="col.phase.color.toLowerCase() === c" (click)="cols.paint(col.phase, c)" [attr.aria-label]="'Cor ' + c"></button>
+                              <button type="button" role="radio" [style.background]="c" [class.on]="col.phase.color.toLowerCase() === c" [attr.aria-checked]="col.phase.color.toLowerCase() === c" (click)="cols.paint(col.phase, c)" [attr.aria-label]="colorName(c)" [title]="colorName(c)"></button>
                             }
                           </div>
                           <label class="bcol-menu-field">Dias úteis previstos
@@ -199,13 +201,15 @@ type KanbanSort = 'manual' | Sort;
                   </header>
                   <div class="wk-col__body">
                     @for (w of col.works; track w.id) {
-                      <div class="wk-kcard" [attr.draggable]="canMove(w) && !presenting()" [class.dragging]="dragId() === w.id" [class.movable]="canMove(w) && !presenting()"
+                      <div class="wk-kcard" role="button" tabindex="0" [attr.aria-label]="'#' + w.id + ' ' + w.name"
+                           [attr.draggable]="canMove(w) && !presenting()" [class.dragging]="dragId() === w.id" [class.movable]="canMove(w) && !presenting()"
                            (dragstart)="dragStart($event, w)" (dragend)="dragId.set(null); dropPhase.set(null)" (click)="openWork($event, w)"
+                           (keydown.enter)="openWork($event, w)" (keydown.space)="$event.preventDefault(); openWork($event, w)"
                            (dragover)="dragOver($event, col.phase.id)" (drop)="dropOn($event, col.phase, w); $event.stopPropagation()">
                         <ng-container *ngTemplateOutlet="card; context: { $implicit: w }" />
                       </div>
                     } @empty {
-                      @if (!canCreate() || presenting()) { <div class="wk-col__empty">Nenhum {{ t().one }} nesta fase</div> }
+                      <app-empty [compact]="true" [dashed]="true" [text]="'Nenhum ' + t().one + ' nesta fase'" />
                     }
                     @if (canCreate() && !presenting()) {
                       <button type="button" class="wk-col__add" (click)="openNew(col.phase.id)">+ Adicionar</button>
@@ -225,12 +229,12 @@ type KanbanSort = 'manual' | Sort;
               <table class="table wk-table">
                 <thead>
                   <tr>
-                    <th class="wk-table__name"><button type="button" class="wk-th-sort" (click)="sortHead('nome')">Projeto{{ sortMark('nome') }}</button></th>
+                    <th class="wk-table__name"><button type="button" class="wk-th-sort" (click)="sortHead('nome')" [attr.aria-sort]="kanbanSort() === 'nome' ? 'ascending' : null">Projeto@if (kanbanSort() === 'nome') { <app-icon name="arrow-down" [size]="12" /> }</button></th>
                     <th>Status</th>
-                    <th><button type="button" class="wk-th-sort" (click)="sortHead('progresso')">Andamento{{ sortMark('progresso') }}</button></th>
+                    <th><button type="button" class="wk-th-sort" (click)="sortHead('progresso')" [attr.aria-sort]="kanbanSort() === 'progresso' ? 'descending' : null">Andamento@if (kanbanSort() === 'progresso') { <app-icon name="arrow-down" [size]="12" /> }</button></th>
                     <th>Prazo</th>
                     <th>Início</th>
-                    <th><button type="button" class="wk-th-sort" (click)="sortHead('prazo')">Previsão de entrega{{ sortMark('prazo') }}</button></th>
+                    <th><button type="button" class="wk-th-sort" (click)="sortHead('prazo')" [attr.aria-sort]="kanbanSort() === 'prazo' ? 'ascending' : null">Previsão de entrega@if (kanbanSort() === 'prazo') { <app-icon name="arrow-down" [size]="12" /> }</button></th>
                     <th>Solicitante</th>
                     <th>Departamento</th>
                   </tr>
@@ -242,8 +246,8 @@ type KanbanSort = 'manual' | Sort;
                         <div class="wk-table__proj">
                           <span class="wk-table__sq" [style.background]="w.color"></span>
                           <span class="wk-table__txt">
-                            <b class="ellipsis"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</b>
-                            <span class="muted small ellipsis">{{ w.owners[0]?.name || w.owner_name || 'Sem responsável' }}</span>
+                            <b class="ellipsis" [title]="'#' + w.id + ' ' + w.name"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</b>
+                            <span class="muted small ellipsis" [title]="w.owners[0]?.name || w.owner_name || 'Sem responsável'">{{ w.owners[0]?.name || w.owner_name || 'Sem responsável' }}</span>
                           </span>
                         </div>
                       </td>
@@ -263,7 +267,7 @@ type KanbanSort = 'manual' | Sort;
                       <td class="wk-table__date">{{ fmtDate(w.due_date) }}</td>
                       <td>
                         @if (w.members[0]; as m) {
-                          <span class="wk-table__person"><app-avatar [person]="m" /><span class="ellipsis">{{ m.name }}</span>
+                          <span class="wk-table__person"><app-avatar [person]="m" /><span class="ellipsis" [title]="m.name">{{ m.name }}</span>
                             @if (w.members.length > 1) { <span class="muted small" [title]="namesOf(w.members)">+{{ w.members.length - 1 }}</span> }</span>
                         } @else { <span class="muted">—</span> }
                       </td>
@@ -281,29 +285,34 @@ type KanbanSort = 'manual' | Sort;
               </table>
             </div>
             @if (!tableRows().length) {
-              <div class="wk-table__empty">
-                @if (works().length) { Nenhum {{ t().one }} com esses filtros. }
-                @else if (isBoard() && !seesAll()) { Você ainda não participa de nenhum {{ t().one }} desta equipe. }
-                @else { {{ isBoard() ? 'Esta equipe ainda não tem' : 'Ainda não há' }} {{ t().many }}. }
-                @if (canCreate()) { <button type="button" class="btn btn-sm" (click)="openNew()">+ {{ t().novo }}</button> }
-              </div>
+              @if (works().length) {
+                <app-empty icon="search" [title]="'Nenhum ' + t().one + ' com esses filtros'" text="Ajuste a busca ou limpe os filtros para ver todos.">
+                  @if (activeFilters() || q()) { <button type="button" class="btn" (click)="clearFilters(); search('')">Limpar filtros</button> }
+                </app-empty>
+              } @else if (isBoard() && !seesAll()) {
+                <app-empty icon="folder" [title]="'Nenhum ' + t().one + ' por aqui'" [text]="'Você ainda não participa de nenhum ' + t().one + ' desta equipe.'" />
+              } @else {
+                <app-empty icon="folder" [title]="(isBoard() ? 'Esta equipe ainda não tem ' : 'Ainda não há ') + t().many" [text]="canCreate() ? 'Crie o primeiro para começar a acompanhar as tarefas.' : ''">
+                  @if (canCreate()) { <button type="button" class="btn btn-primary" (click)="openNew()"><app-icon name="plus" [size]="14" />{{ t().novo }}</button> }
+                </app-empty>
+              }
             }
           </div>
         }
         }
       } @else if (error()) {
-        <div class="muted" style="padding: 40px 0">{{ error() }}</div>
+        <app-error [text]="error()" (retry)="retry()" />
       } @else {
-        <div class="muted" style="padding: 40px 0">Carregando…</div>
+        <app-loading kind="cards" />
       }
     </div>
 
     <ng-template #card let-w>
       <div class="wk-card" [class.wk-card--done]="!!w.completed_at">
-        <div class="row" style="gap: 10px">
+        <div class="row wk-card__top">
           <span class="wk-ic" [style.background]="w.completed_at ? 'var(--text-subtle)' : w.color">{{ initials(w.name) }}</span>
-          <div style="min-width: 0; flex: 1">
-            <a class="wk-name" [routerLink]="workLink(w)"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</a>
+          <div class="grow">
+            <a class="wk-name" [routerLink]="workLink(w)" [title]="'#' + w.id + ' ' + w.name"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</a>
             <div class="wk-meta">{{ w.description || 'Sem descrição' }}</div>
             @if (w.continues?.length || w.continued_by?.length) {
               <div class="wk-meta">@if (w.continues?.length) { Continua de {{ namesOf(w.continues) }} }@if (w.continues?.length && w.continued_by?.length) { · }@if (w.continued_by?.length) { Nova versão: {{ namesOf(w.continued_by) }} }</div>
@@ -349,9 +358,9 @@ type KanbanSort = 'manual' | Sort;
             <span class="phase-chip" [style.--phase]="w.phase_color">{{ w.phase_name }}</span>
           }
           @if (w.owners?.length) {
-            <span class="row" style="gap: 6px" [title]="'Responsáveis: ' + ownerNames(w)"><span class="wk-avatars">@for (o of w.owners.slice(0, 3); track o.id) { <app-avatar [person]="o" /> }</span>{{ w.owners[0].name.split(' ')[0] }}@if (w.owners.length > 1) { <span class="muted"> +{{ w.owners.length - 1 }}</span> }@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
+            <span class="row wk-owner" [title]="'Responsáveis: ' + ownerNames(w)"><span class="wk-avatars">@for (o of w.owners.slice(0, 3); track o.id) { <app-avatar [person]="o" /> }</span>{{ w.owners[0].name.split(' ')[0] }}@if (w.owners.length > 1) { <span class="muted"> +{{ w.owners.length - 1 }}</span> }@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
           } @else if (w.owner_name) {
-            <span class="row" style="gap: 6px"><app-avatar [person]="{ name: w.owner_name, initials: w.owner_initials || '', color: w.owner_color || '' }" />{{ w.owner_name.split(' ')[0] }}@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
+            <span class="row wk-owner"><app-avatar [person]="{ name: w.owner_name, initials: w.owner_initials || '', color: w.owner_color || '' }" />{{ w.owner_name.split(' ')[0] }}@if (w.due_date && (w.tasks_overdue || w.tasks_blocked)) { <span class="muted"> · previsão {{ due(w.due_date) }}</span> }</span>
           }
           <span class="grow"></span>
           <span class="wk-avatars">@for (m of w.members.slice(0, 3); track m.id) { <app-avatar [person]="m" /> }@if (w.members.length > 3) { <span class="wk-more">+{{ w.members.length - 3 }}</span> }</span>
@@ -361,119 +370,133 @@ type KanbanSort = 'manual' | Sort;
 
     @if (form) {
       <div class="modal-scrim" (click)="dismissForm()">
-        <div class="modal" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="form.id ? 'Editar ' + t().one : t().novo">
-          <div class="modal-head">{{ form.id ? 'Editar ' + t().one : t().novo }}
-            @if (!form.id && formPhase(); as fp) { <span class="phase-chip" style="margin-left: 8px" [style.--phase]="fp.color">{{ fp.name }}</span> }
+        <div class="modal" appDialog (dialogClose)="dismissForm()" (click)="$event.stopPropagation()">
+          <div class="modal-head">
+            <h2>{{ form.id ? 'Editar ' + t().one : t().novo }}
+              @if (!form.id && formPhase(); as fp) { <span class="phase-chip wk-form-phase" [style.--phase]="fp.color">{{ fp.name }}</span> }
+            </h2>
+            <button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="dismissForm()"><app-icon name="x" [size]="16" /></button>
           </div>
           <div class="modal-body">
-            <div class="field"><label for="wk-n">Nome</label><input id="wk-n" class="input" appAutofocus [(ngModel)]="form.name" placeholder="Ex.: Customização Fiscal" /></div>
-            <div class="field"><label for="wk-d">Descrição/Escopo</label>
-              <textarea id="wk-d" class="textarea" style="min-height: 80px" [(ngModel)]="form.description" placeholder="O que será entregue e o que fica de fora"></textarea></div>
-            <div class="field">
-              <span class="label">Anexos</span>
-              <div class="qa-files" [class.file-over]="fileOver()"
-                   (dragenter)="fileEnter($event)" (dragover)="fileHover($event)" (dragleave)="fileLeave($event)" (drop)="fileDrop($event)">
-                @if (form.id) {
-                  @if (formFilesLoading()) { <div class="muted small">Carregando anexos…</div> }
-                  @for (f of formFiles(); track f.id) {
-                    <span class="qa-file-chip">
-                      <app-icon name="paperclip" [size]="13" />
-                      <button type="button" class="qa-file-name" (click)="downloadWorkFile(form.id, f)" [title]="'Baixar ' + f.name">{{ f.name }}</button>
-                      <span class="muted small">{{ fileSize(f.size_bytes) }}</span>
-                      <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removeWorkFile(form.id, f)" [attr.aria-label]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
-                    </span>
-                  }
-                } @else {
-                  @for (f of pendingFiles(); track $index) {
-                    <span class="qa-file-chip">
-                      <app-icon name="paperclip" [size]="13" />
-                      <span class="qa-file-name" [title]="f.name">{{ f.name }}</span>
-                      <span class="muted small">{{ fileSize(f.size) }}</span>
-                      <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removePending($index)" [attr.aria-label]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
-                    </span>
-                  }
-                }
-                @if ((form.id ? formFiles().length : pendingFiles().length) < fileMax) {
-                  <label class="btn btn-ghost btn-sm qa-file-add">
-                    <app-icon name="paperclip" [size]="14" />
-                    {{ uploadingFiles() ? 'Enviando…' : 'Anexar arquivos' }}
-                    <input type="file" multiple hidden [disabled]="uploadingFiles()" (change)="pickFiles($event)" />
-                  </label>
-                }
-              </div>
-              <span class="hint">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada. Arraste para a área acima.</span>
+            <div class="form-section">
+              <div class="form-section__title">Básico</div>
+              <div class="field"><label for="wk-n">Nome</label><input id="wk-n" class="input" appAutofocus [(ngModel)]="form.name" placeholder="Ex.: Customização Fiscal" /></div>
+              <div class="field"><label for="wk-d">Descrição/Escopo</label>
+                <textarea id="wk-d" class="textarea wk-ta" [(ngModel)]="form.description" placeholder="O que será entregue e o que fica de fora"></textarea></div>
+              <div class="field"><label id="wk-color-label">Cor</label>
+                <div class="pills" role="radiogroup" aria-labelledby="wk-color-label">@for (c of colors; track c) {
+                  <button type="button" class="swatch" role="radio" [style.background]="c" [class.on]="form.color === c" [attr.aria-checked]="form.color === c" (click)="form.color = c" [attr.aria-label]="colorName(c)" [title]="colorName(c)"></button>
+                }</div></div>
             </div>
-            <div class="field">
-              <label>Responsáveis</label>
-              <div class="row" style="flex-wrap: wrap; gap: 6px">
-                @for (m of chosenOwners(); track m.id) {
-                  <span class="pill"><app-avatar [person]="m" />{{ m.name }}<button type="button" (click)="toggleOwner(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button></span>
+            <div class="form-section">
+              <div class="form-section__title">Pessoas</div>
+              <div class="field">
+                <label>Responsáveis</label>
+                @if (chosenOwners().length) {
+                  <div class="pills">
+                    @for (m of chosenOwners(); track m.id) { <app-person-chip [person]="m" (remove)="toggleOwner(m.id)" /> }
+                  </div>
                 }
+                <app-person-picker [people]="ownerCandidates()" placeholder="Adicionar responsável…" (picked)="toggleOwner($event ?? 0)" />
+                @if (!ownerIds().length) { <span class="hint hint--danger">Escolha pelo menos um responsável.</span> }
+                @else { <span class="hint">Quem responde pelo {{ t().one }}. Todos os responsáveis podem editar e mover o {{ t().one }}.</span> }
               </div>
-              <app-person-picker [people]="ownerCandidates()" placeholder="Adicionar responsável…" (picked)="toggleOwner($event ?? 0)" />
-              @if (!ownerIds().length) { <span class="hint" style="color: var(--danger)">Escolha pelo menos um responsável.</span> }
-              @else { <span class="hint">Quem responde pelo {{ t().one }}. Todos os responsáveis podem editar e mover o {{ t().one }}.</span> }
-            </div>
-            <ng-container [ngTemplateOutlet]="membersField" />
-            <div class="field">
+              <div class="field">
+                <label>Solicitantes</label>
+                @if (chosen().length) {
+                  <div class="pills">
+                    @for (m of chosen(); track m.id) { <app-person-chip [person]="m" (remove)="toggleMember(m.id)" /> }
+                  </div>
+                }
+                <app-person-picker [people]="candidates()" placeholder="Adicionar solicitante…" (picked)="toggleMember($event ?? 0)" />
+                <span class="hint">Quem pediu o projeto, de qualquer área. Só acompanha: vê a fase e o histórico e é avisado a cada mudança de fase, sem ver as tarefas.</span>
+              </div>
+              <div class="field">
                 <label for="wk-dep">Departamento</label>
                 <input id="wk-dep" class="input" list="wk-dep-list" maxlength="200" autocomplete="off" [ngModel]="form.department" (ngModelChange)="form.department = $event; deptAuto = false" placeholder="Área que pediu o projeto" />
                 <datalist id="wk-dep-list">@for (d of departmentOptions(); track d) { <option [value]="d"></option> }</datalist>
                 <span class="hint">Aparece na coluna Departamento de Projetos. Segue o primeiro solicitante até você digitar outro.</span>
+              </div>
             </div>
-            <div class="fields">
-              <div class="field"><label for="wk-s">Data inicial</label><input id="wk-s" type="date" class="input" [ngModel]="form.start_date" (ngModelChange)="onStart($event)" /></div>
-              <div class="field"><label for="wk-p">Previsão de entrega</label><input id="wk-p" type="date" class="input" [min]="form.start_date || ''" [ngModel]="form.due_date" (ngModelChange)="onDue($event)" /></div>
+            <div class="form-section">
+              <div class="form-section__title">Prazo</div>
+              <div class="fields">
+                <div class="field"><label for="wk-s">Data inicial</label><input id="wk-s" type="date" class="input" [ngModel]="form.start_date" (ngModelChange)="onStart($event)" /></div>
+                <div class="field"><label for="wk-p">Previsão de entrega</label><input id="wk-p" type="date" class="input" [min]="form.start_date || ''" [ngModel]="form.due_date" (ngModelChange)="onDue($event)" /></div>
+              </div>
+              @if (spanError()) { <span class="hint hint--danger hint--tight">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
+              @else if (form.start_date && form.due_date) { <span class="hint hint--tight">{{ span() }} {{ span() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo responsável faz um por vez e a fila dele é reajustada.</span> }
+              @else if (form.start_date && phaseDays()) { <span class="hint hint--tight">Roteiro {{ isBoard() ? 'da equipe' : 'do projeto' }}: {{ phaseDays() }} {{ phaseDays() === 1 ? 'dia útil' : 'dias úteis' }}. O prazo é preenchido sozinho.</span> }
+              @if (needsReason()) {
+                <div class="field">
+                  <label for="wk-reason">Motivo da alteração das datas <span class="wk-late">*</span></label>
+                  <textarea id="wk-reason" class="textarea" rows="2" maxlength="500" [(ngModel)]="dateReason" placeholder="Ex.: cliente pediu para adiar a entrega"></textarea>
+                  @if (dateReason.trim().length < 10) { <span class="hint hint--danger">Informe o motivo (pelo menos 10 letras). Ele fica no histórico de datas e as novas datas viram o planejado.</span> }
+                  @else { <span class="hint">Fica no histórico de datas. As novas datas viram o planejado.</span> }
+                </div>
+              }
+              <app-schedule-impact [impact]="impact()" [many]="t().many" (toggle)="toggleAdjust($event)" (useSuggested)="applySuggested()" />
             </div>
-            @if (spanError()) { <span class="hint" style="margin-top: -6px; color: var(--danger)">A previsão de entrega deve ser igual ou depois da data inicial.</span> }
-            @else if (form.start_date && form.due_date) { <span class="hint" style="margin-top: -6px">{{ span() }} {{ span() === 1 ? 'dia útil' : 'dias úteis' }} na linha do tempo. Pessoas diferentes andam em paralelo; o mesmo responsável faz um por vez e a fila dele é reajustada.</span> }
-            @else if (form.start_date && phaseDays()) { <span class="hint" style="margin-top: -6px">Roteiro {{ isBoard() ? 'da equipe' : 'do projeto' }}: {{ phaseDays() }} {{ phaseDays() === 1 ? 'dia útil' : 'dias úteis' }}. O prazo é preenchido sozinho.</span> }
-            @if (needsReason()) {
+            <details class="form-more" [open]="form.id ? formFiles().length > 0 : pendingFiles().length > 0">
+              <summary><app-icon name="chevron" [size]="14" />Mais opções</summary>
               <div class="field">
-                <label for="wk-reason">Motivo da alteração das datas <span class="wk-late">*</span></label>
-                <textarea id="wk-reason" class="textarea" rows="2" maxlength="500" [(ngModel)]="dateReason" placeholder="Ex.: cliente pediu para adiar a entrega"></textarea>
-                @if (dateReason.trim().length < 10) { <span class="hint" style="color: var(--danger)">Informe o motivo (pelo menos 10 letras). Ele fica no histórico de datas e as novas datas viram o planejado.</span> }
-                @else { <span class="hint">Fica no histórico de datas. As novas datas viram o planejado.</span> }
-              </div>
-            }
-            <app-schedule-impact [impact]="impact()" [many]="t().many" (toggle)="toggleAdjust($event)" (useSuggested)="applySuggested()" />
-            <ng-template #membersField>
-            <div class="field">
-              <label>Solicitantes</label>
-              <div class="row" style="flex-wrap: wrap; gap: 6px">
-                @for (m of chosen(); track m.id) {
-                  <span class="pill"><app-avatar [person]="m" />{{ m.name }}<button type="button" (click)="toggleMember(m.id)" [attr.aria-label]="'Remover ' + m.name"><app-icon name="x" [size]="12" /></button></span>
-                }
-              </div>
-              <app-person-picker [people]="candidates()"  placeholder="Adicionar solicitante…" (picked)="toggleMember($event ?? 0)" />
-              <span class="hint">Quem pediu o projeto, de qualquer área. Só acompanha: vê a fase e o histórico e é avisado a cada mudança de fase, sem ver as tarefas.</span>
-            </div>
-            </ng-template>
-            <div class="field">
-                <label>Continua de</label>
-                <div class="row" style="flex-wrap: wrap; gap: 6px">
-                  @for (rel of chosenLinks(); track rel.id) {
-                    <span class="pill">{{ rel.name }}<button type="button" (click)="toggleLink(rel.id)" [attr.aria-label]="'Desvincular ' + rel.name"><app-icon name="x" [size]="12" /></button></span>
+                <span class="label">Anexos</span>
+                <div class="qa-files" [class.file-over]="fileOver()"
+                     (dragenter)="fileEnter($event)" (dragover)="fileHover($event)" (dragleave)="fileLeave($event)" (drop)="fileDrop($event)">
+                  @if (form.id) {
+                    @if (formFilesLoading()) { <app-loading kind="lines" [rows]="1" text="Carregando anexos…" /> }
+                    @for (f of formFiles(); track f.id) {
+                      <span class="qa-file-chip">
+                        <app-icon name="paperclip" [size]="13" />
+                        <button type="button" class="qa-file-name" (click)="downloadWorkFile(form.id, f)" [title]="'Baixar ' + f.name">{{ f.name }}</button>
+                        <span class="muted small">{{ fileSize(f.size_bytes) }}</span>
+                        <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removeWorkFile(form.id, f)" [attr.aria-label]="'Remover ' + f.name" [title]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
+                      </span>
+                    }
+                  } @else {
+                    @for (f of pendingFiles(); track $index) {
+                      <span class="qa-file-chip">
+                        <app-icon name="paperclip" [size]="13" />
+                        <span class="qa-file-name" [title]="f.name">{{ f.name }}</span>
+                        <span class="muted small">{{ fileSize(f.size) }}</span>
+                        <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removePending($index)" [attr.aria-label]="'Remover ' + f.name" [title]="'Remover ' + f.name"><app-icon name="x" [size]="12" /></button>
+                      </span>
+                    }
+                  }
+                  @if ((form.id ? formFiles().length : pendingFiles().length) < fileMax) {
+                    <label class="btn btn-ghost btn-sm qa-file-add">
+                      <app-icon name="paperclip" [size]="14" />
+                      {{ uploadingFiles() ? 'Enviando…' : 'Anexar arquivos' }}
+                      <input type="file" multiple hidden [disabled]="uploadingFiles()" (change)="pickFiles($event)" />
+                    </label>
                   }
                 </div>
+                <span class="hint">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada. Arraste para a área acima.</span>
+              </div>
+              <div class="field">
+                <label>Continua de</label>
+                @if (chosenLinks().length) {
+                  <div class="pills">
+                    @for (rel of chosenLinks(); track rel.id) {
+                      <span class="pill">{{ rel.name }}<button type="button" class="pill__x" (click)="toggleLink(rel.id)" [attr.aria-label]="'Desvincular ' + rel.name" [title]="'Desvincular ' + rel.name"><app-icon name="x" [size]="11" /></button></span>
+                    }
+                  </div>
+                }
                 <select #lk class="select" (change)="toggleLink(+lk.value); lk.value = ''" aria-label="Relacionar com um projeto">
                   <option value="">Relacionar com um projeto…</option>
                   @for (rel of linkCandidates(); track rel.id) { <option [value]="rel.id">{{ rel.name }}</option> }
                 </select>
                 <span class="hint">Se for uma nova versão de outro projeto {{ isBoard() ? 'da equipe' : 'deste quadro' }}, escolha qual. Pode marcar mais de um.</span>
-            </div>
-            <div class="field"><label>Cor</label>
-              <div class="row">@for (c of colors; track c) {
-                <button type="button" class="wk-color" [style.background]="c" [class.on]="form.color === c" (click)="form.color = c" [attr.aria-label]="'Cor ' + c"></button>
-              }</div></div>
+              </div>
+            </details>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" (click)="cancelForm()">Cancelar</button>
+            <button type="button" class="btn btn-ghost" (click)="cancelForm()">Cancelar</button>
             @if (impact()?.conflicts?.length) {
-              <button class="btn btn-sm" [disabled]="saving()" (click)="applySuggested()">Usar data sugerida</button>
-              <button class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" (click)="save(true)">{{ noneAccepted(impact()) ? 'Salvar (ficam juntos)' : 'Salvar e reajustar' }}</button>
+              <button type="button" class="btn" [disabled]="saving()" (click)="applySuggested()">Usar data sugerida</button>
+              <button type="button" class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" [class.btn--loading]="saving()" (click)="save(true)">{{ noneAccepted(impact()) ? 'Salvar (ficam juntos)' : 'Salvar e reajustar' }}</button>
             } @else {
-              <button class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" (click)="save()">Salvar</button>
+              <button type="button" class="btn btn-primary" [disabled]="!form.name.trim() || !ownerIds().length || saving() || spanError() || reasonMissing()" [class.btn--loading]="saving()" (click)="save()">Salvar</button>
             }
           </div>
         </div>
@@ -482,34 +505,36 @@ type KanbanSort = 'manual' | Sort;
 
     @if (pausing(); as w) {
       <div class="modal-scrim" (click)="pausing.set(null)">
-        <div class="modal" style="max-width: 460px" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="'Pausar ' + t().one">
-          <div class="modal-head">Pausar {{ t().one }}</div>
+        <div class="modal wk-pause-modal" appDialog (dialogClose)="pausing.set(null)" (click)="$event.stopPropagation()">
+          <div class="modal-head">
+            <h2>Pausar {{ t().one }}<span class="modal-head__sub"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</span></h2>
+            <button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="pausing.set(null)"><app-icon name="x" [size]="16" /></button>
+          </div>
           <div class="modal-body">
-            <p class="muted small" style="margin: 0 0 12px"><span class="wk-id">#{{ w.id }}</span>{{ w.name }}</p>
             <div class="fields">
               <div class="field"><label for="pz-s">Início da pausa</label><input id="pz-s" type="date" class="input" [min]="today" [(ngModel)]="pauseForm.start" /></div>
               <div class="field"><label for="pz-e">Retomar em <span class="muted">(opcional)</span></label><input id="pz-e" type="date" class="input" [min]="pauseForm.start || today" [(ngModel)]="pauseForm.end" />
                 <span class="hint">{{ pauseForm.end ? 'Último dia da pausa.' : 'Sem data: fica pausado até alguém retomar.' }}</span></div>
             </div>
             <div class="field"><label for="pz-r">Motivo</label>
-              <textarea id="pz-r" class="textarea" style="min-height: 70px" maxlength="470" appAutofocus [(ngModel)]="pauseForm.reason" placeholder="Ex.: aguardando retorno do fornecedor"></textarea>
+              <textarea id="pz-r" class="textarea wk-ta" maxlength="470" appAutofocus [(ngModel)]="pauseForm.reason" placeholder="Ex.: aguardando retorno do fornecedor"></textarea>
               @if (pauseForm.reason.trim().length < 10) {
-                <span class="hint" style="color: var(--warn, #b45309)">Escreva pelo menos 10 letras · faltam {{ 10 - pauseForm.reason.trim().length }}</span>
+                <span class="hint hint--warn">Escreva pelo menos 10 letras · faltam {{ 10 - pauseForm.reason.trim().length }}</span>
               } @else {
                 <span class="hint">Vai para o histórico de datas e para o aviso a responsáveis e solicitantes.</span>
               }</div>
             @if (w.due_date && pauseForm.end) {
-              <label class="check-label" style="align-items: flex-start">
+              <label class="check-label check-label--top">
                 <input type="checkbox" [(ngModel)]="pauseForm.push_due" />
                 <span>Adiar a previsão de entrega pelos dias úteis da pausa @if (pauseDays()) { <span class="muted">({{ pauseDays() }} {{ pauseDays() === 1 ? 'dia' : 'dias' }}; previsão atual {{ fmtYear(w.due_date) }})</span> }</span>
               </label>
             } @else if (w.due_date) {
-              <p class="hint" style="margin: 0">Sem data de retorno, a previsão de entrega não muda agora. Ao retomar, você escolhe se ela anda os dias úteis em que o {{ t().one }} ficou parado.</p>
+              <span class="hint">Sem data de retorno, a previsão de entrega não muda agora. Ao retomar, você escolhe se ela anda os dias úteis em que o {{ t().one }} ficou parado.</span>
             }
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" (click)="pausing.set(null)">Cancelar</button>
-            <button class="btn btn-primary" [disabled]="pauseInvalid() || saving()" (click)="savePause(w)">Pausar</button>
+            <button type="button" class="btn btn-ghost" (click)="pausing.set(null)">Cancelar</button>
+            <button type="button" class="btn btn-primary" [disabled]="pauseInvalid() || saving()" [class.btn--loading]="saving()" (click)="savePause(w)">Pausar</button>
           </div>
         </div>
       </div>
@@ -526,7 +551,7 @@ type KanbanSort = 'manual' | Sort;
 
     @if (detail(); as w) {
       <div class="modal-scrim" (click)="closeDetail()">
-        <div class="modal wk-detail" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="w.name">
+        <div class="modal wk-detail" appDialog (dialogClose)="closeDetail()" (click)="$event.stopPropagation()">
           <div class="wk-detail__head">
             <span class="wk-table__sq wk-detail__sq" [style.background]="w.color"></span>
             <div class="grow">
@@ -537,7 +562,7 @@ type KanbanSort = 'manual' | Sort;
                 <span [class]="'wk-dl wk-dl--' + deadlineState(w).tone">{{ deadlineState(w).label }}</span>
               </div>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="closeDetail()" aria-label="Fechar"><app-icon name="x" [size]="16" /></button>
+            <button type="button" class="btn btn-ghost btn-sm btn-icon modal-x" (click)="closeDetail()" aria-label="Fechar" title="Fechar"><app-icon name="x" [size]="16" /></button>
           </div>
           <div class="modal-body">
             <div>
@@ -548,7 +573,7 @@ type KanbanSort = 'manual' | Sort;
 
             <div>
               <div class="wk-detail__title">Anexos @if (detailFiles().length) { <span class="muted">· {{ detailFiles().length }}</span> }</div>
-              @if (detailFilesLoading()) { <div class="muted small">Carregando anexos…</div> }
+              @if (detailFilesLoading()) { <app-loading kind="lines" [rows]="1" text="Carregando anexos…" /> }
               @else {
                 <div class="th-files">
                   @for (f of detailFiles(); track f.id) {
@@ -608,7 +633,7 @@ type KanbanSort = 'manual' | Sort;
               <div>
                 <div class="wk-detail__title">Tarefas @if (!detailTasksLoading() && detailTasks().length) { <span class="muted">· {{ detailTasks().length }}</span> }</div>
                 @if (detailTasksLoading()) {
-                  <div class="muted small">Carregando…</div>
+                  <app-loading kind="lines" [rows]="2" />
                 } @else if (!detailTasks().length) {
                   <div class="muted small">Nenhuma tarefa.</div>
                 } @else {
@@ -653,7 +678,7 @@ type KanbanSort = 'manual' | Sort;
             <div>
               <div class="wk-detail__title">Histórico de fases</div>
               @if (detailLoading()) {
-                <div class="muted small">Carregando…</div>
+                <app-loading kind="lines" [rows]="2" />
               } @else {
                 <ol class="wk-detail__log">
                   @for (l of detailLog(); track l.id) {
@@ -669,7 +694,7 @@ type KanbanSort = 'manual' | Sort;
           </div>
           <div class="modal-foot">
             @if (w.my_role === 'manage') { <button type="button" class="btn btn-sm" (click)="editFromDetail(w)"><app-icon name="pencil" [size]="14" />Editar</button> }
-            <a class="btn btn-primary btn-sm" [routerLink]="workLink(w)">Abrir projeto</a>
+            <a class="btn btn-primary btn-sm" [routerLink]="workLink(w)">Abrir {{ t().one }}</a>
           </div>
         </div>
       </div>
@@ -731,7 +756,12 @@ export class ProjectWorksPage implements OnChanges {
     return [...this.visible()].sort(s === 'manual' ? this.boardOrder : this.sortBy(s));
   });
   sortHead(s: Sort) { this.kanbanSort.set(this.kanbanSort() === s ? 'manual' : s); }
-  sortMark(s: Sort) { return this.kanbanSort() === s ? ' ↓' : ''; }
+  colorName = colorName;
+  // Tentar de novo depois de um erro: refaz o carregamento do quadro (equipe, individual ou projeto).
+  retry() {
+    if (this.pid()) { this.load(); return; }
+    this.ngOnChanges({ id: new SimpleChange(null, this.id(), true), teamId: new SimpleChange(null, this.teamId(), true) });
+  }
   deadlineState(w: Work): { label: string; tone: 'ok' | 'bad' | 'warn' | 'none' } {
     const due = w.due_date?.slice(0, 10);
     if (w.my_role === 'follow') return w.completed_at ? { label: 'Entregue', tone: 'ok' } : { label: '—', tone: 'none' };
@@ -897,6 +927,7 @@ export class ProjectWorksPage implements OnChanges {
   private auth = inject(AuthService);
   data = inject(DataService);
   private toast = inject(ToastService);
+  private confirmSvc = inject(ConfirmService);
   private router = inject(Router);
 
   project = signal<Project | null>(null);
@@ -917,7 +948,7 @@ export class ProjectWorksPage implements OnChanges {
   dragId = signal<number | null>(null);
   dropPhase = signal<number | null>(null);
   cols = new PhaseColumns({
-    api: this.api, toast: this.toast, phases: () => this.phases(), scope: () => this.phaseScope(),
+    api: this.api, toast: this.toast, confirm: this.confirmSvc, phases: () => this.phases(), scope: () => this.phaseScope(),
     saved: phases => { this.phases.set(phases); this.load(); },
   });
   private phaseOf(w: Work) {
@@ -1171,7 +1202,7 @@ export class ProjectWorksPage implements OnChanges {
       error: e => { this.load(); this.toast.error(errorMessage(e, `Não foi possível mover o ${this.t().one}.`)); },
     });
   }
-  openWork(ev: MouseEvent, w: Work) {
+  openWork(ev: Event, w: Work) {
     if ((ev.target as HTMLElement).closest('a, button')) return;
     this.router.navigate(this.workLink(w));
   }
@@ -1322,7 +1353,7 @@ export class ProjectWorksPage implements OnChanges {
     });
     if (!closing) { run(); return; }
     this.api.tasks({ project_id: w.project_id, section_id: w.id, status: 'open', with_steps: 1 }).subscribe({
-      next: list => { if (confirmOpen(`o ${T.one}`, openWorkLines(list))) run(); },
+      next: list => confirmOpen(this.confirmSvc, `o ${T.one}`, openWorkLines(list)).subscribe(ok => { if (ok) run(); }),
       error: e => this.toast.error(errorMessage(e, `Não foi possível atualizar o ${T.one}.`)),
     });
   }
@@ -1358,14 +1389,19 @@ export class ProjectWorksPage implements OnChanges {
       error: e => { this.saving.set(false); this.toast.error(errorMessage(e, `Não foi possível pausar o ${T.one}.`)); },
     });
   }
-  resume(w: Work) {
+  async resume(w: Work) {
     const T = this.t();
-    let push = false;
     const started = !!w.pause_start && w.pause_start.slice(0, 10) < this.today;
-    if (this.openPause(w) && started && w.due_date) {
-      if (!confirm(`Retomar ${w.name}?\nA pausa termina agora.`)) return;
-      push = confirm(`Adiar a previsão de entrega (${this.fmtYear(w.due_date)}) pelos dias úteis em que ${w.name} ficou pausado?\nOK adia; Cancelar mantém a data.`);
-    } else if (!confirm(`Retomar ${w.name}?\nA pausa termina agora. A previsão de entrega continua como está.`)) return;
+    const canPush = this.openPause(w) && started && !!w.due_date;
+    const r = await this.confirmSvc.ask({
+      title: `Retomar ${w.name}?`,
+      message: canPush ? 'A pausa termina agora.' : 'A pausa termina agora. A previsão de entrega continua como está.',
+      confirmLabel: 'Retomar',
+      icon: 'play',
+      checkbox: canPush ? { label: `Adiar a previsão de entrega (${this.fmtYear(w.due_date!)}) pelos dias úteis em que ficou pausado`, checked: true } : undefined,
+    });
+    if (!r.ok) return;
+    const push = canPush && r.checked;
     this.api.resumeWork(w.id, push).subscribe({
       next: () => { this.load(); this.toast.show(`${T.One} retomado.`); },
       error: e => this.toast.error(errorMessage(e, `Não foi possível retomar o ${T.one}.`)),
