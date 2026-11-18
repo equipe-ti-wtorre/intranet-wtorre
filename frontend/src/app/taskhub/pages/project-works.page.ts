@@ -146,6 +146,9 @@ type KanbanSort = 'manual' | Sort;
               </div>
             }
           </div>
+          @if (editCols() && view() === 'kanban') {
+            <button type="button" class="btn btn-sm wk-toolbar__new" (click)="cols.add()"><app-icon name="plus" [size]="14" />Nova coluna</button>
+          }
         </div>
 
         @if (view() === 'kanban') {
@@ -216,9 +219,6 @@ type KanbanSort = 'manual' | Sort;
                     }
                   </div>
                 </section>
-              }
-              @if (editCols()) {
-                <button type="button" class="bcol-new wk-col-new" (click)="cols.add()">+ Nova coluna</button>
               }
             </div>
             @if (cols.colMenu() !== null) { <div class="bcol-menu-scrim" (click)="cols.closeMenu()"></div> }
