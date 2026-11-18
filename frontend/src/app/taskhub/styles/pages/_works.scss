@@ -33,3 +33,8 @@
 .wk-foot .wk-owner { min-width: 0; max-width: 100%; flex-wrap: wrap; row-gap: 0; }
 .wk-foot .wk-owner .muted { white-space: nowrap; }
 .wk-foot .grow { flex: 1 1 0; min-width: 0; }
+
+/* Nome do projeto: quebra em até 3 linhas em vez de cortar; ações em grade 2x2 para sobrar largura. */
+.wk-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; line-height: 1.25; }
+.wk-card__top .wk-actions { display: grid; grid-template-columns: repeat(2, auto); gap: 0; align-self: start; flex: none; }
+.wk-card__top .wk-actions .btn { min-width: 30px; min-height: 30px; width: 30px; height: 30px; padding: 0; }
