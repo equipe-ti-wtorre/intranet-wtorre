@@ -38,3 +38,6 @@
 .wk-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; line-height: 1.25; }
 .wk-card__top .wk-actions { display: grid; grid-template-columns: repeat(2, auto); gap: 0; align-self: start; flex: none; }
 .wk-card__top .wk-actions .btn { min-width: 30px; min-height: 30px; width: 30px; height: 30px; padding: 0; }
+
+/* "+ Nova coluna" ocupa a linha inteira embaixo das colunas, em vez de cair solta numa célula da grade. */
+.wk-col-new { grid-column: 1 / -1; width: 100%; }
