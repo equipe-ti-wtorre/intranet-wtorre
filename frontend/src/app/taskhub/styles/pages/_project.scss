@@ -1,0 +1,31 @@
+// Estilos específicos (parcial importado por taskhub.scss, dentro de .taskhub-root).
+
+// Página do projeto: cabeçalho com ponto de cor + título + saúde na mesma linha
+.page-head--work { margin-bottom: 12px; }
+.page-head__title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.page-head__title h1 { min-width: 0; }
+
+// Painel de quem só acompanha
+.follow-panel__hint { margin-bottom: 12px; }
+.phase-chip--future { opacity: .5; }
+.phase-chip--current { font-weight: 700; }
+.wk-pause--self { align-self: flex-start; }
+
+// Configurações
+.note-info--flush { margin-top: 0; }
+.status-row__limit { width: 80px; }
+
+// Linha do tempo: ajuda "Como usar"
+.tl-help { margin: 0 0 12px; }
+.tl-help__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.tl-help__steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+.tl-help__steps b { color: var(--text-primary); }
+
+// Linha do tempo: painel do item selecionado
+.tl-panel__text { min-width: 0; }
+.tl-panel__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tl-panel__h4--gap { margin-top: 14px; }
+.tl-panel__edit-btn { align-self: flex-end; }
+.tl-panel__desc { white-space: pre-wrap; margin: 0 0 8px; }
+.tl-panel__members { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tl-panel__member { display: inline-flex; align-items: center; gap: 4px; }

@@ -21,13 +21,13 @@ const PHASE_STATE_LABEL: Record<PhaseState, string> = { past: 'Fase anterior', c
       @if (g.state) {
         <button type="button" [class]="'group-head phase-head phase-' + g.state" (click)="toggleGroup(g)" [attr.aria-expanded]="isOpen(g)">
           <span class="phase-caret" [class.open]="isOpen(g)">▸</span>
-          <span class="dot" style="width:8px;height:8px;border-radius:50%" [style.background]="g.color"></span>
+          <span class="dot dot--round" [style.background]="g.color"></span>
           {{ g.label }} <span class="n">{{ g.tasks.length }}</span>
           <span class="phase-tag">{{ stateLabel[g.state] }}</span>
         </button>
       } @else if (groupBy() !== 'none') {
         <div class="group-head">
-          @if (g.color) { <span class="dot" style="width:8px;height:8px;border-radius:50%" [style.background]="g.color"></span> }
+          @if (g.color) { <span class="dot dot--round" [style.background]="g.color"></span> }
           {{ g.label }} <span class="n">{{ g.tasks.length }}</span>
         </div>
       }
@@ -52,7 +52,7 @@ const PHASE_STATE_LABEL: Record<PhaseState, string> = { past: 'Fase anterior', c
         }
         @if (canAdd() && g.add) {
           <div class="add-row">
-            <span style="width:18px;text-align:center">+</span>
+            <span class="add-row__plus" aria-hidden="true">+</span>
             <input #inp placeholder="Adicionar tarefa e Enter" (keydown.enter)="add.emit({ title: inp.value, extra: g.add! }); inp.value = ''" [attr.aria-label]="'Adicionar tarefa em ' + g.label" />
           </div>
         }

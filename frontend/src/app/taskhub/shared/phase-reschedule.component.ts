@@ -3,6 +3,7 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
 import { PhaseReschedule, PhaseScope } from '../core/models';
 import { IconComponent } from './ui';
+import { DialogDirective } from './dialog.directive';
 
 type Candidate = PhaseReschedule['candidates'][number];
 
@@ -11,13 +12,13 @@ type Candidate = PhaseReschedule['candidates'][number];
 @Component({
   selector: 'app-phase-reschedule',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, DialogDirective],
   template: `
     @if (candidates().length) {
       <div class="modal-scrim">
-        <div class="modal resched-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Atualizar datas dos projetos">
-          <div class="modal-head row" style="gap: 8px"><app-icon name="calendar" [size]="16" />Atualizar datas dos projetos?
-            <button type="button" class="btn btn-ghost btn-sm btn-icon resched__x" [disabled]="busy()" (click)="closed.emit('cancelled')" aria-label="Cancelar" title="Cancelar"><app-icon name="x" [size]="14" /></button>
+        <div class="modal resched-modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="!busy() && closed.emit('cancelled')">
+          <div class="modal-head row"><app-icon name="calendar" [size]="16" /><h2>Atualizar datas dos projetos?</h2>
+            <button type="button" class="btn btn-ghost btn-icon btn-sm modal-x resched__x" [disabled]="busy()" (click)="closed.emit('cancelled')" aria-label="Fechar" title="Fechar"><app-icon name="x" [size]="16" /></button>
           </div>
           <div class="modal-body">
             <p class="resched__lead">O roteiro {{ scope().kind === 'team' ? 'da equipe' : 'do projeto' }} agora tem <b>{{ total() }} {{ total() === 1 ? 'dia útil' : 'dias úteis' }}</b>. Escolha os projetos que devem seguir o novo prazo.</p>

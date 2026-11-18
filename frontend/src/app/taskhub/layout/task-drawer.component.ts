@@ -8,10 +8,12 @@ import { ToastService } from '../core/toast.service';
 import { AuthService } from '../core/auth.service';
 import { Person, Phase, Status, Subtask, TaskDetail, TaskFile, TimelineEntry } from '../core/models';
 import { PRIORITIES, SIZES, TASK_FILE_MAX, TASK_FILE_MAX_MB, activityValue, dueLabel, fileSize, isExternalFileDrag, isTaskImage, stamp, taskFileError, termsFor, todayIso } from '../core/format';
-import { AvatarComponent, IconComponent, RichTextComponent, AutofocusDirective } from '../shared/ui';
+import { AvatarComponent, IconComponent, RichTextComponent, AutofocusDirective, LoadingComponent, ErrorComponent, PersonChipComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 import { PersonGroup, PersonPickerComponent, stepAssigneeGroups } from '../shared/person-picker.component';
 import { takeBulletLine } from '../core/steps-text';
 import { confirmOpen } from '../core/confirm-open';
+import { ConfirmService } from '../core/confirm.service';
 import { firstValueFrom } from 'rxjs';
 
 interface StepSnap {
@@ -53,10 +55,10 @@ const ACTIVITY_TEXT: Record<string, string> = {
 @Component({
   selector: 'app-task-drawer',
   standalone: true,
-  imports: [AutofocusDirective, FormsModule, RouterLink, AvatarComponent, IconComponent, RichTextComponent, PersonPickerComponent],
+  imports: [AutofocusDirective, DialogDirective, FormsModule, RouterLink, AvatarComponent, IconComponent, RichTextComponent, PersonPickerComponent, LoadingComponent, ErrorComponent, PersonChipComponent],
   template: `
     <div class="task-modal-scrim" (click)="close()">
-    <aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalhes da tarefa" (click)="$event.stopPropagation()">
+    <aside class="drawer" appDialog="Detalhes da tarefa" (dialogClose)="close()" (click)="$event.stopPropagation()">
       <div class="drawer-head">
         @if (task(); as t) {
           @if (t.project) {
@@ -71,15 +73,15 @@ const ACTIVITY_TEXT: Record<string, string> = {
         <span class="grow"></span>
         @if (task()) {
           @if (editable()) {
-            <button class="btn btn-sm btn-ghost btn-icon dh-del" (click)="remove()" title="Excluir" aria-label="Excluir tarefa"><app-icon name="trash" [size]="14" /></button>
+            <button type="button" class="btn btn-sm btn-ghost btn-icon dh-del" (click)="remove()" title="Excluir tarefa" aria-label="Excluir tarefa"><app-icon name="trash" [size]="14" /></button>
           }
         }
-        <button class="btn btn-sm btn-ghost btn-icon dh-close" (click)="close()" aria-label="Fechar"><app-icon name="x" [size]="14" /></button>
+        <button type="button" class="btn btn-sm btn-ghost btn-icon dh-close" (click)="close()" aria-label="Fechar" title="Fechar"><app-icon name="x" [size]="14" /></button>
       </div>
 
       <div class="drawer-body">
-        @if (loading()) { <div class="muted">Carregando…</div> }
-        @if (error()) { <div class="error-text">{{ error() }}</div> }
+        @if (loading()) { <app-loading kind="lines" [rows]="6" /> }
+        @if (error()) { <app-error [text]="error()" (retry)="load()" /> }
         @if (task(); as t) {
           <textarea #titleEl class="drawer-title" rows="1" [readOnly]="!editable()" [ngModel]="draftTitle"
                     (ngModelChange)="onTitle($event)" (keydown.enter)="$event.preventDefault(); titleEl.blur()" aria-label="Título"></textarea>
@@ -134,15 +136,13 @@ const ACTIVITY_TEXT: Record<string, string> = {
             </div>
             }
             @if (assigneeAway(); as away) {
-              <div class="k"></div><div class="v small" style="color:var(--warn)">{{ away }}</div>
+              <div class="k"></div><div class="v small hint--warn">{{ away }}</div>
             }
 
             <div class="k" title="Quem participou ou pediu. Só registro: ninguém é avisado nem ganha acesso.">Alinhado com</div>
-            <div class="v" style="flex-wrap: wrap; gap: 6px">
+            <div class="v pills">
               @for (c of t.contacts || []; track c.id) {
-                <span class="pill"><app-avatar [person]="c" />{{ c.name }}
-                  @if (editable()) { <button type="button" (click)="toggleContact(c.id)" [attr.aria-label]="'Remover ' + c.name"><app-icon name="x" [size]="12" /></button> }
-                </span>
+                <app-person-chip [person]="c" [removable]="editable()" (remove)="toggleContact(c.id)" />
               }
               @if (editable()) {
                 <app-person-picker variant="inline" [people]="contactCandidates()" [placeholder]="t.contacts?.length ? '+ pessoa' : 'Adicionar pessoa…'"
@@ -171,7 +171,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
             <div class="v">
               <div class="seg" role="group" aria-label="Tempo">
                 @for (z of sizes; track z.v) {
-                  <button type="button" [disabled]="!working()" [class.on]="t.size === z.v" (click)="setSize(t.size === z.v ? null : z.v)" [title]="z.hint">{{ z.t }}</button>
+                  <button type="button" [disabled]="!working()" [class.on]="t.size === z.v" [attr.aria-pressed]="t.size === z.v" (click)="setSize(t.size === z.v ? null : z.v)" [title]="z.hint">{{ z.t }}</button>
                 }
               </div>
             </div>
@@ -200,14 +200,14 @@ const ACTIVITY_TEXT: Record<string, string> = {
             @if (editable() && seesProject()) {
               <div class="k">{{ isBoard() ? 'Equipe' : 'Projeto' }}</div>
               <div class="v">
-                <select class="inline grow" [ngModel]="t.project?.id ?? null" (ngModelChange)="moveProject($event)" [attr.aria-label]="isBoard() ? 'Equipe' : 'Projeto'">
+                <select class="inline grow" [disabled]="!editable()" [ngModel]="t.project?.id ?? null" (ngModelChange)="moveProject($event)" [attr.aria-label]="isBoard() ? 'Equipe' : 'Projeto'">
                   <option [ngValue]="null">Sem projeto</option>
                   @for (p of data.editableProjects(t.space); track p.id) { <option [ngValue]="p.id">{{ p.is_board ? 'Equipe · ' + p.name : p.name }}</option> }
                 </select>
               </div>
               @if (t.project && t.space === 'profissional') {
                 <div class="k">Privacidade</div>
-                <div class="v"><label class="check-label"><input type="checkbox" class="switch" role="switch" [checked]="t.is_private" (change)="setPrivate(!t.is_private)" /> Só quem está na tarefa (esconde dos outros participantes)</label></div>
+                <div class="v"><label class="check-label"><input type="checkbox" class="switch" role="switch" [disabled]="!editable()" [checked]="t.is_private" (change)="setPrivate(!t.is_private)" /> Só quem está na tarefa (esconde dos outros participantes)</label></div>
               }
             }
 
@@ -216,7 +216,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
           <div class="section-label step-head">
             <span class="grow">Descrição</span>
             @if (editable()) {
-              <label class="check-label" style="text-transform: none; letter-spacing: 0; font-weight: 500" title="Com o interruptor ligado, cada Enter vira etapa. Desligado, só a linha que começa com -.">
+              <label class="check-label step-order-switch" title="Com o interruptor ligado, cada Enter vira etapa. Desligado, só a linha que começa com -.">
                 <input type="checkbox" class="switch" role="switch" [ngModel]="linesToStepsOn" (ngModelChange)="linesToStepsOn = $event" /> Linhas viram etapas
               </label>
             }
@@ -254,8 +254,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
               <span class="step-badge" [class]="'step-badge step-badge--' + stepState(s)">{{ stepLabel(s) }}</span>
               @if (editable()) {
                 <span class="step-order">
-                  <button class="btn btn-ghost btn-sm btn-icon" [disabled]="i === 0" (click)="moveSub(i, -1)" aria-label="Subir etapa" title="Subir"><app-icon name="chevron" [size]="12" class="rot-up" /></button>
-                  <button class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveSub(i, 1)" aria-label="Descer etapa" title="Descer"><app-icon name="chevron" [size]="12" class="rot-down" /></button>
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" [disabled]="i === 0" (click)="moveSub(i, -1)" aria-label="Subir etapa" title="Subir etapa"><app-icon name="arrow-up" [size]="14" /></button>
+                  <button type="button" class="btn btn-ghost btn-sm btn-icon" [disabled]="last" (click)="moveSub(i, 1)" aria-label="Descer etapa" title="Descer etapa"><app-icon name="arrow-down" [size]="14" /></button>
                 </span>
                 <app-person-picker class="step-who" mode="single" variant="inline" [groups]="stepGroups()" [value]="s.assignee_id ?? null"
                                    [specials]="[{ value: null, label: 'Sem responsável' }]" [placeholder]="s.assignee_name || 'Responsável'"
@@ -264,10 +264,10 @@ const ACTIVITY_TEXT: Record<string, string> = {
                   <label class="check-label step-notify" [title]="t.steps_ordered !== false ? 'Avisar a pessoa quando for a vez dela' : 'Avisar a pessoa sobre esta etapa'"><input type="checkbox" class="switch" role="switch" [checked]="s.notify !== false" (change)="setSub(s.id, { notify: s.notify === false })" /> avisar</label>
                 }
                 <input type="date" class="inline step-due" [ngModel]="s.due_date" (change)="setSub(s.id, { due_date: $any($event.target).value || null })" aria-label="Prazo da etapa" />
-                <button class="btn btn-ghost btn-sm btn-icon x" (click)="deleteSub(s.id)" aria-label="Remover etapa"><app-icon name="x" [size]="13" /></button>
+                <button type="button" class="btn btn-ghost btn-sm btn-icon x" (click)="deleteSub(s.id)" aria-label="Remover etapa" title="Remover etapa"><app-icon name="x" [size]="13" /></button>
               } @else {
                 @if (s.assignee_name) {
-                  <span class="step-who-ro"><app-avatar [person]="{ name: s.assignee_name, initials: s.assignee_initials || '?', color: s.assignee_color || '#888' }" />{{ s.assignee_id === me ? 'Você' : s.assignee_name }}</span>
+                  <span class="step-who-ro"><app-avatar [person]="{ name: s.assignee_name, initials: s.assignee_initials || '?' }" />{{ s.assignee_id === me ? 'Você' : s.assignee_name }}</span>
                 }
                 @if (s.due_date) { <span class="due">{{ dueText(s.due_date) }}</span> }
               }
@@ -276,9 +276,9 @@ const ACTIVITY_TEXT: Record<string, string> = {
           @if (editable()) {
             <div class="subtask step-row">
               <span class="step-num step-num--new"><app-icon name="plus" [size]="12" /></span>
-              <input class="inline grow" placeholder="Adicionar etapa e Enter" [(ngModel)]="newSub" (keydown.enter)="addSub()" />
+              <input class="inline grow" placeholder="Adicionar etapa e Enter" aria-label="Nova etapa" [(ngModel)]="newSub" (keydown.enter)="addSub()" />
             </div>
-            <div class="muted small" style="margin-top:4px">{{ t.steps_ordered !== false ? 'As etapas andam em ordem: a próxima só conclui depois da anterior, e cada pessoa é avisada quando chega a vez dela.' : 'As etapas andam ao mesmo tempo: cada uma pode ser concluída sem esperar a anterior.' }}</div>
+            <div class="muted small drawer-help">{{ t.steps_ordered !== false ? 'As etapas andam em ordem: a próxima só conclui depois da anterior, e cada pessoa é avisada quando chega a vez dela.' : 'As etapas andam ao mesmo tempo: cada uma pode ser concluída sem esperar a anterior.' }}</div>
           }
 
           <div class="th-files-zone" [class.file-over]="fileOver()"
@@ -295,7 +295,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
               </label>
             }
           </div>
-          @if (filesLoading()) { <div class="muted small">Carregando anexos…</div> }
+          @if (filesLoading()) { <app-loading kind="lines" [rows]="2" text="Carregando anexos…" /> }
           @if (!filesLoading() && !files().length) {
             <div class="muted small">{{ editable() ? 'Nenhum anexo. Arraste um arquivo para cá.' : 'Nenhum anexo.' }}</div>
           }
@@ -321,7 +321,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
             }
           </div>
           @if (editable()) {
-            <div class="muted small" style="margin-top:4px">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</div>
+            <div class="muted small drawer-help">Qualquer tipo de arquivo. Até {{ fileMax }} arquivos, {{ fileMaxMb }} MB cada.</div>
           }
           </div>
 
@@ -329,7 +329,7 @@ const ACTIVITY_TEXT: Record<string, string> = {
           <div class="timeline">
             @for (e of visibleTimeline(); track e.kind + e.id) {
               <div class="tl-card" [class.tl-card--comment]="e.kind === 'comment'">
-                <app-avatar [person]="{ name: e.user_name || 'Sistema', initials: e.initials || '?', color: e.color || '#888' }" />
+                <app-avatar [person]="{ name: e.user_name || 'Sistema', initials: e.initials || '?' }" />
                 <div class="tl-card__body">
                   <div class="tl-card__head">
                     <b>{{ e.user_name || 'Sistema' }}</b>
@@ -358,47 +358,51 @@ const ACTIVITY_TEXT: Record<string, string> = {
                 }
               </div>
             }
+            <div class="composer drawer-composer">
+              <textarea class="textarea drawer-composer__input" placeholder="Escreva um comentário. Use &#64;usuario para avisar alguém."
+                        [(ngModel)]="comment" (ngModelChange)="onCommentInput()" (keydown)="commentKey($event)" aria-label="Comentário"></textarea>
+              @if (mentionList().length) {
+                <div class="card drawer-mentions" role="listbox" aria-label="Pessoas para mencionar">
+                  @for (p of mentionList(); track p.id) {
+                    <button type="button" class="pal-item" role="option" (click)="insertMention(p)"><app-avatar [person]="p" />{{ p.name }} <span class="side-note">&#64;{{ p.username }}</span></button>
+                  }
+                </div>
+              }
+              <div class="row"><span class="muted small grow">Ctrl+Enter envia</span>
+                <button type="button" class="btn btn-sm" [disabled]="!comment.trim() || sending()" [class.btn--loading]="sending()" (click)="sendComment()">Comentar</button></div>
+            </div>
           </div>
         }
       </div>
       @if (task(); as t) {
-        <div class="drawer-foot composer">
-          <textarea class="textarea" style="min-height:70px" placeholder="Escreva um comentário. Use &#64;usuario para avisar alguém."
-                    [(ngModel)]="comment" (ngModelChange)="onCommentInput()" (keydown)="commentKey($event)" aria-label="Comentário"></textarea>
-          @if (mentionList().length) {
-            <div class="card" style="padding:4px">
-              @for (p of mentionList(); track p.id) {
-                <button class="pal-item" (click)="insertMention(p)"><app-avatar [person]="p" />{{ p.name }} <span class="side-note">&#64;{{ p.username }}</span></button>
-              }
-            </div>
-          }
-          <div class="row"><span class="muted small grow">Ctrl+Enter envia</span>
-            <button class="btn btn-primary btn-sm" [disabled]="!comment.trim() || sending()" (click)="sendComment()">Comentar</button></div>
+        <div class="drawer-foot">
           <div class="drawer-actions">
-              @if (showConclude()) {
-                <button type="button" class="btn-action-primary btn-sm" (click)="toggleDone()">{{ taskClosed() ? 'Reabrir' : 'Concluir' }}</button>
-              }
-              @if (editable() && otherPhases().length) {
-                <div class="act-phase">
-                  <button type="button" class="btn-action-secondary btn-sm" (click)="phaseMenu.set(!phaseMenu())">Jogar para outra fase</button>
-                  @if (phaseMenu()) {
-                    <div class="act-phase-menu act-phase-menu--up">
-                      @for (f of otherPhases(); track f.id) {
-                        <button type="button" (click)="sendToPhase(f)"><i [style.background]="f.color"></i>{{ f.name }}</button>
-                      }
-                    </div>
-                  }
-                </div>
-              }
-              <span class="grow"></span>
-              <div class="drawer-actions__right">
-                <button type="button" class="btn btn-sm btn-ghost dh-day" (click)="planToday()" title="Adicionar ao Meu Dia de hoje"><app-icon name="sun" [size]="14" />Meu Dia</button>
-                @if (editable() || working()) {
-                  <button type="button" class="btn btn-sm btn-ghost" (click)="close()">Cancelar</button>
-                  <button type="button" class="btn btn-sm btn-primary" [disabled]="!dirty() || savingEdit()" (click)="saveEdits()">{{ savingEdit() ? 'Salvando…' : 'Salvar' }}</button>
+            <button type="button" class="btn btn-sm btn-ghost dh-day" (click)="planToday()" title="Adicionar ao Meu Dia de hoje" aria-label="Adicionar ao Meu Dia de hoje"><app-icon name="sun" [size]="14" />Meu Dia</button>
+            @if (editable() && otherPhases().length) {
+              <div class="act-phase">
+                <button type="button" class="btn btn-sm btn-ghost" (click)="phaseMenu.set(!phaseMenu())" [attr.aria-expanded]="phaseMenu()">Jogar para outra fase</button>
+                @if (phaseMenu()) {
+                  <div class="act-phase-menu act-phase-menu--up">
+                    @for (f of otherPhases(); track f.id) {
+                      <button type="button" (click)="sendToPhase(f)"><i [style.background]="f.color"></i>{{ f.name }}</button>
+                    }
+                  </div>
                 }
               </div>
+            }
+            @if (editable() || working()) {
+              <button type="button" class="btn btn-sm btn-ghost" (click)="close()">Cancelar</button>
+            }
+            <span class="grow"></span>
+            <div class="drawer-actions__right">
+              @if (showConclude()) {
+                <button type="button" class="btn btn-sm" (click)="toggleDone()">{{ taskClosed() ? 'Reabrir' : 'Concluir' }}</button>
+              }
+              @if (editable() || working()) {
+                <button type="button" class="btn btn-sm btn-primary" [disabled]="!dirty() || savingEdit()" [class.btn--loading]="savingEdit()" (click)="saveEdits()">{{ savingEdit() ? 'Salvando…' : 'Salvar' }}</button>
+              }
             </div>
+          </div>
         </div>
       }
     </aside>
@@ -406,8 +410,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
 
     @if (finishFor(); as s) {
       <div class="modal-scrim" (click)="finishFor.set(null)">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <div class="modal-head">Concluir etapa: {{ s.title }}</div>
+        <div class="modal" appDialog (dialogClose)="finishFor.set(null)" (click)="$event.stopPropagation()">
+          <div class="modal-head"><h2>Concluir etapa<span class="modal-head__sub">{{ s.title }}</span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="finishFor.set(null)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
             <div class="field"><label for="fin-note">O que foi feito (opcional)</label>
               <textarea id="fin-note" class="textarea" [(ngModel)]="finishNote" maxlength="1000" placeholder="Ex.: contrato revisado e enviado ao jurídico." appAutofocus></textarea>
@@ -415,8 +419,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
             </div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" (click)="finishFor.set(null)">Cancelar</button>
-            <button class="btn btn-primary" [disabled]="finishing()" (click)="confirmFinish()">{{ finishing() ? 'Concluindo…' : 'Concluir' }}</button>
+            <button type="button" class="btn btn-ghost" (click)="finishFor.set(null)">Cancelar</button>
+            <button type="button" class="btn btn-primary" [disabled]="finishing()" [class.btn--loading]="finishing()" (click)="confirmFinish()">{{ finishing() ? 'Concluindo…' : 'Concluir' }}</button>
           </div>
         </div>
       </div>
@@ -424,8 +428,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
 
     @if (moveFor(); as s) {
       <div class="modal-scrim" (click)="cancelMove()">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <div class="modal-head">Mover para {{ s.name }}</div>
+        <div class="modal" appDialog (dialogClose)="cancelMove()" (click)="$event.stopPropagation()">
+          <div class="modal-head"><h2>Mover para {{ s.name }}</h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="cancelMove()"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
             <div class="field"><label for="mv-reason">Motivo da mudança</label>
               <textarea id="mv-reason" class="textarea" [(ngModel)]="moveReason" placeholder="Por que a tarefa está mudando de etapa?" maxlength="1000" appAutofocus></textarea>
@@ -439,8 +443,8 @@ const ACTIVITY_TEXT: Record<string, string> = {
             }
           </div>
           <div class="modal-foot">
-            <button class="btn btn-ghost" (click)="cancelMove()">Cancelar</button>
-            <button class="btn btn-primary" [disabled]="moveReason.trim().length < 3" (click)="confirmMove()">Mover</button>
+            <button type="button" class="btn btn-ghost" (click)="cancelMove()">Cancelar</button>
+            <button type="button" class="btn btn-primary" [disabled]="moveReason.trim().length < 3" (click)="confirmMove()">Mover</button>
           </div>
         </div>
       </div>
@@ -456,6 +460,7 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
   private api = inject(ApiService);
   private toast = inject(ToastService);
   private auth = inject(AuthService);
+  private confirmSvc = inject(ConfirmService);
 
   task = signal<TaskDetail | null>(null);
   timeline = signal<TimelineEntry[]>([]);
@@ -758,8 +763,9 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const t = this.task(); if (!t || this.projectClosed()) return;
     this.phaseMenu.set(false);
     const closing = t.status.category !== 'done';
-    if (closing && !confirmOpen('a tarefa', t.subtasks.filter(s => !s.done).map(s => s.title))) return;
-    this.patch({ done: closing }, () => this.toast.show(closing ? 'Tarefa concluída. Permanece nesta fase.' : 'Tarefa reaberta.'));
+    const run = () => this.patch({ done: closing }, () => this.toast.show(closing ? 'Tarefa concluída. Permanece nesta fase.' : 'Tarefa reaberta.'));
+    if (!closing) { run(); return; }
+    confirmOpen(this.confirmSvc, 'a tarefa', t.subtasks.filter(s => !s.done).map(s => s.title)).subscribe(ok => { if (ok) run(); });
   }
   sendToPhase(f: Phase) {
     this.phaseMenu.set(false);
@@ -770,10 +776,17 @@ export class TaskDrawerComponent implements OnChanges, OnDestroy {
     const t = this.task();
     const s = t?.statuses.find(x => x.id === id);
     if (!t || !s || s.id === t.status.id) return;
-    if (s.category === 'done' && !confirmOpen('a tarefa', t.subtasks.filter(x => !x.done).map(x => x.title))) return;
-    this.moveReason = ''; this.blockReason = '';
+    const open = () => {
+      this.moveReason = ''; this.blockReason = '';
+      this.statusPick.set(id);
+      this.moveFor.set(s);
+    };
+    if (s.category !== 'done') { open(); return; }
+    // O select já mostra o status escolhido; se a pessoa desistir, volta ao atual.
     this.statusPick.set(id);
-    this.moveFor.set(s);
+    confirmOpen(this.confirmSvc, 'a tarefa', t.subtasks.filter(x => !x.done).map(x => x.title)).subscribe(ok => {
+      if (ok) open(); else this.statusPick.set(null);
+    });
   }
 
   cancelMove() { this.moveFor.set(null); this.statusPick.set(null); }

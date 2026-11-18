@@ -1,0 +1,12 @@
+// Estilos específicos (parcial importado por taskhub.scss, dentro de .taskhub-root).
+
+// Gaveta da tarefa: notas de ajuda abaixo de etapas/anexos.
+.drawer-help { margin-top: 4px; }
+
+// Composer de comentário no fim da seção Atividade.
+.drawer-composer { margin-top: 14px; }
+.drawer-composer__input { min-height: 70px; }
+.drawer-mentions { padding: 4px; }
+
+// Rodapé só com ações: a margem do bloco de ações vem do próprio rodapé.
+.drawer-foot > .drawer-actions { margin-top: 0; }

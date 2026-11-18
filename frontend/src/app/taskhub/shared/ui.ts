@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, Directive, ElementRef, EventEmitter, Input, Output, computed, inject, input } from '@angular/core';
+import { AfterViewInit, Component, Directive, ElementRef, EventEmitter, Output, booleanAttribute, computed, inject, input, output } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Person, Priority, Task } from '../core/models';
 import { dueLabel, dueTone, isClosed, priorityLabel } from '../core/format';
@@ -47,6 +47,14 @@ const ICONS: Record<string, string> = {
   pin: '<path d="M6.2 2.2h3.6l-.5 3.1 1.8 1.4v1.1H5v-1.1l1.7-1.4z"/><path d="M8 7.8V14"/>',
   paperclip: '<path d="M5.2 8.4l5.1-5.1a2.4 2.4 0 113.4 3.4L7.2 13.2a3.2 3.2 0 11-4.5-4.5l6.2-6.2"/>',
   download: '<path d="M8 2.5v8M5 8l3 3 3-3"/><path d="M3 13.5h10"/>',
+  alert: '<path d="M8 2.2L14.3 13H1.7z"/><path d="M8 6.5v3.2M8 11.6v.1"/>',
+  'chevron-up': '<path d="M3.5 10L8 5.5 12.5 10"/>',
+  'chevron-down': '<path d="M3.5 6L8 10.5 12.5 6"/>',
+  'chevron-left': '<path d="M10 3.5L5.5 8 10 12.5"/>',
+  'chevron-right': '<path d="M6 3.5L10.5 8 6 12.5"/>',
+  'arrow-up': '<path d="M8 13V3M4 7l4-4 4 4"/>',
+  'arrow-down': '<path d="M8 3v10M4 9l4 4 4-4"/>',
+  spark: '<path d="M8 2l1.4 3.6L13 7l-3.6 1.4L8 12l-1.4-3.6L3 7l3.6-1.4z"/>',
 };
 
 @Component({
@@ -119,19 +127,19 @@ export class StatusPillComponent {
 }
 
 // Linha de tarefa usada em listas, painéis e resultados.
+// A linha inteira responde ao clique; pelo teclado, o título é o botão que abre (sem interativo dentro de interativo).
 @Component({
   selector: 'app-task-row',
   standalone: true,
   imports: [AvatarComponent, PrioComponent, StatusPillComponent, IconComponent],
   template: `
-    <div class="trow" [class.done]="closed()" (click)="open.emit(task())" role="button" tabindex="0"
-         (keydown.enter)="open.emit(task())">
+    <div class="trow" [class.done]="closed()" (click)="open.emit(task())">
       <button class="tick" [class.on]="task().status.category === 'done'" [disabled]="task().access !== 'edit' && task().access !== 'work'"
               (click)="$event.stopPropagation(); toggle.emit(task())"
               [attr.aria-label]="task().status.category === 'done' ? 'Reabrir tarefa' : 'Concluir tarefa'"></button>
       <app-prio [p]="task().priority" />
       <span class="t-main">
-        <span class="t-title" [title]="task().title">{{ task().title }}</span>
+        <button type="button" class="t-open t-title" [title]="task().title" (click)="$event.stopPropagation(); open.emit(task())">{{ task().title }}</button>
         @if (hasSub()) {
           <span class="t-sub">
             @if (stepText()) { <span class="step-chip" [title]="'Sua etapa: ' + stepText()">Sua etapa: {{ stepText() }}</span> }
@@ -188,20 +196,116 @@ export class RichTextComponent {
   parts = computed(() => this.text().split(/(@[a-z0-9._-]+)/gi).filter(Boolean).map(t => ({ text: t, mention: t.startsWith('@') })));
 }
 
+// Estado vazio padrão: ícone opcional, título, texto e uma ação (ng-content).
+// variant: '' (bloco), 'compact' (pequeno), 'dashed' (tracejado), 'row' (uma linha), 'ok' (ícone verde, tudo feito).
 @Component({
   selector: 'app-empty',
   standalone: true,
-  template: `<div class="empty"><b>{{ title }}</b><span>{{ text }}</span><ng-content /></div>`,
+  imports: [IconComponent],
+  template: `<div class="empty" [class.empty--compact]="compact()" [class.empty--dashed]="dashed()" [class.empty--row]="row()" [class.empty--ok]="ok()">
+      @if (icon()) { <app-icon [name]="icon()" [size]="compact() || row() ? 18 : 28" /> }
+      @if (title()) { <b>{{ title() }}</b> }
+      @if (text()) { <span>{{ text() }}</span> }
+      <ng-content />
+    </div>`,
 })
 export class EmptyComponent {
-  @Input() title = '';
-  @Input() text = '';
+  title = input('');
+  text = input('');
+  icon = input('');
+  compact = input(false, { transform: booleanAttribute });
+  dashed = input(false, { transform: booleanAttribute });
+  row = input(false, { transform: booleanAttribute });
+  ok = input(false, { transform: booleanAttribute });
+}
+
+// Carregando: esqueleto de linhas (rows), de cartões (cards) ou um giro centralizado (spinner).
+@Component({
+  selector: 'app-loading',
+  standalone: true,
+  template: `@if (kind() === 'spinner') {
+      <div class="loading loading--center" role="status" aria-live="polite"><i class="spinner"></i><span>{{ text() }}</span></div>
+    } @else if (kind() === 'cards') {
+      <div class="loading loading--cards" role="status" aria-live="polite" [attr.aria-label]="text()">
+        @for (i of items(); track i) { <i class="skeleton skeleton--card"></i> }
+      </div>
+    } @else if (kind() === 'lines') {
+      <div class="loading" role="status" aria-live="polite" [attr.aria-label]="text()">
+        @for (i of items(); track i) { <i class="skeleton skeleton--line" [class.short]="i % 3 === 2"></i> }
+      </div>
+    } @else {
+      <div class="loading" role="status" aria-live="polite" [attr.aria-label]="text()">
+        @for (i of items(); track i) { <i class="skeleton skeleton--row"></i> }
+      </div>
+    }`,
+})
+export class LoadingComponent {
+  kind = input<'rows' | 'cards' | 'lines' | 'spinner'>('rows');
+  rows = input(4);
+  text = input('Carregando…');
+  items = computed(() => Array.from({ length: this.rows() }, (_, i) => i));
+}
+
+// Erro ao carregar, com "Tentar de novo".
+@Component({
+  selector: 'app-error',
+  standalone: true,
+  imports: [IconComponent],
+  template: `<div class="error-block" role="alert">
+      <app-icon name="alert" [size]="24" />
+      <b>{{ title() }}</b>
+      @if (text()) { <span>{{ text() }}</span> }
+      @if (retryable()) { <button type="button" class="btn" (click)="retry.emit()"><app-icon name="refresh" [size]="14" />Tentar de novo</button> }
+    </div>`,
+})
+export class ErrorComponent {
+  title = input('Não foi possível carregar');
+  text = input('');
+  retryable = input(true, { transform: booleanAttribute });
+  retry = output<void>();
+}
+
+// Campo de busca com ícone e botão de limpar.
+@Component({
+  selector: 'app-search',
+  standalone: true,
+  imports: [IconComponent],
+  template: `<label class="search" [class.search--wide]="wide()">
+      <app-icon name="search" [size]="15" />
+      <input type="search" [placeholder]="placeholder()" [attr.aria-label]="placeholder()" [value]="value()" (input)="valueChange.emit(input.value)" #input autocomplete="off" />
+      @if (value()) { <button type="button" class="search__clear" aria-label="Limpar busca" (click)="valueChange.emit(''); input.focus()"><app-icon name="x" [size]="13" /></button> }
+    </label>`,
+  styles: [':host{display:inline-flex;max-width:100%;min-width:0}:host(.grow){flex:1}'],
+})
+export class SearchComponent {
+  value = input('');
+  placeholder = input('Buscar');
+  wide = input(false, { transform: booleanAttribute });
+  valueChange = output<string>();
+}
+
+// Chip de pessoa com avatar e botão de remover.
+@Component({
+  selector: 'app-person-chip',
+  standalone: true,
+  imports: [AvatarComponent, IconComponent],
+  template: `<span class="pill pill--person" [title]="person().name">
+      <app-avatar [person]="person()" />
+      <span class="pill__name">{{ person().name }}</span>
+      @if (removable()) { <button type="button" class="pill__x" [attr.aria-label]="'Remover ' + person().name" (click)="$event.stopPropagation(); remove.emit()"><app-icon name="x" [size]="11" /></button> }
+    </span>`,
+  styles: [':host{display:inline-flex;max-width:100%}'],
+})
+export class PersonChipComponent {
+  person = input.required<Pick<Person, 'name' | 'initials'> & { id?: number; avatar_url?: string | null }>();
+  removable = input(true, { transform: booleanAttribute });
+  remove = output<void>();
 }
 
 // Foca o campo quando ele aparece (o atributo autofocus não funciona em janelas abertas depois do carregamento).
 @Directive({ selector: '[appAutofocus]', standalone: true })
 export class AutofocusDirective implements AfterViewInit {
-  private el = inject(ElementRef<HTMLElement>);
+  private el = inject<ElementRef<HTMLElement>>(ElementRef);
   ngAfterViewInit() {
     this.el.nativeElement.focus();
     setTimeout(() => { if (document.activeElement !== this.el.nativeElement) this.el.nativeElement.focus(); }, 0);

@@ -8,26 +8,26 @@ import { fileToAvatarJpeg } from '../core/avatar';
 import { User } from '../core/models';
 import { ToastService } from '../core/toast.service';
 import { UiService } from '../core/ui.service';
-import { AvatarComponent } from '../shared/ui';
+import { AvatarComponent, IconComponent } from '../shared/ui';
 import { environment } from '../environments/environment';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [FormsModule, RouterLink, AvatarComponent],
+  imports: [FormsModule, RouterLink, AvatarComponent, IconComponent],
   template: `
     <div class="page">
-      <div class="page-head"><div><h1>Meu perfil</h1><div class="sub">{{ auth.user()?.username }} · {{ auth.user()?.email }}</div></div></div>
+      <div class="page-head"><div class="page-head__text"><h1>Meu perfil</h1><div class="sub">{{ auth.user()?.username }} · {{ auth.user()?.email }}</div></div></div>
 
       <div class="settings-section">
         <div><h2>Foto</h2><p class="desc">Substitui as iniciais no seu avatar.</p></div>
-        <div class="row" style="align-items:center;gap:16px">
+        <div class="users-photo">
           <app-avatar [person]="auth.user()" [preview]="true" />
-          <div class="stack" style="gap:8px">
+          <div class="users-photo__acts">
             <input #photoFile type="file" accept="image/jpeg,image/png" hidden (change)="onPhoto($event)" />
-            <button type="button" class="btn btn-sm" (click)="photoFile.click()" [disabled]="photoBusy()">Escolher foto</button>
+            <button type="button" class="btn btn-sm" (click)="photoFile.click()" [disabled]="photoBusy()" [class.btn--loading]="photoBusy()">Escolher foto</button>
             @if (auth.user()?.avatar_url) {
-              <button type="button" class="btn btn-sm" (click)="removePhoto()" [disabled]="photoBusy()">Remover foto</button>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="removePhoto()" [disabled]="photoBusy()">Remover foto</button>
             }
           </div>
         </div>
@@ -42,7 +42,7 @@ import { environment } from '../environments/environment';
             <div class="field"><label for="a">Ausente até</label><input id="a" class="input" type="date" [(ngModel)]="away" />
               <span class="hint">Quem for atribuir algo a você verá o aviso.</span></div>
           </div>
-          <div><button class="btn btn-primary btn-sm" (click)="save()">Salvar</button></div>
+          <div><button type="button" class="btn btn-primary btn-sm" [disabled]="saving()" [class.btn--loading]="saving()" (click)="save()">Salvar</button></div>
         </div>
       </div>
 
@@ -61,16 +61,16 @@ import { environment } from '../environments/environment';
       @if (demo) {
         <div class="settings-section">
           <div><h2>Demonstração</h2><p class="desc">Volta os dados de exemplo ao estado inicial.</p></div>
-          <div><button class="btn btn-sm" (click)="resetDemo()">Restaurar dados de exemplo</button></div>
+          <div><button type="button" class="btn btn-sm" (click)="resetDemo()">Restaurar dados de exemplo</button></div>
         </div>
       }
 
       <div class="settings-section">
         <div><h2>Segurança</h2><p class="desc">Se usou o TaskHub em um computador compartilhado, encerre as outras sessões.</p></div>
-        <div class="row" style="flex-wrap:wrap">
+        <div class="pills">
           <a class="btn btn-sm" routerLink="/ti/taskhub/trocar-senha">Trocar senha</a>
-          <button class="btn btn-sm" (click)="logoutAll()">Sair de todos os dispositivos</button>
-          <button class="btn btn-sm btn-danger" (click)="auth.logout()">Sair</button>
+          <button type="button" class="btn btn-sm" (click)="logoutAll()">Sair de todos os dispositivos</button>
+          <button type="button" class="btn btn-sm btn-danger" (click)="auth.logout()"><app-icon name="logout" [size]="14" />Sair</button>
         </div>
       </div>
     </div>
@@ -83,14 +83,16 @@ export class ProfilePage {
   private data = inject(DataService);
   private toast = inject(ToastService);
   photoBusy = signal(false);
+  saving = signal(false);
   name = this.auth.user()?.name || '';
   job = this.auth.user()?.job_title || '';
   away: string | null = this.auth.user()?.away_until || null;
 
   save() {
+    this.saving.set(true);
     this.api.updateMe({ name: this.name, job_title: this.job, away_until: this.away || null }).subscribe({
-      next: u => { this.auth.setUser(u); this.toast.show('Perfil salvo.'); },
-      error: e => this.toast.error(errorMessage(e)),
+      next: u => { this.saving.set(false); this.auth.setUser(u); this.toast.show('Perfil salvo.'); },
+      error: e => { this.saving.set(false); this.toast.error(errorMessage(e)); },
     });
   }
   demo = environment.demo;

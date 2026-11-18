@@ -7,17 +7,18 @@ import { UiService } from '../core/ui.service';
 import { DataService } from '../core/data.service';
 import { AuthService } from '../core/auth.service';
 import { Person, SearchResult } from '../core/models';
-import { AvatarComponent, IconComponent, AutofocusDirective } from '../shared/ui';
+import { AvatarComponent, EmptyComponent, IconComponent, AutofocusDirective } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 
 interface Item { kind: 'cmd' | 'task' | 'project' | 'person'; label: string; note?: string; icon?: string; color?: string; person?: Person; run: () => void; }
 
 @Component({
   selector: 'app-palette',
   standalone: true,
-  imports: [AutofocusDirective, FormsModule, AvatarComponent, IconComponent],
+  imports: [AutofocusDirective, FormsModule, AvatarComponent, EmptyComponent, IconComponent, DialogDirective],
   template: `
     <div class="modal-scrim" (click)="close()">
-      <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Buscar e comandos">
+      <div class="modal" (click)="$event.stopPropagation()" appDialog="Buscar e comandos" (dialogClose)="close()">
         <input class="pal-input" appAutofocus placeholder="Buscar tarefas, projetos, pessoas ou digitar um comando…"
                [ngModel]="q()" (ngModelChange)="onQuery($event)" (keydown)="key($event)" aria-label="Buscar" />
         <div class="pal-list">
@@ -26,14 +27,14 @@ interface Item { kind: 'cmd' | 'task' | 'project' | 'person'; label: string; not
             @for (it of g.items; track it.label + $index) {
               <button class="pal-item" [class.on]="flat().indexOf(it) === active()" (mouseenter)="active.set(flat().indexOf(it))" (click)="it.run()">
                 @if (it.person) { <app-avatar [person]="it.person" /> }
-                @else if (it.color) { <span class="dot" style="width:9px;height:9px;border-radius:3px" [style.background]="it.color"></span> }
+                @else if (it.color) { <span class="dot" [style.background]="it.color"></span> }
                 @else { <app-icon [name]="it.icon || 'arrow'" [size]="15" /> }
-                <span class="ellipsis">{{ it.label }}</span>
+                <span class="ellipsis" [title]="it.label">{{ it.label }}</span>
                 @if (it.note) { <span class="side-note">{{ it.note }}</span> }
               </button>
             }
           }
-          @if (!flat().length) { <div class="pal-empty">Nada encontrado para "{{ q() }}".</div> }
+          @if (!flat().length) { <div class="pal-empty"><app-empty compact icon="search" [text]="'Nada encontrado para &quot;' + q() + '&quot;.'" /></div> }
         </div>
       </div>
     </div>

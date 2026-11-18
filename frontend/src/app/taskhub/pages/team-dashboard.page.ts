@@ -6,7 +6,8 @@ import { ToastService } from '../core/toast.service';
 import { UiService } from '../core/ui.service';
 import { Task, TeamDashboard } from '../core/models';
 import { activityValue, minutesLabel, relativeTime } from '../core/format';
-import { AvatarComponent, IconComponent, TaskRowComponent } from '../shared/ui';
+import { AvatarComponent, EmptyComponent, IconComponent, LoadingComponent, TaskRowComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
 import { TEAM_SLIDES, TeamSlideKey, buildTeamDeck, defaultTeamSlides } from '../presentation/team-deck';
 import { DeckSlide } from '../presentation/day-deck';
 import { DeckViewerComponent } from '../presentation/deck-viewer.component';
@@ -23,34 +24,34 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
 @Component({
   selector: 'app-team-dashboard',
   standalone: true,
-  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent, TeamBarComponent, DeckThemePickerComponent],
+  imports: [RouterLink, IconComponent, AvatarComponent, TaskRowComponent, DeckViewerComponent, TeamBarComponent, DeckThemePickerComponent, EmptyComponent, LoadingComponent, DialogDirective],
   template: `
     @if (d(); as d) {
       <div class="page td-page" [class.td-page--sector]="kind() === 'sector'">
         <div class="page-head">
-          <div>
-            <div class="crumb">Painel › {{ d.team.name }}</div>
+          <div class="page-head__text">
+            <div class="crumb"><a routerLink="/ti/taskhub/painel">Painel</a> › {{ d.team.name }}</div>
             @if (kind() === 'team') {
               <h1 class="td-title">
                 <span class="td-dot" [style.background]="d.team.color"></span>
                 {{ d.team.name }}
               </h1>
               @if (d.scope === 'mine') {
-                <p class="muted">Equipe · Mostrando só os seus projetos e tarefas. · atualizado {{ relativeTime(d.generated_at) }}</p>
+                <div class="sub">Equipe · Mostrando só os seus projetos e tarefas. · atualizado {{ relativeTime(d.generated_at) }}</div>
               } @else {
-                <p class="muted">Equipe · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</p>
+                <div class="sub">Equipe · {{ d.people.length }} {{ d.people.length === 1 ? 'pessoa' : 'pessoas' }} · atualizado {{ relativeTime(d.generated_at) }}</div>
               }
             } @else {
               <h1>Setor · {{ d.team.name }}</h1>
-              <p class="sub">Projetos e trabalho das equipes do setor — atualizado {{ relativeTime(d.generated_at) }}. Clique em um cartão para filtrar os projetos.</p>
+              <div class="sub">Projetos e trabalho das equipes do setor — atualizado {{ relativeTime(d.generated_at) }}. Clique em um cartão para filtrar os projetos.</div>
             }
           </div>
           <div class="actions">
             @if (kind() === 'team') {
-              <button class="btn-action-primary btn-sm" (click)="openPresent()">Apresentar</button>
-              <a class="btn-action-secondary btn-sm" [routerLink]="['/ti/taskhub/equipes']" [queryParams]="{ equipe: d.team.id }">Membros da equipe</a>
+              <button type="button" class="btn btn-primary btn-sm" (click)="openPresent()">Apresentar</button>
+              <a class="btn btn-sm" [routerLink]="['/ti/taskhub/equipes']" [queryParams]="{ equipe: d.team.id }">Membros da equipe</a>
             }
-            <button class="btn-action-secondary btn-sm" [disabled]="loading()" (click)="load()">{{ loading() ? 'Atualizando…' : 'Atualizar' }}</button>
+            <button type="button" class="btn btn-ghost btn-sm" [disabled]="loading()" [class.btn--loading]="loading()" (click)="load()">{{ loading() ? 'Atualizando…' : 'Atualizar' }}</button>
           </div>
         </div>
 
@@ -136,7 +137,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
                 </div>
               }
             } @else {
-              <div class="td-empty">Nenhum projeto neste setor.</div>
+              <app-empty compact icon="folder" text="Nenhum projeto neste setor." />
             }
           </div>
         }
@@ -170,7 +171,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
             </thead>
             <tbody>
               @for (p of d.people; track p.id) {
-                <tr class="click" (click)="goPerson(p.id)">
+                <tr class="click" tabindex="0" (click)="goPerson(p.id)" (keydown.enter)="goPerson(p.id)">
                   <td>
                     <div class="who">
                       <app-avatar [person]="p" />
@@ -222,7 +223,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
               <span class="td-info" title="Passaram do prazo e continuam abertas."><app-icon name="info" [size]="14" /></span>
             </div>
             @for (t of d.overdue; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
-            @if (!d.overdue.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Nenhuma atrasada.</div> }
+            @if (!d.overdue.length) { <app-empty row ok icon="check" text="Nenhuma atrasada." /> }
           </div>
           <div class="td-card">
             <div class="td-card-head">
@@ -231,7 +232,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
               <span class="td-info" title="Travadas: alguém precisa desbloquear."><app-icon name="info" [size]="14" /></span>
             </div>
             @for (t of d.blocked; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
-            @if (!d.blocked.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Nada bloqueado.</div> }
+            @if (!d.blocked.length) { <app-empty row ok icon="check" text="Nada bloqueado." /> }
           </div>
           <div class="td-card">
             <div class="td-card-head">
@@ -240,7 +241,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
               <span class="td-info" title="Vencem nos próximos 7 dias."><app-icon name="info" [size]="14" /></span>
             </div>
             @for (t of d.due_soon; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
-            @if (!d.due_soon.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Sem prazos na semana.</div> }
+            @if (!d.due_soon.length) { <app-empty row ok icon="check" text="Sem prazos na semana." /> }
           </div>
           <div class="td-card">
             <div class="td-card-head">
@@ -249,7 +250,7 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
               <span class="td-info" title="Abertas sem prazo. Combinar uma data."><app-icon name="info" [size]="14" /></span>
             </div>
             @for (t of d.triage; track t.id) { <app-task-row [task]="t" (open)="openTask($event)" /> }
-            @if (!d.triage.length) { <div class="td-empty"><app-icon name="check" [size]="16" /> Tudo com prazo.</div> }
+            @if (!d.triage.length) { <app-empty row ok icon="check" text="Tudo com prazo." /> }
           </div>
           @if (d.waiting_other.length) {
             <div class="td-card full">
@@ -267,40 +268,37 @@ const PROJECT_STATUS_LABEL = { done: 'Concluído', paused: 'Em pausa', attention
         </div>
       </div>
     } @else if (loading()) {
-      <div class="empty"><p>Carregando o painel…</p></div>
+      <div class="page"><app-loading kind="cards" /></div>
     } @else if (denied(); as msg) {
       <div class="page">
-        <div class="vp-empty">
-          <app-icon name="chart" [size]="28" />
-          <b>{{ msg }}</b>
-          <span>O painel aparece para gestores e para quem recebe o acesso de ver o painel da equipe.</span>
-          <a class="btn btn-sm" routerLink="/ti/taskhub/kanban" style="margin-top:8px">Voltar ao Corporativo</a>
-        </div>
+        <app-empty icon="lock" [title]="msg" text="O painel aparece para gestores e para quem recebe o acesso de ver o painel da equipe.">
+          <a class="btn btn-primary btn-sm" routerLink="/ti/taskhub/kanban">Voltar ao Corporativo</a>
+        </app-empty>
       </div>
     }
 
     @if (choosing()) {
       <div class="modal-scrim" (click)="choosing.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Apresentar o painel">
-          <div class="modal-head">Apresentar<div class="muted small" style="font-weight:500;margin-top:2px">{{ d()?.team?.name }} · escolha os slides e como apresentar</div></div>
+        <div class="modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="choosing.set(false)">
+          <div class="modal-head"><h2>Apresentar<span class="modal-head__sub">{{ d()?.team?.name }} · escolha os slides e como apresentar</span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="choosing.set(false)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
             <app-deck-theme-picker [value]="theme()" (valueChange)="theme.set($event)" />
-                        <div class="row" style="justify-content: space-between">
+            <div class="row row--between">
               <span class="form-label">Slides ({{ picked().length }} de {{ slideOptions().length }})</span>
               <span class="row small"><button type="button" class="link-btn" (click)="picked.set(slideOptions().map(s => s.key))">Todos</button> · <button type="button" class="link-btn" (click)="picked.set([])">Nenhum</button></span>
             </div>
             <div class="pd-pick">
               @for (s of slideOptions(); track s.key) {
-                <label class="check-label" style="align-items: flex-start">
-                  <input type="checkbox" style="margin-top: 3px" [checked]="picked().includes(s.key)" (change)="togglePick(s.key)" />
+                <label class="check-label check-label--top">
+                  <input type="checkbox" [checked]="picked().includes(s.key)" (change)="togglePick(s.key)" />
                   <span>{{ s.label }}<br /><span class="muted small">{{ s.hint }}</span></span>
                 </label>
               }
             </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn-action-secondary" [disabled]="!picked().length || exporting()" (click)="downloadPptx()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
-            <button type="button" class="btn-action-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
+            <button type="button" class="btn" [disabled]="!picked().length || exporting()" (click)="downloadPptx()">{{ exporting() ? 'Gerando…' : 'Baixar PowerPoint' }}</button>
+            <button type="button" class="btn btn-primary" [disabled]="!picked().length" (click)="present()">Apresentar</button>
           </div>
         </div>
       </div>
@@ -324,7 +322,7 @@ export class TeamDashboardPage implements OnInit, OnDestroy {
   presenting = signal(false);
   exporting = signal(false);
   deck = signal<DeckSlide[]>([]);
-  theme = signal<DeckTheme>('nubank-parque');
+  theme = signal<DeckTheme>(readDeckTheme(this.ui.palette()));
   picked = signal<TeamSlideKey[]>([]);
   projectFilter = signal<ProjectFilter>('all');
   readonly Math = Math;

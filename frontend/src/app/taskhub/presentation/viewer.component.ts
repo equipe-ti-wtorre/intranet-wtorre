@@ -108,10 +108,10 @@ import { DeckTheme, ensureBrandFonts, stripeRects } from './deck-theme';
       </div>
 
       <div class="pv-bar">
-        <button (click)="prev()" [disabled]="index() === 0" aria-label="Slide anterior">‹</button>
+        <button type="button" (click)="prev()" [disabled]="index() === 0" aria-label="Slide anterior" title="Slide anterior">‹</button>
         <span>{{ index() + 1 }} de {{ slides().length }} · {{ label() }}</span>
-        <button (click)="next()" [disabled]="index() === slides().length - 1" aria-label="Próximo slide">›</button>
-        <button class="pv-exit" (click)="close.emit()">Sair (Esc)</button>
+        <button type="button" (click)="next()" [disabled]="index() === slides().length - 1" aria-label="Próximo slide" title="Próximo slide">›</button>
+        <button type="button" class="pv-exit" (click)="close.emit()" aria-label="Sair da apresentação (Esc)">Sair (Esc)</button>
       </div>
     </div>
   `,

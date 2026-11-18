@@ -4,7 +4,7 @@ import { AuthService } from '../core/auth.service';
 import { CorpView, CORP_VIEWS, corpTeamLink, corpViewPath } from '../core/corp-views';
 import { DataService } from '../core/data.service';
 import { buildSectorNav, readKanbanTeam, readPainelLast } from '../core/sector-nav';
-import { IconComponent } from '../shared/ui';
+import { EmptyComponent, IconComponent, SearchComponent } from '../shared/ui';
 
 const VIEW_ORDER: CorpView[] = ['kanban', 'quadro', 'linha', 'painel'];
 const DIRECT: CorpView[] = ['kanban', 'quadro'];
@@ -12,25 +12,21 @@ const DIRECT: CorpView[] = ['kanban', 'quadro'];
 @Component({
   selector: 'app-view-picker',
   standalone: true,
-  imports: [RouterLink, IconComponent],
+  imports: [RouterLink, IconComponent, SearchComponent, EmptyComponent],
   template: `
     <div class="page vp-page">
       @if (!redirecting()) {
       <div class="page-head vp-head">
         <div class="vp-title">
           <span class="vp-title__ico"><app-icon [name]="meta().icon" [size]="20" /></span>
-          <div>
+          <div class="page-head__text">
             <h1>{{ meta().label }}</h1>
             <div class="sub">{{ meta().hint }}</div>
           </div>
         </div>
         @if (view() !== 'painel') {
         <div class="actions">
-          <label class="vp-search">
-            <app-icon name="search" [size]="15" />
-            <input type="search" placeholder="Buscar equipe ou setor" aria-label="Buscar equipe ou setor"
-                   [value]="q()" (input)="q.set($any($event.target).value)" />
-          </label>
+          <app-search [value]="q()" (valueChange)="q.set($event)" placeholder="Buscar equipe ou setor" />
         </div>
         }
       </div>
@@ -60,7 +56,7 @@ const DIRECT: CorpView[] = ['kanban', 'quadro'];
             @for (t of g.teams; track t.id) {
               <a class="vp-team" [routerLink]="corpTeamLink(view(), t.id)" [style.--vp-color]="t.color">
                 <span class="vp-team__body">
-                  <b class="ellipsis">{{ t.name }}</b>
+                  <b class="ellipsis" [title]="t.name">{{ t.name }}</b>
                   <span class="vp-team__meta">
                     {{ t.projects_count || 0 }} {{ t.projects_count === 1 ? 'projeto' : 'projetos' }}
                     · {{ t.members_count || 0 }} {{ t.members_count === 1 ? 'pessoa' : 'pessoas' }}
@@ -74,19 +70,14 @@ const DIRECT: CorpView[] = ['kanban', 'quadro'];
           </div>
         </section>
       } @empty {
-        <div class="vp-empty">
-          <app-icon [name]="view() === 'painel' ? 'chart' : q().trim() ? 'search' : 'people'" [size]="28" />
-          @if (view() === 'painel') {
-            <b>Você ainda não acompanha o painel de nenhuma equipe</b>
-            <span>O painel aparece para gestores e para quem recebe o acesso de ver o painel da equipe.</span>
-          } @else if (q().trim()) {
-            <b>Nenhuma equipe encontrada</b>
-            <span>Tente outro nome de equipe ou setor.</span>
-          } @else {
-            <b>Nenhuma equipe ainda</b>
-            <span>Quando um gestor incluir você numa equipe, ela aparece aqui.</span>
-          }
-        </div>
+        @if (view() === 'painel') {
+          <app-empty [dashed]="true" icon="chart" title="Você ainda não acompanha o painel de nenhuma equipe"
+                     text="O painel aparece para gestores e para quem recebe o acesso de ver o painel da equipe." />
+        } @else if (q().trim()) {
+          <app-empty [dashed]="true" icon="search" title="Nenhuma equipe encontrada" text="Tente outro nome de equipe ou setor." />
+        } @else {
+          <app-empty [dashed]="true" icon="people" title="Nenhuma equipe ainda" text="Quando um gestor incluir você numa equipe, ela aparece aqui." />
+        }
       }
       }
     </div>

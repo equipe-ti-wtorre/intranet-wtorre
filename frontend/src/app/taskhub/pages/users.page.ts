@@ -7,7 +7,9 @@ import { AuthService } from '../core/auth.service';
 import { fileToAvatarJpeg } from '../core/avatar';
 import { Profile, User } from '../core/models';
 import { relativeTime } from '../core/format';
-import { AutofocusDirective, AvatarComponent, IconComponent } from '../shared/ui';
+import { AutofocusDirective, AvatarComponent, EmptyComponent, ErrorComponent, IconComponent, LoadingComponent, SearchComponent } from '../shared/ui';
+import { DialogDirective } from '../shared/dialog.directive';
+import { ConfirmService } from '../core/confirm.service';
 
 type Row = User & { last_login_at: string | null };
 interface Catalog { profiles: { key: string; label: string; description: string; permissions: string[] }[]; permissions: { key: string; label: string; hint: string }[]; }
@@ -22,57 +24,67 @@ function tempPassword() {
 @Component({
   selector: 'app-users',
   standalone: true,
-  imports: [FormsModule, AutofocusDirective, AvatarComponent, IconComponent],
+  imports: [FormsModule, AutofocusDirective, AvatarComponent, IconComponent, SearchComponent, LoadingComponent, ErrorComponent, EmptyComponent, DialogDirective],
   template: `
     <div [class.page]="!embedded()">
       <div [class.page-head]="!embedded()" [class.toolbar]="embedded()">
         @if (!embedded()) {
-          <div><h1>Pessoas</h1>
+          <div class="page-head__text"><h1>Pessoas</h1>
             <div class="sub">{{ full() ? activeCount() + ' pessoas ativas.' : 'Pessoas dos setores e equipes que você gerencia.' }} @if (full()) { Novas contas recebem senha temporária e trocam no primeiro acesso. }</div></div>
         }
         <div class="actions">
-          <input class="input" style="width:220px;height:30px" placeholder="Buscar pessoa" [ngModel]="q()" (ngModelChange)="q.set($event)" aria-label="Buscar" />
+          <app-search [value]="q()" (valueChange)="q.set($event)" placeholder="Buscar pessoa" />
           @if (full()) {
-            <button class="btn btn-sm" (click)="syncDirectory()" [disabled]="syncing()">{{ syncing() ? 'Sincronizando...' : 'Sincronizar com o AD' }}</button>
-            <button class="btn btn-primary btn-sm" (click)="openNew()"><app-icon name="plus" [size]="14" />Nova pessoa</button>
+            <button type="button" class="btn btn-sm" (click)="syncDirectory()" [disabled]="syncing()" [class.btn--loading]="syncing()"><app-icon name="refresh" [size]="14" />Sincronizar com o AD</button>
+            <button type="button" class="btn btn-primary btn-sm" (click)="openNew()"><app-icon name="plus" [size]="14" />Nova pessoa</button>
           }
         </div>
       </div>
-      <div style="overflow-x:auto">
-        <table class="table">
-          <thead><tr><th>Pessoa</th><th>Usuário</th><th>E-mail</th><th>{{ full() ? 'Departamento' : 'Departamento · equipe' }}</th><th>Perfis</th><th>Acessos extras</th><th>Último acesso</th><th>Situação</th><th></th></tr></thead>
+      @if (err()) {
+        <app-error [text]="err()" (retry)="load()" />
+      } @else if (!loaded()) {
+        <app-loading [rows]="6" />
+      } @else if (!filtered().length) {
+        <app-empty icon="people" [title]="q() ? 'Ninguém com esse nome' : 'Nenhuma pessoa'" [text]="q() ? 'Tente outro termo de busca.' : ''" />
+      } @else {
+      <div class="table-scroll">
+        <table class="table users-table">
+          <thead><tr><th class="users-table__name">Pessoa</th><th class="users-table__user">Usuário</th><th class="users-table__email">E-mail</th><th>{{ full() ? 'Departamento' : 'Departamento · equipe' }}</th><th>Perfis</th><th>Acessos extras</th><th class="users-table__seen">Último acesso</th><th>Situação</th><th></th></tr></thead>
           <tbody>
             @for (u of filtered(); track u.id) {
-              <tr class="click" [style.opacity]="u.active ? 1 : .5" (click)="openEdit(u)">
-                <td><div class="row"><app-avatar [person]="u" /><div>{{ u.name }}</div></div></td>
-                <td class="muted">{{ u.username }}</td>
-                <td class="muted">{{ u.email }}</td>
+              <tr class="click" [class.users-table__row--off]="!u.active" tabindex="0" (click)="openEdit(u)" (keydown.enter)="openEdit(u)">
+                <td class="users-table__name"><div class="row"><app-avatar [person]="u" /><div>{{ u.name }}</div></div></td>
+                <td class="muted users-table__user">{{ u.username }}</td>
+                <td class="muted users-table__email">{{ u.email }}</td>
                 <td>{{ u.department || '—' }}@if (!full() && u.team_name) { <span class="muted"> · {{ u.team_name }}</span> }</td>
-                <td><div class="row" style="flex-wrap:wrap;gap:4px">@for (p of u.profiles; track p) { <span class="pill">{{ profileLabel(p) }}</span> }</div></td>
+                <td><div class="pills">@for (p of u.profiles; track p) { <span class="pill">{{ profileLabel(p) }}</span> }</div></td>
                 <td class="small muted">{{ u.permissions.length ? u.permissions.length + (u.permissions.length === 1 ? ' acesso' : ' acessos') : '—' }}</td>
-                <td class="muted small">{{ u.last_login_at ? rel(u.last_login_at) : 'nunca' }}</td>
+                <td class="muted small users-table__seen">{{ u.last_login_at ? rel(u.last_login_at) : 'nunca' }}</td>
                 <td class="small">{{ u.active ? (u.must_change_password ? 'Aguardando 1º acesso' : 'Ativa') : 'Desativada' }}</td>
-                <td class="num"><button class="btn btn-ghost btn-sm" (click)="$event.stopPropagation(); openEdit(u)">Editar</button></td>
+                <td class="num"><button type="button" class="btn btn-ghost btn-sm btn-icon" tabindex="-1" (click)="$event.stopPropagation(); openEdit(u)" [attr.aria-label]="'Editar ' + u.name" title="Editar"><app-icon name="pencil" [size]="14" /></button></td>
               </tr>
             }
           </tbody>
         </table>
       </div>
+      }
     </div>
 
     @if (editing(); as e) {
       <div class="modal-scrim" (click)="close()">
-        <div class="modal wide" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="e.id ? 'Editar pessoa' : 'Nova pessoa'">
-          <div class="modal-head">{{ e.id ? e.name : 'Nova pessoa' }}</div>
+        <div class="modal wide" appDialog (dialogClose)="close()" (click)="$event.stopPropagation()">
+          <div class="modal-head"><h2>{{ e.id ? e.name : 'Nova pessoa' }}@if (e.id) { <span class="modal-head__sub">Editar pessoa</span> }</h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="close()"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
+            <div class="form-section">
+              <div class="form-section__title">Dados</div>
             @if (e.id) {
-              <div class="row" style="align-items:center;gap:14px;margin-bottom:14px">
+              <div class="users-photo">
                 <app-avatar [person]="{ name: e.name || '', initials: e.initials || '?', id: e.id, avatar_url: e.avatar_url }" [large]="true" />
-                <div class="stack" style="gap:8px">
+                <div class="users-photo__acts">
                   <input #personPhoto type="file" accept="image/jpeg,image/png" hidden (change)="onPhoto($event)" />
-                  <button type="button" class="btn btn-sm" (click)="personPhoto.click()" [disabled]="photoBusy()">Escolher foto</button>
+                  <button type="button" class="btn btn-sm" (click)="personPhoto.click()" [disabled]="photoBusy()" [class.btn--loading]="photoBusy()">Escolher foto</button>
                   @if (e.avatar_url) {
-                    <button type="button" class="btn btn-sm" (click)="removePhoto()" [disabled]="photoBusy()">Remover foto</button>
+                    <button type="button" class="btn btn-ghost btn-sm" (click)="removePhoto()" [disabled]="photoBusy()">Remover foto</button>
                   }
                 </div>
               </div>
@@ -89,52 +101,61 @@ function tempPassword() {
               }
               @if (!e.id) { <div class="field"><label for="up">Senha temporária</label><input id="up" class="input" [(ngModel)]="form.password" /></div> }
             </div>
+            </div>
 
             @if (full()) {
-              <div class="section-label" style="margin-top:8px">Perfis <span class="muted small" style="font-weight:400">pode marcar mais de um</span></div>
-              <div class="stack" style="gap:8px">
-                @for (p of catalog()?.profiles || []; track p.key) {
-                  <label class="check-label" style="align-items:flex-start">
-                    <input type="checkbox" style="margin-top:3px" [checked]="form.profiles.includes(p.key)" (change)="toggleProfile(p.key)" />
-                    <span><b>{{ p.label }}</b><br /><span class="muted small">{{ p.description }}</span></span>
-                  </label>
-                }
+              <div class="form-section">
+                <div class="form-section__title">Perfis <span class="form-section__hint">pode marcar mais de um</span></div>
+                <div class="users-checks">
+                  @for (p of catalog()?.profiles || []; track p.key) {
+                    <label class="check-label check-label--top">
+                      <input type="checkbox" [checked]="form.profiles.includes(p.key)" (change)="toggleProfile(p.key)" />
+                      <span><b>{{ p.label }}</b><br /><span class="muted small">{{ p.description }}</span></span>
+                    </label>
+                  }
+                </div>
               </div>
 
               @if (form.profiles.includes('diretoria')) {
-                <div class="section-label">Setores que a diretoria acompanha</div>
-                <div class="row" style="flex-wrap:wrap;gap:6px 16px">
-                  @for (t of data.sectors(); track t.id) {
-                    <label class="check-label"><input type="checkbox" [checked]="form.directed_sectors.includes(t.id)" (change)="toggleTeam(t.id)" /> {{ t.name }}</label>
-                  }
+                <div class="form-section">
+                  <div class="form-section__title">Setores que a diretoria acompanha</div>
+                  <div class="users-checks users-checks--inline">
+                    @for (t of data.sectors(); track t.id) {
+                      <label class="check-label"><input type="checkbox" [checked]="form.directed_sectors.includes(t.id)" (change)="toggleTeam(t.id)" /> {{ t.name }}</label>
+                    }
+                  </div>
+                  <span class="hint">Vê, sem editar, os projetos e as tarefas das equipes dos setores marcados, e abre o painel deles.</span>
                 </div>
-                <span class="muted small">Vê, sem editar, os projetos e as tarefas das equipes dos setores marcados, e abre o painel deles.</span>
               }
 
-              <div class="section-label">Acessos <span class="muted small" style="font-weight:400">os do perfil já vêm marcados; marque extras se precisar</span></div>
-              <div class="stack" style="gap:8px">
-                @for (perm of extraPerms(); track perm.key) {
-                  <label class="check-label" style="align-items:flex-start" [style.opacity]="fromProfile(perm.key) ? .75 : 1">
-                    <input type="checkbox" style="margin-top:3px" [checked]="fromProfile(perm.key) || form.permissions.includes(perm.key)"
-                           [disabled]="fromProfile(perm.key)" (change)="togglePerm(perm.key)" />
-                    <span>{{ perm.label }} @if (fromProfile(perm.key)) { <span class="muted small">· pelo perfil</span> }
-                      <br /><span class="muted small">{{ perm.hint }}</span></span>
-                  </label>
-                }
+              <div class="form-section">
+                <div class="form-section__title">Acessos <span class="form-section__hint">os do perfil já vêm marcados; marque extras se precisar</span></div>
+                <div class="users-checks">
+                  @for (perm of extraPerms(); track perm.key) {
+                    <label class="check-label check-label--top" [class.users-check--inherited]="fromProfile(perm.key)">
+                      <input type="checkbox" [checked]="fromProfile(perm.key) || form.permissions.includes(perm.key)"
+                             [disabled]="fromProfile(perm.key)" (change)="togglePerm(perm.key)" />
+                      <span>{{ perm.label }} @if (fromProfile(perm.key)) { <span class="muted small">· pelo perfil</span> }
+                        <br /><span class="muted small">{{ perm.hint }}</span></span>
+                    </label>
+                  }
+                </div>
               </div>
             } @else {
               <div class="note-info">Contas criadas por você entram como <b>Colaborador</b> na equipe escolhida. Perfis e acessos extras são definidos pelo administrador.</div>
             }
-            @if (error()) { <div class="error-text">{{ error() }}</div> }
+            @if (error()) { <div class="error-text" role="alert">{{ error() }}</div> }
           </div>
           <div class="modal-foot">
             @if (e.id) {
-              @if (!e.from_directory) { <button class="btn btn-sm left" style="margin-right:auto" (click)="reset(e)">Gerar senha temporária</button> }
-              @if (e.id !== meId()) { <button class="btn btn-sm btn-danger" (click)="remove(e)">Excluir</button> }
-              @if (e.id !== meId()) { <button class="btn btn-sm btn-ghost" (click)="toggleActive(e)">{{ e.active ? 'Desativar' : 'Reativar' }}</button> }
+              <div class="left">
+                @if (!e.from_directory) { <button type="button" class="btn btn-sm" (click)="reset(e)">Gerar senha temporária</button> }
+                @if (e.id !== meId()) { <button type="button" class="btn btn-sm btn-danger" (click)="remove(e)">Excluir</button> }
+                @if (e.id !== meId()) { <button type="button" class="btn btn-sm btn-ghost" (click)="toggleActive(e)">{{ e.active ? 'Desativar' : 'Reativar' }}</button> }
+              </div>
             }
-            <button class="btn btn-ghost" (click)="close()">Cancelar</button>
-            <button class="btn btn-primary" [disabled]="saving()" (click)="save()">{{ e.id ? 'Salvar' : 'Criar conta' }}</button>
+            <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="close()">Cancelar</button>
+            <button type="button" class="btn btn-primary" [disabled]="saving()" [class.btn--loading]="saving()" (click)="save()">{{ e.id ? 'Salvar' : 'Criar conta' }}</button>
           </div>
         </div>
       </div>
@@ -142,14 +163,14 @@ function tempPassword() {
 
     @if (shownPassword()) {
       <div class="modal-scrim" (click)="shownPassword.set(null)">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <div class="modal-head">Senha temporária de {{ shownPassword()!.name }}</div>
+        <div class="modal" appDialog (dialogClose)="shownPassword.set(null)" (click)="$event.stopPropagation()">
+          <div class="modal-head"><h2>Senha temporária de {{ shownPassword()!.name }}</h2><button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" (click)="shownPassword.set(null)"><app-icon name="x" [size]="16" /></button></div>
           <div class="modal-body">
-            <div class="row"><code style="font-size:18px;letter-spacing:.5px">{{ shownPassword()!.password }}</code>
-              <button class="btn btn-sm" (click)="copy(shownPassword()!.password)">Copiar</button></div>
-            <span class="muted small">Entregue pessoalmente ou por um canal seguro. A pessoa vai criar a própria senha no primeiro acesso. Esta senha não aparece de novo.</span>
+            <div class="row"><code class="users-temp-pass">{{ shownPassword()!.password }}</code>
+              <button type="button" class="btn btn-sm" (click)="copy(shownPassword()!.password)">Copiar</button></div>
+            <span class="hint">Entregue pessoalmente ou por um canal seguro. A pessoa vai criar a própria senha no primeiro acesso. Esta senha não aparece de novo.</span>
           </div>
-          <div class="modal-foot"><button class="btn btn-primary" (click)="shownPassword.set(null)">Entendi</button></div>
+          <div class="modal-foot"><button type="button" class="btn btn-primary" (click)="shownPassword.set(null)">Entendi</button></div>
         </div>
       </div>
     }
@@ -160,9 +181,12 @@ export class UsersPage implements OnInit {
   private api = inject(ApiService);
   private toast = inject(ToastService);
   private auth = inject(AuthService);
+  private confirmSvc = inject(ConfirmService);
   data = inject(DataService);
 
   users = signal<Row[]>([]);
+  loaded = signal(false);
+  err = signal('');
   catalog = signal<Catalog | null>(null);
   q = signal('');
   editing = signal<Partial<Row> | null>(null);
@@ -195,7 +219,13 @@ export class UsersPage implements OnInit {
       error: () => this.directoryEnabled.set(false),
     });
   }
-  load() { this.api.users().subscribe({ next: u => this.users.set(u), error: e => this.toast.error(errorMessage(e)) }); }
+  load() {
+    this.err.set('');
+    this.api.users().subscribe({
+      next: u => { this.users.set(u); this.loaded.set(true); },
+      error: e => { this.err.set(errorMessage(e)); this.loaded.set(true); },
+    });
+  }
 
   profileLabel(p: string) { return this.catalog()?.profiles.find(x => x.key === p)?.label || p; }
   fromProfile(perm: string) {
@@ -300,8 +330,9 @@ export class UsersPage implements OnInit {
     });
   }
 
-  remove(e: Partial<Row>) {
-    if (!e.id || !confirm(`Excluir ${e.name}? A conta sai do sistema. As tarefas e os comentários continuam, sem essa pessoa.`)) return;
+  async remove(e: Partial<Row>) {
+    if (!e.id) return;
+    if (!(await this.confirmSvc.confirm({ title: `Excluir ${e.name}?`, message: 'A conta sai do sistema. As tarefas e os comentários continuam, sem essa pessoa.', confirmLabel: 'Excluir', danger: true }))) return;
     this.api.deleteUser(e.id).subscribe({
       next: () => { this.close(); this.load(); this.data.start(); this.toast.show('Pessoa excluída.'); },
       error: err => this.error.set(errorMessage(err)),

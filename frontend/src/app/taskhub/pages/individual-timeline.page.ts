@@ -5,14 +5,14 @@ import { AuthService } from '../core/auth.service';
 import { corpTeamLink } from '../core/corp-views';
 import { DataService } from '../core/data.service';
 import { buildSectorNav, saveKanbanTeam } from '../core/sector-nav';
-import { IconComponent } from '../shared/ui';
+import { ErrorComponent, IconComponent, LoadingComponent } from '../shared/ui';
 import { ProjectTimelineComponent } from './project-timeline.component';
 
 // Linha do tempo do Individual: o quadro pessoal e, em seguida, cada equipe.
 @Component({
   selector: 'app-individual-timeline',
   standalone: true,
-  imports: [RouterLink, IconComponent, ProjectTimelineComponent],
+  imports: [RouterLink, IconComponent, ErrorComponent, LoadingComponent, ProjectTimelineComponent],
   template: `
     <div class="page works-page">
       <div class="page-head">
@@ -31,15 +31,15 @@ import { ProjectTimelineComponent } from './project-timeline.component';
           <app-project-timeline [projectId]="id" />
         </section>
       } @else if (error()) {
-        <div class="muted" style="padding: 40px 0">{{ error() }}</div>
+        <app-error [text]="error()" [retryable]="false" />
       } @else {
-        <div class="muted" style="padding: 40px 0">Carregando…</div>
+        <app-loading kind="cards" [rows]="2" />
       }
 
       @for (tm of teams(); track tm.id) {
         <section class="tla-team" [class.tla-team--empty]="!tm.projects_count">
           <header class="tla-team__head">
-            <span class="wk-teambar__dot" [style.background]="tm.color"></span>
+            <span class="dot" [style.background]="tm.color"></span>
             <h2>{{ tm.name }}</h2>
             @if (multiSector()) { <span class="muted small">{{ tm.sector_name }}</span> }
             <span class="tla-team__n">
