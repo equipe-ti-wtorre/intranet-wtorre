@@ -5,7 +5,11 @@ import { ToastService } from '../core/toast.service';
 import { Note, NoteColor, TaskFile } from '../core/models';
 import { NOTE_FILE_MAX_MB, fileSize, isExternalFileDrag, relativeTime } from '../core/format';
 import { bodyToHtml, bodyToText, htmlToBody, safeHref } from '../shared/rich-text';
-import { EmptyComponent, IconComponent, LoadingComponent, SearchComponent } from '../shared/ui';
+import { EmptyComponent, IconComponent, LoadingComponent, PersonChipComponent, SearchComponent } from '../shared/ui';
+import { PersonPickerComponent } from '../shared/person-picker.component';
+import { DialogDirective } from '../shared/dialog.directive';
+import { DataService } from '../core/data.service';
+import { AuthService } from '../core/auth.service';
 
 const COLORS: { id: NoteColor; label: string }[] = [
   { id: 'none', label: 'Sem cor' },
@@ -20,13 +24,13 @@ const COLORS: { id: NoteColor; label: string }[] = [
 @Component({
   selector: 'app-notes',
   standalone: true,
-  imports: [FormsModule, IconComponent, SearchComponent, LoadingComponent, EmptyComponent],
+  imports: [FormsModule, IconComponent, SearchComponent, LoadingComponent, EmptyComponent, PersonChipComponent, PersonPickerComponent, DialogDirective],
   template: `
     <div class="page notes-page">
       <div class="page-head">
         <div class="page-head__text">
           <h1>Notas</h1>
-          <div class="sub">Espaço Individual: só você vê. As alterações são salvas sozinhas.</div>
+          <div class="sub">Só você vê, a menos que compartilhe com alguém. As alterações são salvas sozinhas.</div>
         </div>
         <div class="actions">
           <app-search [value]="q()" (valueChange)="q.set($event)" placeholder="Buscar nas notas" />
@@ -47,7 +51,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
               <button type="button" class="note-item" [class.on]="n.id === selectedId()" (click)="open(n.id)">
                 <span class="bar {{ n.color }}"></span>
                 <span class="grow">
-                  <b class="ellipsis" [title]="n.title.trim() || 'Sem título'">{{ n.title.trim() || 'Sem título' }}</b>
+                  <b class="ellipsis" [title]="n.title.trim() || 'Sem título'">@if (isShared(n)) { <app-icon name="people" [size]="13" class="note-shared-ico" /> }{{ n.title.trim() || 'Sem título' }}</b>
                   <span class="preview ellipsis" [title]="preview(n) || 'Sem conteúdo'">{{ preview(n) || (n.files?.length ? n.files!.length + ' anexo(s)' : 'Sem conteúdo') }}</span>
                   <span class="when">{{ rel(n.updated_at) }}</span>
                 </span>
@@ -61,18 +65,27 @@ const COLORS: { id: NoteColor; label: string }[] = [
             <div class="note-tools">
               <div class="note-dots" role="radiogroup" aria-label="Cor da nota">
                 @for (c of colors; track c.id) {
-                  <button type="button" class="color-dot {{ c.id }}" [class.on]="n.color === c.id" role="radio" [attr.aria-label]="c.label" [title]="c.label" [attr.aria-checked]="n.color === c.id" (click)="setColor(c.id)"></button>
+                  <button type="button" class="color-dot {{ c.id }}" [class.on]="n.color === c.id" role="radio" [attr.aria-label]="c.label" [title]="c.label" [attr.aria-checked]="n.color === c.id" [disabled]="!canEdit(n)" (click)="setColor(c.id)"></button>
                 }
               </div>
               <div class="note-tools-right">
                 <span class="hint" role="status" aria-live="polite">{{ saveState() === 'saving' ? 'Salvando…' : 'Salvo' }}</span>
-                <button type="button" class="btn btn-ghost btn-sm" [class.on]="n.pinned" (click)="togglePin()" [attr.aria-pressed]="n.pinned">
+                <button type="button" class="btn btn-ghost btn-sm" [class.on]="n.pinned" [disabled]="!canEdit(n)" (click)="togglePin()" [attr.aria-pressed]="n.pinned">
                   <app-icon name="pin" [size]="14" /> Fixar no topo
                 </button>
-                <button type="button" class="btn btn-ghost btn-icon btn-danger" (click)="remove(n)" aria-label="Excluir nota" title="Excluir nota"><app-icon name="trash" [size]="15" /></button>
+                @if (n.is_owner !== false) {
+                  <button type="button" class="btn btn-ghost btn-sm" [class.on]="isShared(n)" (click)="openShare(n)"><app-icon name="people" [size]="14" /> {{ n.members?.length ? 'Compartilhada (' + (n.members!.length + 1) + ')' : 'Compartilhar' }}</button>
+                  <button type="button" class="btn btn-ghost btn-icon btn-danger" (click)="remove(n)" aria-label="Excluir nota" title="Excluir nota"><app-icon name="trash" [size]="15" /></button>
+                } @else {
+                  <button type="button" class="btn btn-ghost btn-sm btn-danger" (click)="remove(n)" title="Deixar de ver esta nota">Sair da nota</button>
+                }
               </div>
             </div>
-            <input #titleInput class="note-title" [ngModel]="n.title" (ngModelChange)="edit({ title: $event })" placeholder="Título" aria-label="Título" />
+            @if (isShared(n)) {
+              <div class="note-shared"><app-icon name="people" [size]="14" /> @if (n.is_owner === false) { Compartilhada por <b>{{ n.owner?.name }}</b> com }@else { Compartilhada com } {{ sharedNames(n) }}. @if (!canEdit(n)) { <b>Você só pode ler.</b> } @else { Quem tem permissão edita. }</div>
+            }
+            <input #titleInput class="note-title" [readonly]="!canEdit(n)" [ngModel]="n.title" (ngModelChange)="edit({ title: $event })" placeholder="Título" aria-label="Título" />
+            @if (canEdit(n)) {
             <div class="note-format" role="toolbar" aria-label="Formatação do texto">
               <button type="button" class="note-fmt" [class.on]="fmt().bold" (mousedown)="$event.preventDefault()" (click)="cmd('bold')" [attr.aria-pressed]="fmt().bold" aria-label="Negrito" title="Negrito (Ctrl+B)"><b>N</b></button>
               <button type="button" class="note-fmt" [class.on]="fmt().italic" (mousedown)="$event.preventDefault()" (click)="cmd('italic')" [attr.aria-pressed]="fmt().italic" aria-label="Itálico" title="Itálico (Ctrl+I)"><i>I</i></button>
@@ -88,6 +101,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
               <button type="button" class="note-fmt note-fmt--wide" (click)="fileInput.click()" [disabled]="uploading()"><app-icon name="paperclip" [size]="14" /> {{ uploading() ? 'Enviando…' : 'Anexar' }}</button>
               <input #fileInput type="file" multiple hidden (change)="pick($event)" />
             </div>
+            }
             @if (linkOpen()) {
               <div class="note-link">
                 <input class="input" #linkInput type="url" placeholder="https://…" aria-label="Endereço do link" [value]="linkUrl()" (input)="linkUrl.set(linkInput.value)" (keydown.enter)="applyLink(); $event.preventDefault()" (keydown.escape)="linkOpen.set(false)" />
@@ -95,7 +109,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
                 <button type="button" class="btn btn-ghost btn-sm" (click)="linkOpen.set(false)">Cancelar</button>
               </div>
             }
-            <div #editor class="note-body note-rich" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Conteúdo" data-placeholder="Escreva aqui..." (input)="onInput()" (paste)="onPaste($event)" (keyup)="syncFmt()" (mouseup)="syncFmt()"></div>
+            <div #editor class="note-body note-rich" [attr.contenteditable]="canEdit(n)" role="textbox" aria-multiline="true" aria-label="Conteúdo" data-placeholder="Escreva aqui..." (input)="onInput()" (paste)="onPaste($event)" (keyup)="syncFmt()" (mouseup)="syncFmt()"></div>
             @if (n.files?.length) {
               <div class="note-files">
                 <div class="note-files__title"><app-icon name="paperclip" [size]="13" /> Anexos ({{ n.files!.length }})</div>
@@ -108,18 +122,50 @@ const COLORS: { id: NoteColor; label: string }[] = [
                         <span class="muted small">{{ fileSize(f.size_bytes) }}</span>
                       </div>
                       <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="download(n, f)" [attr.aria-label]="'Baixar ' + f.name" title="Baixar"><app-icon name="download" [size]="14" /></button>
-                      <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removeFile(n, f)" [attr.aria-label]="'Remover ' + f.name" title="Remover"><app-icon name="trash" [size]="14" /></button>
+                      @if (canEdit(n)) { <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removeFile(n, f)" [attr.aria-label]="'Remover ' + f.name" title="Remover"><app-icon name="trash" [size]="14" /></button> }
                     </div>
                   }
                 </div>
               </div>
             }
-            <div class="muted small note-files__help">Qualquer tipo de arquivo, até {{ fileMaxMb }} MB cada. Arraste para cá ou cole uma imagem.</div>
+            @if (canEdit(n)) { <div class="muted small note-files__help">Qualquer tipo de arquivo, até {{ fileMaxMb }} MB cada. Arraste para cá ou cole uma imagem.</div> }
           } @else {
             <div class="note-blank">Escolha uma nota ou crie uma nova.</div>
           }
         </div>
       </div>
+
+      @if (sharing(); as sn) {
+        <div class="modal-scrim" (click)="sharing.set(null)">
+          <div class="modal" (click)="$event.stopPropagation()" appDialog (dialogClose)="sharing.set(null)">
+            <div class="modal-head">
+              <h2>Compartilhar nota</h2>
+              <button type="button" class="btn btn-ghost btn-icon btn-sm modal-x" aria-label="Fechar" title="Fechar" (click)="sharing.set(null)"><app-icon name="x" [size]="16" /></button>
+            </div>
+            <div class="modal-body">
+              <div class="note-info note-info--tight">As pessoas escolhidas veem e editam <b>esta nota</b>, com os anexos, mesmo sendo de outra equipe ou setor. Você decide, para cada pessoa, se ela pode editar ou só ler. Só você muda quem participa ou exclui a nota.</div>
+              <div class="field"><label>Quem participa</label>
+                <div class="pills">
+                  @for (m of shareChosen(); track m.id) {
+                    <span class="np-member">
+                      <app-person-chip [person]="m" (remove)="shareRemove(m.id)" />
+                      <select class="inline np-role" [ngModel]="shareRoles()[m.id] || 'editor'" (ngModelChange)="setShareRole(m.id, $event)" [attr.aria-label]="'Permissão de ' + m.name">
+                        <option value="editor">Pode editar</option><option value="leitor">Somente leitura</option>
+                      </select>
+                    </span>
+                  }
+                  @if (!shareChosen().length) { <span class="muted small">Ninguém ainda.</span> }
+                </div>
+                <app-person-picker [people]="shareAvailable()" placeholder="Incluir pessoa…" (picked)="shareAdd($event)" />
+              </div>
+            </div>
+            <div class="modal-foot">
+              <button type="button" class="btn btn-ghost" (click)="sharing.set(null)">Cancelar</button>
+              <button type="button" class="btn btn-primary" [disabled]="shareSaving()" (click)="saveShare()">{{ shareSaving() ? 'Salvando…' : 'Salvar' }}</button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `,
 })
@@ -138,6 +184,15 @@ export class NotesPage implements OnInit, OnDestroy {
   linkUrl = signal('');
   fmt = signal({ bold: false, italic: false, underline: false, strike: false, heading: false, ul: false, ol: false });
   private savedRange: Range | null = null;
+  private data = inject(DataService);
+  private auth = inject(AuthService);
+  sharing = signal<Note | null>(null);
+  shareIds = signal<number[]>([]);
+  shareRoles = signal<Record<number, 'editor' | 'leitor'>>({});
+  shareSaving = signal(false);
+  shareChosen = computed(() => this.shareIds().map(id => this.data.people().find(p => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p));
+  shareAvailable = computed(() => this.data.people().filter(p => p.id !== this.auth.user()?.id && !this.shareIds().includes(p.id)));
+  private poll: ReturnType<typeof setInterval> | null = null;
   notes = signal<Note[]>([]);
   selectedId = signal<number | null>(null);
   q = signal('');
@@ -167,6 +222,7 @@ export class NotesPage implements OnInit, OnDestroy {
       });
     });
     document.addEventListener('selectionchange', this.onSelection);
+    this.poll = setInterval(() => this.refresh(), 8000);
   }
 
   private onSelection = () => { if (this.inEditor()) this.syncFmt(); };
@@ -177,6 +233,66 @@ export class NotesPage implements OnInit, OnDestroy {
   }
 
   preview(n: Note) { return bodyToText(n.body); }
+  isShared(n: Note) { return n.is_owner === false || !!n.members?.length; }
+  sharedNames(n: Note) {
+    const names = [...(n.members || []).map(m => m.name)];
+    if (n.is_owner === false) { const me = this.auth.user()?.name; return names.filter(x => x !== me).join(', ') || 'você'; }
+    return names.join(', ');
+  }
+
+  openShare(n: Note) {
+    this.shareIds.set((n.members || []).map(m => m.id));
+    this.shareRoles.set(Object.fromEntries((n.members || []).map(m => [m.id, m.role || 'editor'])));
+    this.sharing.set(n);
+  }
+  shareAdd(id: number | null) { if (id) { this.shareIds.update(l => [...l, id]); this.shareRoles.update(r => ({ ...r, [id]: 'editor' })); } }
+  setShareRole(id: number, role: 'editor' | 'leitor') { this.shareRoles.update(r => ({ ...r, [id]: role })); }
+  canEdit(n: Note | null) { return !!n && n.my_role !== 'leitor'; }
+  shareRemove(id: number) { this.shareIds.update(l => l.filter(x => x !== id)); }
+  saveShare() {
+    const n = this.sharing();
+    if (!n) return;
+    this.flush();
+    this.shareSaving.set(true);
+    this.api.setNoteMembers(n.id, this.shareIds().map(user_id => ({ user_id, role: this.shareRoles()[user_id] || 'editor' }))).subscribe({
+      next: saved => {
+        this.shareSaving.set(false);
+        this.sharing.set(null);
+        this.notes.update(list => list.map(x => (x.id === saved.id ? { ...x, members: saved.members, updated_at: saved.updated_at } : x)));
+        this.toast.show(saved.members?.length ? 'Nota compartilhada.' : 'Nota só sua de novo.');
+      },
+      error: e => { this.shareSaving.set(false); this.toast.error(errorMessage(e)); },
+    });
+  }
+
+  // Traz o que outras pessoas mudaram nas notas compartilhadas (sem pisar no que você está digitando).
+  private refresh() {
+    if (document.hidden || this.timer || this.saveState() === 'saving' || this.uploading()) return;
+    this.api.notes().subscribe({
+      next: list => {
+        if (this.timer || this.saveState() === 'saving') return;
+        const cur = this.notes();
+        const sel = this.selectedId();
+        let editorChanged = false;
+        const merged = list.map(n => {
+          const old = cur.find(x => x.id === n.id);
+          if (old && old.updated_at === n.updated_at && (old.files?.length ?? 0) === (n.files?.length ?? 0) && (old.members?.length ?? 0) === (n.members?.length ?? 0)) return old;
+          if (n.id === sel && old && old.body !== n.body) editorChanged = true;
+          return n;
+        });
+        const same = merged.length === cur.length && merged.every((n, i) => n === cur[i]);
+        if (same) return;
+        this.notes.set(merged);
+        if (sel != null && !merged.some(n => n.id === sel)) this.selectedId.set(merged[0]?.id ?? null);
+        else if (editorChanged) {
+          const el = this.editor()?.nativeElement;
+          const note = merged.find(n => n.id === sel);
+          if (el && note && !el.contains(document.activeElement)) el.innerHTML = bodyToHtml(note.body);
+          else if (el && note) el.innerHTML = bodyToHtml(note.body);
+        }
+      },
+    });
+  }
 
   syncFmt() {
     const q = (c: string) => { try { return document.queryCommandState(c); } catch { return false; } };
@@ -259,7 +375,7 @@ export class NotesPage implements OnInit, OnDestroy {
 
   upload(files: File[]) {
     const n = this.current();
-    if (!n) return;
+    if (!n || !this.canEdit(n)) return;
     const max = NOTE_FILE_MAX_MB * 1024 * 1024;
     const ok = files.filter(f => {
       if (f.size > max) { this.toast.error(`${f.name} passa de ${NOTE_FILE_MAX_MB} MB.`); return false; }
@@ -309,7 +425,7 @@ export class NotesPage implements OnInit, OnDestroy {
     });
   }
 
-  ngOnDestroy() { document.removeEventListener('selectionchange', this.onSelection); this.flush(); }
+  ngOnDestroy() { document.removeEventListener('selectionchange', this.onSelection); if (this.poll) clearInterval(this.poll); this.flush(); }
 
   rel(iso: string) { return relativeTime(iso); }
 
@@ -336,6 +452,7 @@ export class NotesPage implements OnInit, OnDestroy {
   }
 
   edit(partial: Partial<Pick<Note, 'title' | 'body'>>) {
+    if (!this.canEdit(this.current())) return;
     this.patch(partial);
     this.queue();
   }

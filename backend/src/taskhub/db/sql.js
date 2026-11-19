@@ -18,6 +18,7 @@ const TABLES = [
   'routine_checks',
   'personal_notes',
   'personal_note_files',
+  'personal_note_members',
   'sector_managers',
   'team_managers',
   'team_members',
