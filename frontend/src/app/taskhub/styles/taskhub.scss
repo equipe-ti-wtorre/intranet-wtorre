@@ -1473,7 +1473,9 @@ div.td-kpi { cursor: default; }
   .note-sheet { min-height: calc(100dvh - 260px); overflow: visible; }
   .note-body { min-height: 160px; }
 }
-.note-edit-area { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.note-edit-area { display: flex; flex-direction: column; flex: 1 0 auto; }
+.note-edit-area > .note-rich { flex: 1 0 auto; }
+.note-edit-area > .note-format { position: sticky; top: -14px; z-index: 2; background: var(--panel); }
 .note-edit-area[hidden] { display: none; }
 .note-rich ul[data-check] { list-style: none; padding-left: 0; }
 .note-rich ul[data-check] > li { position: relative; padding-left: 28px; min-height: 1.5em; }
