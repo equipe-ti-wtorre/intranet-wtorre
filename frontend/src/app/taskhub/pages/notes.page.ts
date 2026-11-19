@@ -1,9 +1,10 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
-import { Note, NoteColor } from '../core/models';
-import { relativeTime } from '../core/format';
+import { Note, NoteColor, TaskFile } from '../core/models';
+import { NOTE_FILE_MAX_MB, fileSize, isExternalFileDrag, relativeTime } from '../core/format';
+import { bodyToHtml, bodyToText, htmlToBody, safeHref } from '../shared/rich-text';
 import { EmptyComponent, IconComponent, LoadingComponent, SearchComponent } from '../shared/ui';
 
 const COLORS: { id: NoteColor; label: string }[] = [
@@ -47,7 +48,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
                 <span class="bar {{ n.color }}"></span>
                 <span class="grow">
                   <b class="ellipsis" [title]="n.title.trim() || 'Sem título'">{{ n.title.trim() || 'Sem título' }}</b>
-                  <span class="preview ellipsis" [title]="n.body.trim() || 'Sem conteúdo'">{{ n.body.trim() || 'Sem conteúdo' }}</span>
+                  <span class="preview ellipsis" [title]="preview(n) || 'Sem conteúdo'">{{ preview(n) || (n.files?.length ? n.files!.length + ' anexo(s)' : 'Sem conteúdo') }}</span>
                   <span class="when">{{ rel(n.updated_at) }}</span>
                 </span>
               </button>
@@ -55,7 +56,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
           }
         </div>
 
-        <div class="note-sheet">
+        <div class="note-sheet" [class.file-over]="dragOver()" (dragover)="onDragOver($event)" (dragleave)="dragOver.set(false)" (drop)="onDrop($event)">
           @if (current(); as n) {
             <div class="note-tools">
               <div class="note-dots" role="radiogroup" aria-label="Cor da nota">
@@ -72,7 +73,48 @@ const COLORS: { id: NoteColor; label: string }[] = [
               </div>
             </div>
             <input #titleInput class="note-title" [ngModel]="n.title" (ngModelChange)="edit({ title: $event })" placeholder="Título" aria-label="Título" />
-            <textarea class="note-body" [ngModel]="n.body" (ngModelChange)="edit({ body: $event })" placeholder="Escreva aqui..." aria-label="Conteúdo"></textarea>
+            <div class="note-format" role="toolbar" aria-label="Formatação do texto">
+              <button type="button" class="note-fmt" [class.on]="fmt().bold" (mousedown)="$event.preventDefault()" (click)="cmd('bold')" [attr.aria-pressed]="fmt().bold" aria-label="Negrito" title="Negrito (Ctrl+B)"><b>N</b></button>
+              <button type="button" class="note-fmt" [class.on]="fmt().italic" (mousedown)="$event.preventDefault()" (click)="cmd('italic')" [attr.aria-pressed]="fmt().italic" aria-label="Itálico" title="Itálico (Ctrl+I)"><i>I</i></button>
+              <button type="button" class="note-fmt" [class.on]="fmt().underline" (mousedown)="$event.preventDefault()" (click)="cmd('underline')" [attr.aria-pressed]="fmt().underline" aria-label="Sublinhado" title="Sublinhado (Ctrl+U)"><u>S</u></button>
+              <button type="button" class="note-fmt" [class.on]="fmt().strike" (mousedown)="$event.preventDefault()" (click)="cmd('strikeThrough')" [attr.aria-pressed]="fmt().strike" aria-label="Tachado" title="Tachado"><s>T</s></button>
+              <span class="note-fmt-sep" aria-hidden="true"></span>
+              <button type="button" class="note-fmt" [class.on]="fmt().heading" (mousedown)="$event.preventDefault()" (click)="heading()" [attr.aria-pressed]="fmt().heading" aria-label="Título" title="Título">H</button>
+              <button type="button" class="note-fmt" [class.on]="fmt().ul" (mousedown)="$event.preventDefault()" (click)="cmd('insertUnorderedList')" [attr.aria-pressed]="fmt().ul" aria-label="Lista com marcadores" title="Lista com marcadores">&bull;&mdash;</button>
+              <button type="button" class="note-fmt" [class.on]="fmt().ol" (mousedown)="$event.preventDefault()" (click)="cmd('insertOrderedList')" [attr.aria-pressed]="fmt().ol" aria-label="Lista numerada" title="Lista numerada">1.</button>
+              <button type="button" class="note-fmt" [class.on]="linkOpen()" (mousedown)="$event.preventDefault()" (click)="openLink()" aria-label="Inserir link" title="Link">&#128279;</button>
+              <button type="button" class="note-fmt" (mousedown)="$event.preventDefault()" (click)="cmd('removeFormat')" aria-label="Limpar formatação" title="Limpar formatação">Tx</button>
+              <span class="note-fmt-sep" aria-hidden="true"></span>
+              <button type="button" class="note-fmt note-fmt--wide" (click)="fileInput.click()" [disabled]="uploading()"><app-icon name="paperclip" [size]="14" /> {{ uploading() ? 'Enviando…' : 'Anexar' }}</button>
+              <input #fileInput type="file" multiple hidden (change)="pick($event)" />
+            </div>
+            @if (linkOpen()) {
+              <div class="note-link">
+                <input class="input" #linkInput type="url" placeholder="https://…" aria-label="Endereço do link" [value]="linkUrl()" (input)="linkUrl.set(linkInput.value)" (keydown.enter)="applyLink(); $event.preventDefault()" (keydown.escape)="linkOpen.set(false)" />
+                <button type="button" class="btn btn-primary btn-sm" (click)="applyLink()">Aplicar</button>
+                <button type="button" class="btn btn-ghost btn-sm" (click)="linkOpen.set(false)">Cancelar</button>
+              </div>
+            }
+            <div #editor class="note-body note-rich" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Conteúdo" data-placeholder="Escreva aqui..." (input)="onInput()" (paste)="onPaste($event)" (keyup)="syncFmt()" (mouseup)="syncFmt()"></div>
+            @if (n.files?.length) {
+              <div class="note-files">
+                <div class="note-files__title"><app-icon name="paperclip" [size]="13" /> Anexos ({{ n.files!.length }})</div>
+                <div class="th-files">
+                  @for (f of n.files!; track f.id) {
+                    <div class="th-file">
+                      <span class="th-file-ico"><app-icon name="paperclip" [size]="14" /></span>
+                      <div class="th-file-meta">
+                        <button type="button" class="th-file-name" (click)="download(n, f)" [title]="'Baixar ' + f.name">{{ f.name }}</button>
+                        <span class="muted small">{{ fileSize(f.size_bytes) }}</span>
+                      </div>
+                      <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="download(n, f)" [attr.aria-label]="'Baixar ' + f.name" title="Baixar"><app-icon name="download" [size]="14" /></button>
+                      <button type="button" class="btn btn-ghost btn-sm btn-icon" (click)="removeFile(n, f)" [attr.aria-label]="'Remover ' + f.name" title="Remover"><app-icon name="trash" [size]="14" /></button>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            <div class="muted small note-files__help">Qualquer tipo de arquivo, até {{ fileMaxMb }} MB cada. Arraste para cá ou cole uma imagem.</div>
           } @else {
             <div class="note-blank">Escolha uma nota ou crie uma nova.</div>
           }
@@ -87,6 +129,15 @@ export class NotesPage implements OnInit, OnDestroy {
   @ViewChild('titleInput') private titleInput?: ElementRef<HTMLInputElement>;
 
   colors = COLORS;
+  fileMaxMb = NOTE_FILE_MAX_MB;
+  fileSize = fileSize;
+  editor = viewChild<ElementRef<HTMLElement>>('editor');
+  uploading = signal(false);
+  dragOver = signal(false);
+  linkOpen = signal(false);
+  linkUrl = signal('');
+  fmt = signal({ bold: false, italic: false, underline: false, strike: false, heading: false, ul: false, ol: false });
+  private savedRange: Range | null = null;
   notes = signal<Note[]>([]);
   selectedId = signal<number | null>(null);
   q = signal('');
@@ -95,7 +146,7 @@ export class NotesPage implements OnInit, OnDestroy {
   shown = computed(() => {
     const q = this.q().trim().toLowerCase();
     return this.notes()
-      .filter(n => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q))
+      .filter(n => !q || n.title.toLowerCase().includes(q) || bodyToText(n.body).toLowerCase().includes(q))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at) || b.id - a.id);
   });
   current = computed(() => this.notes().find(n => n.id === this.selectedId()) ?? null);
@@ -103,6 +154,149 @@ export class NotesPage implements OnInit, OnDestroy {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private epoch = 0;
   private wantFocus = false;
+
+  constructor() {
+    // Carrega o texto no editor quando a nota muda (não a cada tecla, para não perder o cursor).
+    effect(() => {
+      const id = this.selectedId();
+      const el = this.editor()?.nativeElement;
+      if (!el) return;
+      untracked(() => {
+        el.innerHTML = bodyToHtml(this.notes().find(n => n.id === id)?.body ?? '');
+        this.linkOpen.set(false);
+      });
+    });
+    document.addEventListener('selectionchange', this.onSelection);
+  }
+
+  private onSelection = () => { if (this.inEditor()) this.syncFmt(); };
+  private inEditor() {
+    const el = this.editor()?.nativeElement;
+    const sel = window.getSelection();
+    return !!el && !!sel && sel.rangeCount > 0 && el.contains(sel.anchorNode);
+  }
+
+  preview(n: Note) { return bodyToText(n.body); }
+
+  syncFmt() {
+    const q = (c: string) => { try { return document.queryCommandState(c); } catch { return false; } };
+    let heading = false;
+    try { heading = /^h[1-3]$/i.test(String(document.queryCommandValue('formatBlock'))); } catch { /* sem suporte */ }
+    this.fmt.set({ bold: q('bold'), italic: q('italic'), underline: q('underline'), strike: q('strikeThrough'), heading, ul: q('insertUnorderedList'), ol: q('insertOrderedList') });
+  }
+
+  cmd(name: string, value?: string) {
+    this.editor()?.nativeElement.focus();
+    try { document.execCommand('styleWithCSS', false, 'false'); } catch { /* ignora */ }
+    document.execCommand(name, false, value);
+    this.onInput();
+    this.syncFmt();
+  }
+
+  heading() {
+    this.editor()?.nativeElement.focus();
+    document.execCommand('formatBlock', false, this.fmt().heading ? 'div' : 'h3');
+    this.onInput();
+    this.syncFmt();
+  }
+
+  openLink() {
+    const sel = window.getSelection();
+    this.savedRange = sel && sel.rangeCount && this.inEditor() ? sel.getRangeAt(0).cloneRange() : null;
+    this.linkUrl.set('https://');
+    this.linkOpen.set(true);
+  }
+
+  applyLink() {
+    const href = safeHref(this.linkUrl());
+    this.linkOpen.set(false);
+    if (!href) { this.toast.error('Use um endereço que comece com http://, https:// ou mailto:'); return; }
+    const el = this.editor()?.nativeElement;
+    el?.focus();
+    const sel = window.getSelection();
+    if (this.savedRange && sel) { sel.removeAllRanges(); sel.addRange(this.savedRange); }
+    if (sel && sel.isCollapsed) document.execCommand('insertHTML', false, `<a href="${href.replace(/"/g, '%22')}">${href.replace(/</g, '&lt;')}</a>`);
+    else document.execCommand('createLink', false, href);
+    this.onInput();
+  }
+
+  onInput() {
+    const el = this.editor()?.nativeElement;
+    if (!el) return;
+    if (!(el.textContent || '').trim() && !el.querySelector('li')) el.innerHTML = '';
+    this.edit({ body: htmlToBody(el.innerHTML) });
+  }
+
+  onPaste(ev: ClipboardEvent) {
+    const files = Array.from(ev.clipboardData?.files || []);
+    if (files.length) { ev.preventDefault(); this.upload(files); return; }
+    const text = ev.clipboardData?.getData('text/plain');
+    if (text == null) return;
+    ev.preventDefault();
+    document.execCommand('insertText', false, text);
+  }
+
+  onDragOver(ev: DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+    this.dragOver.set(true);
+  }
+
+  onDrop(ev: DragEvent) {
+    this.dragOver.set(false);
+    const files = Array.from(ev.dataTransfer?.files || []);
+    if (!files.length) return;
+    ev.preventDefault();
+    this.upload(files);
+  }
+
+  pick(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = '';
+    if (files.length) this.upload(files);
+  }
+
+  upload(files: File[]) {
+    const n = this.current();
+    if (!n) return;
+    const max = NOTE_FILE_MAX_MB * 1024 * 1024;
+    const ok = files.filter(f => {
+      if (f.size > max) { this.toast.error(`${f.name} passa de ${NOTE_FILE_MAX_MB} MB.`); return false; }
+      return true;
+    });
+    if (!ok.length) return;
+    this.uploading.set(true);
+    this.api.uploadNoteFiles(n.id, ok).subscribe({
+      next: created => {
+        this.uploading.set(false);
+        this.notes.update(list => list.map(x => (x.id === n.id ? { ...x, files: [...(x.files || []), ...created] } : x)));
+        this.toast.show(created.length === 1 ? 'Anexo incluído.' : 'Anexos incluídos.');
+      },
+      error: e => { this.uploading.set(false); this.toast.error(errorMessage(e)); },
+    });
+  }
+
+  download(n: Note, f: TaskFile) {
+    this.api.downloadNoteFile(n.id, f.id).subscribe({
+      next: blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = f.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: e => this.toast.error(errorMessage(e, 'Não foi possível baixar o arquivo.')),
+    });
+  }
+
+  removeFile(n: Note, f: TaskFile) {
+    this.api.deleteNoteFile(n.id, f.id).subscribe({
+      next: () => this.notes.update(list => list.map(x => (x.id === n.id ? { ...x, files: (x.files || []).filter(y => y.id !== f.id) } : x))),
+      error: e => this.toast.error(errorMessage(e)),
+    });
+  }
 
   ngOnInit() {
     this.api.notes().subscribe({
@@ -115,7 +309,7 @@ export class NotesPage implements OnInit, OnDestroy {
     });
   }
 
-  ngOnDestroy() { this.flush(); }
+  ngOnDestroy() { document.removeEventListener('selectionchange', this.onSelection); this.flush(); }
 
   rel(iso: string) { return relativeTime(iso); }
 

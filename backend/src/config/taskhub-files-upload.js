@@ -36,6 +36,26 @@ const uploadTaskFiles = multer({
   },
 });
 
+// Notas: qualquer tipo de arquivo, sem limite de quantidade (só por envio, para não travar o servidor).
+const uploadNoteFiles = multer({
+  storage,
+  limits: { fileSize: env.taskhubNotaMaxMb * 1024 * 1024, files: 30 },
+});
+
+function handleNoteFilesMulterError(err, req, res, next) {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ message: `Cada arquivo pode ter até ${env.taskhubNotaMaxMb} MB.` });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ message: 'Envie no máximo 30 arquivos de cada vez.' });
+    }
+    return res.status(400).json({ message: err.message });
+  }
+  if (err) return res.status(400).json({ message: err.message });
+  next();
+}
+
 function handleTaskFilesMulterError(err, req, res, next) {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -63,5 +83,7 @@ function blobNameFor(file) {
 module.exports = {
   uploadTaskFiles,
   handleTaskFilesMulterError,
+  uploadNoteFiles,
+  handleNoteFilesMulterError,
   blobNameFor,
 };

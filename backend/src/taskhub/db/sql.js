@@ -17,6 +17,7 @@ const TABLES = [
   'routine_blocks',
   'routine_checks',
   'personal_notes',
+  'personal_note_files',
   'sector_managers',
   'team_managers',
   'team_members',
