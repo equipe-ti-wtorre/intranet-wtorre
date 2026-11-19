@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../environments/environment';
 import {
-  AccessProfile, DayData, Note, Notification, Permission, Person, Project, Sector, Reminder, ReminderRepeat, RoutineBlock, Section, Status, Task, TaskDetail, TaskFile, Work, WorkDashboard, WorkDetail, WorkPhaseLog,
+  AccessProfile, DayData, Note, NoteHistoryEntry, Notification, Permission, Person, Project, Sector, Reminder, ReminderRepeat, RoutineBlock, Section, Status, Task, TaskDetail, TaskFile, Work, WorkDashboard, WorkDetail, WorkPhaseLog,
   Team, TeamDashboard, TimelineEntry, User, Subtask, TaskContact, CreatableWork, ProjectTimeline, Phase, SearchResult, SchedulePreview, PhaseReschedule, PhaseScope, WorkDateLog,
 } from './models';
 
@@ -75,6 +75,7 @@ export class ApiService {
   createNote(body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>> = {}) { return this.http.post<Note>(`${U}/notes`, body); }
   updateNote(id: number, body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>>) { return this.http.patch<Note>(`${U}/notes/${id}`, body); }
   deleteNote(id: number) { return this.http.delete(`${U}/notes/${id}`); }
+  noteHistory(id: number) { return this.http.get<NoteHistoryEntry[]>(`${U}/notes/${id}/history`); }
   setNoteMembers(id: number, members: { user_id: number; role: 'editor' | 'leitor' }[]) { return this.http.put<Note>(`${U}/notes/${id}/members`, { members }); }
   uploadNoteFiles(id: number, files: File[]) {
     const fd = new FormData();

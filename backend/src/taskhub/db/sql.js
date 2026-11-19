@@ -19,6 +19,7 @@ const TABLES = [
   'personal_notes',
   'personal_note_files',
   'personal_note_members',
+  'personal_note_history',
   'sector_managers',
   'team_managers',
   'team_members',

@@ -2,8 +2,8 @@ import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, effect, 
 import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ToastService } from '../core/toast.service';
-import { Note, NoteColor, TaskFile } from '../core/models';
-import { NOTE_FILE_MAX_MB, fileSize, isExternalFileDrag, relativeTime } from '../core/format';
+import { Note, NoteColor, NoteHistoryEntry, TaskFile } from '../core/models';
+import { NOTE_FILE_MAX_MB, fileSize, isExternalFileDrag, relativeTime, stamp } from '../core/format';
 import { bodyToHtml, bodyToText, htmlToBody, safeHref } from '../shared/rich-text';
 import { EmptyComponent, IconComponent, LoadingComponent, PersonChipComponent, SearchComponent } from '../shared/ui';
 import { PersonPickerComponent } from '../shared/person-picker.component';
@@ -69,6 +69,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
                 }
               </div>
               <div class="note-tools-right">
+                <button type="button" class="btn btn-ghost btn-sm" [class.on]="view() === 'hist'" [attr.aria-pressed]="view() === 'hist'" (click)="toggleHistory()"><app-icon name="clock" [size]="14" /> Histórico</button>
                 <span class="hint" role="status" aria-live="polite">{{ saveState() === 'saving' ? 'Salvando…' : 'Salvo' }}</span>
                 <button type="button" class="btn btn-ghost btn-sm" [class.on]="n.pinned" [disabled]="!canEdit(n)" (click)="togglePin()" [attr.aria-pressed]="n.pinned">
                   <app-icon name="pin" [size]="14" /> Fixar no topo
@@ -85,6 +86,21 @@ const COLORS: { id: NoteColor; label: string }[] = [
               <div class="note-shared"><app-icon name="people" [size]="14" /> @if (n.is_owner === false) { Compartilhada por <b>{{ n.owner?.name }}</b> com }@else { Compartilhada com } {{ sharedNames(n) }}. @if (!canEdit(n)) { <b>Você só pode ler.</b> } @else { Quem tem permissão edita. }</div>
             }
             <input #titleInput class="note-title" [readonly]="!canEdit(n)" [ngModel]="n.title" (ngModelChange)="edit({ title: $event })" placeholder="Título" aria-label="Título" />
+            @if (view() === 'hist') {
+              <div class="note-history" aria-live="polite">
+                <div class="note-files__title"><app-icon name="clock" [size]="13" /> Histórico desta nota</div>
+                @if (historyLoading()) { <div class="muted small">Carregando…</div> }
+                @else if (!history().length) { <div class="muted small">Nada registrado ainda.</div> }
+                @else {
+                  <ul class="note-history__list">
+                    @for (h of history(); track h.id) {
+                      <li><span class="note-history__who">{{ h.user?.name || 'Alguém' }}</span> {{ actionText(h) }}<span class="muted small note-history__when" [title]="stamp(h.created_at)"> · {{ rel(h.created_at) }}</span></li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+            <div class="note-edit-area" [hidden]="view() === 'hist'">
             @if (canEdit(n)) {
             <div class="note-format" role="toolbar" aria-label="Formatação do texto">
               <button type="button" class="note-fmt" [class.on]="fmt().bold" (mousedown)="$event.preventDefault()" (click)="cmd('bold')" [attr.aria-pressed]="fmt().bold" aria-label="Negrito" title="Negrito (Ctrl+B)"><b>N</b></button>
@@ -94,6 +110,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
               <span class="note-fmt-sep" aria-hidden="true"></span>
               <button type="button" class="note-fmt" [class.on]="fmt().heading" (mousedown)="$event.preventDefault()" (click)="heading()" [attr.aria-pressed]="fmt().heading" aria-label="Título" title="Título">H</button>
               <button type="button" class="note-fmt" [class.on]="fmt().ul" (mousedown)="$event.preventDefault()" (click)="cmd('insertUnorderedList')" [attr.aria-pressed]="fmt().ul" aria-label="Lista com marcadores" title="Lista com marcadores">&bull;&mdash;</button>
+              <button type="button" class="note-fmt" [class.on]="fmt().check" (mousedown)="$event.preventDefault()" (click)="checklist()" [attr.aria-pressed]="fmt().check" aria-label="Lista de tarefas com caixa de seleção" title="Lista de tarefas (caixinhas)">&#9745;</button>
               <button type="button" class="note-fmt" [class.on]="fmt().ol" (mousedown)="$event.preventDefault()" (click)="cmd('insertOrderedList')" [attr.aria-pressed]="fmt().ol" aria-label="Lista numerada" title="Lista numerada">1.</button>
               <button type="button" class="note-fmt" [class.on]="linkOpen()" (mousedown)="$event.preventDefault()" (click)="openLink()" aria-label="Inserir link" title="Link">&#128279;</button>
               <button type="button" class="note-fmt" (mousedown)="$event.preventDefault()" (click)="cmd('removeFormat')" aria-label="Limpar formatação" title="Limpar formatação">Tx</button>
@@ -109,7 +126,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
                 <button type="button" class="btn btn-ghost btn-sm" (click)="linkOpen.set(false)">Cancelar</button>
               </div>
             }
-            <div #editor class="note-body note-rich" [attr.contenteditable]="canEdit(n)" role="textbox" aria-multiline="true" aria-label="Conteúdo" data-placeholder="Escreva aqui..." (input)="onInput()" (paste)="onPaste($event)" (keyup)="syncFmt()" (mouseup)="syncFmt()"></div>
+            <div #editor class="note-body note-rich" [attr.contenteditable]="canEdit(n)" role="textbox" aria-multiline="true" aria-label="Conteúdo" data-placeholder="Escreva aqui..." (input)="onInput()" (paste)="onPaste($event)" (keyup)="syncFmt()" (mouseup)="syncFmt()" (click)="onEditorClick($event)" (keydown.enter)="afterEnter()"></div>
             @if (n.files?.length) {
               <div class="note-files">
                 <div class="note-files__title"><app-icon name="paperclip" [size]="13" /> Anexos ({{ n.files!.length }})</div>
@@ -129,6 +146,7 @@ const COLORS: { id: NoteColor; label: string }[] = [
               </div>
             }
             @if (canEdit(n)) { <div class="muted small note-files__help">Qualquer tipo de arquivo, até {{ fileMaxMb }} MB cada. Arraste para cá ou cole uma imagem.</div> }
+            </div>
           } @else {
             <div class="note-blank">Escolha uma nota ou crie uma nova.</div>
           }
@@ -182,7 +200,11 @@ export class NotesPage implements OnInit, OnDestroy {
   dragOver = signal(false);
   linkOpen = signal(false);
   linkUrl = signal('');
-  fmt = signal({ bold: false, italic: false, underline: false, strike: false, heading: false, ul: false, ol: false });
+  fmt = signal({ bold: false, italic: false, underline: false, strike: false, heading: false, ul: false, ol: false, check: false });
+  view = signal<'nota' | 'hist'>('nota');
+  history = signal<NoteHistoryEntry[]>([]);
+  historyLoading = signal(false);
+  stamp = stamp;
   private savedRange: Range | null = null;
   private data = inject(DataService);
   private auth = inject(AuthService);
@@ -298,7 +320,7 @@ export class NotesPage implements OnInit, OnDestroy {
     const q = (c: string) => { try { return document.queryCommandState(c); } catch { return false; } };
     let heading = false;
     try { heading = /^h[1-3]$/i.test(String(document.queryCommandValue('formatBlock'))); } catch { /* sem suporte */ }
-    this.fmt.set({ bold: q('bold'), italic: q('italic'), underline: q('underline'), strike: q('strikeThrough'), heading, ul: q('insertUnorderedList'), ol: q('insertOrderedList') });
+    this.fmt.set({ bold: q('bold'), italic: q('italic'), underline: q('underline'), strike: q('strikeThrough'), heading, ul: q('insertUnorderedList'), ol: q('insertOrderedList'), check: !!this.closestList()?.hasAttribute('data-check') });
   }
 
   cmd(name: string, value?: string) {
@@ -307,6 +329,85 @@ export class NotesPage implements OnInit, OnDestroy {
     document.execCommand(name, false, value);
     this.onInput();
     this.syncFmt();
+  }
+
+  private closestList(): HTMLElement | null {
+    const sel = window.getSelection();
+    const node = sel?.anchorNode;
+    const el = node && (node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement);
+    const ul = el?.closest('ul');
+    return ul && this.editor()?.nativeElement.contains(ul) ? (ul as HTMLElement) : null;
+  }
+
+  checklist() {
+    this.editor()?.nativeElement.focus();
+    const ul = this.closestList();
+    if (ul?.hasAttribute('data-check')) {
+      document.execCommand('insertUnorderedList'); // tira a lista
+    } else if (ul) {
+      ul.setAttribute('data-check', '1');
+    } else {
+      document.execCommand('insertUnorderedList');
+      this.closestList()?.setAttribute('data-check', '1');
+    }
+    this.onInput();
+    this.syncFmt();
+  }
+
+  // Clique na caixinha (margem esquerda do item) marca/desmarca.
+  onEditorClick(ev: MouseEvent) {
+    const t = ev.target as HTMLElement;
+    const li = t?.closest?.('li');
+    if (!li || !li.parentElement?.hasAttribute('data-check')) return;
+    if (ev.clientX - li.getBoundingClientRect().left > 26) return;
+    if (!this.canEdit(this.current())) return;
+    li.setAttribute('data-done', li.getAttribute('data-done') === 'true' ? 'false' : 'true');
+    this.onInput();
+  }
+
+  // Item novo criado com Enter começa sem marcar.
+  afterEnter() {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const node = sel?.anchorNode;
+      const el = node && (node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement);
+      const li = el?.closest('li');
+      if (li && li.parentElement?.hasAttribute('data-check') && !(li.textContent || '').trim()) li.setAttribute('data-done', 'false');
+    });
+  }
+
+  toggleHistory() {
+    if (this.view() === 'hist') { this.view.set('nota'); return; }
+    this.view.set('hist');
+    this.loadHistory();
+  }
+
+  loadHistory() {
+    const n = this.current();
+    if (!n) return;
+    this.flush();
+    this.historyLoading.set(true);
+    this.api.noteHistory(n.id).subscribe({
+      next: list => { this.history.set(list); this.historyLoading.set(false); },
+      error: e => { this.historyLoading.set(false); this.toast.error(errorMessage(e)); },
+    });
+  }
+
+  actionText(h: NoteHistoryEntry) {
+    const d = h.detail;
+    switch (h.action) {
+      case 'criou': return 'criou a nota';
+      case 'titulo': return d ? `mudou o título para “${d}”` : 'apagou o título';
+      case 'texto': return 'editou o texto';
+      case 'cor': return `mudou a cor (${COLORS.find(c => c.id === d)?.label || d})`;
+      case 'fixou': return 'fixou a nota no topo';
+      case 'desafixou': return 'tirou a nota do topo';
+      case 'anexou': return `anexou ${d}`;
+      case 'tirou_anexo': return `removeu o anexo ${d}`;
+      case 'compartilhou': return `mudou o compartilhamento (${d})`;
+      case 'saiu': return 'saiu da nota';
+      default: return h.action;
+    }
   }
 
   heading() {
@@ -432,6 +533,7 @@ export class NotesPage implements OnInit, OnDestroy {
   open(id: number) {
     if (id === this.selectedId()) return;
     this.flush();
+    this.view.set('nota');
     this.selectedId.set(id);
     this.saveState.set('saved');
   }
@@ -441,6 +543,7 @@ export class NotesPage implements OnInit, OnDestroy {
     this.api.createNote({}).subscribe({
       next: n => {
         this.notes.update(list => [n, ...list]);
+        this.view.set('nota');
         this.selectedId.set(n.id);
         this.q.set('');
         this.saveState.set('saved');
