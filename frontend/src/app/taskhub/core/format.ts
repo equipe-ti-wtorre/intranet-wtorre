@@ -100,6 +100,7 @@ export function relativeTime(iso: string): string {
 
 export const TASK_FILE_MAX = 10;
 export const TASK_FILE_MAX_MB = 15;
+export const NOTE_FILE_MAX_MB = 48;
 
 export function isExternalFileDrag(ev: DragEvent): boolean {
   const types = ev.dataTransfer?.types;

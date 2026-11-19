@@ -75,6 +75,13 @@ export class ApiService {
   createNote(body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>> = {}) { return this.http.post<Note>(`${U}/notes`, body); }
   updateNote(id: number, body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>>) { return this.http.patch<Note>(`${U}/notes/${id}`, body); }
   deleteNote(id: number) { return this.http.delete(`${U}/notes/${id}`); }
+  uploadNoteFiles(id: number, files: File[]) {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f, f.name);
+    return this.http.post<TaskFile[]>(`${U}/notes/${id}/files`, fd);
+  }
+  downloadNoteFile(id: number, fileId: number) { return this.http.get(`${U}/notes/${id}/files/${fileId}`, { responseType: 'blob' }); }
+  deleteNoteFile(id: number, fileId: number) { return this.http.delete(`${U}/notes/${id}/files/${fileId}`); }
 
   // Caixa de entrada
   inbox(filter: 'all' | 'unread') { return this.http.get<Notification[]>(`${U}/inbox`, { params: this.params({ filter }) }); }

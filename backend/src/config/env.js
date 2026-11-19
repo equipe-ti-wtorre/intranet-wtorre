@@ -111,6 +111,8 @@ const env = {
   taskhubTmpDir: process.env.TASKHUB_TMP_DIR || os.tmpdir(),
   taskhubAnexoMaxMb: Number(process.env.TASKHUB_ANEXO_MAX_MB) || 15,
   taskhubAnexoMaxFiles: Number(process.env.TASKHUB_ANEXO_MAX_FILES) || 10,
+  // Anexos das notas: sem limite de quantidade; o nginx do servidor aceita corpo de até 50 MB, então 48 MB por arquivo deixa folga.
+  taskhubNotaMaxMb: Number(process.env.TASKHUB_NOTA_MAX_MB) || 48,
   /** Só nbpdev: anexos das tarefas em disco. Se omitido, segue PESQUISAS_BLOB_LOCAL. */
   taskhubBlobLocal: (() => {
     const v = process.env.TASKHUB_BLOB_LOCAL;

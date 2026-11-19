@@ -1306,7 +1306,11 @@ div.td-kpi { cursor: default; }
   .notes-page .page-head { flex-wrap: wrap; align-items: flex-start; }
   .notes-page .page-head .actions { width: 100%; margin-left: 0; }
   .notes-page .notes-search { flex: 1; width: auto; min-width: 0; }
-  .note-sheet { min-height: 420px; }
+  .notes-page { display: flex; flex-direction: column; }
+  .notes-split { grid-template-rows: auto minmax(0, 1fr); }
+  .notes-list { max-height: 30dvh; }
+  .note-sheet { min-height: calc(100dvh - 240px); }
+  .note-body { min-height: 0; }
   .day-grid .plan-col { order: -1; }
   .trow .meta { flex-shrink: 1; min-width: 0; gap: 8px; }
   .trow .col-status { display: none; }
@@ -1395,12 +1399,13 @@ div.td-kpi { cursor: default; }
 .ruler-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 
 /* ---------- Notas e lembretes (Individual) ---------- */
-.notes-page { overflow: hidden; min-width: 0; }
+.notes-page { overflow: hidden; min-width: 0; display: flex; flex-direction: column; }
+.notes-page > .page-head { flex: none; }
 .notes-page .page-head { flex-wrap: nowrap; align-items: flex-end; min-width: 0; }
 .notes-page .page-head > div:first-child { min-width: 0; flex: 1; }
 .notes-page .page-head .actions { flex-wrap: nowrap; width: auto; margin-left: auto; min-width: 0; }
 .notes-search { width: min(220px, 100%); min-width: 0; }
-.notes-split { flex: 1; min-height: 0; min-width: 0; display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+.notes-split { flex: 1; min-height: 0; min-width: 0; display: grid; grid-template-columns: 280px 1fr; grid-template-rows: minmax(0, 1fr); gap: 16px; }
 .notes-list { min-height: 0; overflow: auto; padding-right: 4px; }
 .note-item {
   display: flex; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 4px;
@@ -1443,6 +1448,28 @@ div.td-kpi { cursor: default; }
   flex: 1; min-height: 240px; border: 0; background: transparent; resize: none; width: 100%;
   color: var(--tx); font-size: 15px; line-height: 1.55; outline: none; padding: 4px 0 12px;
 }
+
+/* Texto formatado + anexos das notas */
+.note-format { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 0; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.note-fmt { min-width: 34px; height: 34px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; cursor: pointer; }
+.note-fmt:hover:not(:disabled) { background: var(--hover); }
+.note-fmt.on { background: var(--act-soft); color: var(--act); }
+.note-fmt:disabled { opacity: .6; cursor: default; }
+.note-fmt--wide { font-size: 13px; font-weight: 600; }
+.note-fmt-sep { width: 1px; height: 20px; margin: 0 6px; background: var(--line); }
+.note-link { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0; }
+.note-link .input { flex: 1 1 220px; min-width: 0; }
+.note-rich { overflow-wrap: anywhere; white-space: pre-wrap; cursor: text; }
+.note-rich:empty::before { content: attr(data-placeholder); color: var(--mu2); pointer-events: none; }
+.note-rich h1, .note-rich h2, .note-rich h3 { font-family: var(--font-display); font-size: 1.25em; font-weight: 650; line-height: 1.3; margin: .6em 0 .2em; }
+.note-rich ul, .note-rich ol { margin: .3em 0; padding-left: 1.5em; white-space: normal; }
+.note-rich ul { list-style: disc; }
+.note-rich ol { list-style: decimal; }
+.note-rich a { color: var(--brand); text-decoration: underline; }
+.note-sheet.file-over { outline: 2px dashed var(--brand); outline-offset: -6px; background: color-mix(in srgb, var(--brand) 6%, var(--panel)); }
+.note-files { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.note-files__title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; color: var(--text-muted); margin-bottom: 6px; }
+.note-files__help { margin-top: 8px; }
 
 .reminders-page { min-width: 0; }
 .rem-form {

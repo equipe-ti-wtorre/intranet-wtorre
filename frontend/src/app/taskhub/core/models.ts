@@ -253,6 +253,7 @@ export type NoteColor = 'none' | 'yellow' | 'blue' | 'green' | 'purple' | 'orang
 export interface Note {
   id: number; title: string; body: string; color: NoteColor; pinned: boolean;
   created_at: string; updated_at: string;
+  files?: TaskFile[];
 }
 
 export interface TeamDashboard {
