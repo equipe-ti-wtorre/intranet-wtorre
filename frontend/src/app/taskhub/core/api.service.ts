@@ -75,6 +75,7 @@ export class ApiService {
   createNote(body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>> = {}) { return this.http.post<Note>(`${U}/notes`, body); }
   updateNote(id: number, body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>>) { return this.http.patch<Note>(`${U}/notes/${id}`, body); }
   deleteNote(id: number) { return this.http.delete(`${U}/notes/${id}`); }
+  setNoteMembers(id: number, members: { user_id: number; role: 'editor' | 'leitor' }[]) { return this.http.put<Note>(`${U}/notes/${id}/members`, { members }); }
   uploadNoteFiles(id: number, files: File[]) {
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);

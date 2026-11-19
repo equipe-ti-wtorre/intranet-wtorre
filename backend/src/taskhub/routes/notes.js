@@ -18,9 +18,13 @@ const noteSchema = z.object({
   pinned: z.boolean().optional(),
 }).refine((data) => Object.keys(data).length > 0, { message: 'Informe ao menos um campo para atualizar' });
 
-function mapNote(row, files = []) {
+// Nota minha ou compartilhada comigo ($1 = meu id).
+const CAN_SEE = `(n.user_id = $1 OR EXISTS (SELECT 1 FROM personal_note_members m WHERE m.note_id = n.id AND m.user_id = $1))`;
+
+function mapNote(row, extra = {}, meId) {
+  const mine = (extra.members || []).find((m) => m.id === meId);
   return {
-    files,
+    my_role: meId == null || row.user_id === meId ? 'owner' : (mine ? mine.role : 'leitor'),
     id: row.id,
     title: row.title || '',
     body: row.body || '',
@@ -28,36 +32,69 @@ function mapNote(row, files = []) {
     pinned: row.pinned,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    is_owner: meId == null ? true : row.user_id === meId,
+    owner: row.owner_name ? { id: row.user_id, name: row.owner_name } : null,
+    members: extra.members || [],
+    files: extra.files || [],
   };
 }
 
-router.get('/', async (req, res, next) => {
-  try {
-    const { rows } = await query(
-      `SELECT * FROM personal_notes WHERE user_id = $1
-       ORDER BY pinned DESC, updated_at DESC, id DESC`,
-      [req.user.id]
-    );
-    const byNote = new Map();
-    if (rows.length) {
-      const { rows: fr } = await query(
-        `SELECT f.id, f.note_id, f.name, f.mime, f.size_bytes, f.created_at, f.uploaded_by, u.name AS uploader_name
-           FROM personal_note_files f
-           JOIN personal_notes n ON n.id = f.note_id
-           LEFT JOIN users u ON u.id = f.uploaded_by
-          WHERE n.user_id = $1 ORDER BY f.id`,
-        [req.user.id]
-      );
-      for (const f of fr) {
-        if (!byNote.has(f.note_id)) byNote.set(f.note_id, []);
-        byNote.get(f.note_id).push(formatFile(f));
-      }
-    }
-    res.json(rows.map((r) => mapNote(r, byNote.get(r.id) || [])));
-  } catch (err) {
-    next(err);
+async function loadNotes(meId, onlyId) {
+  const { rows } = await query(
+    `SELECT n.*, ou.name AS owner_name FROM personal_notes n
+       JOIN users ou ON ou.id = n.user_id
+      WHERE ${CAN_SEE} ${onlyId ? 'AND n.id = $2' : ''}
+      ORDER BY n.pinned DESC, n.updated_at DESC, n.id DESC`,
+    onlyId ? [meId, onlyId] : [meId]
+  );
+  if (!rows.length) return [];
+  const files = new Map();
+  const members = new Map();
+  const { rows: fr } = await query(
+    `SELECT f.id, f.note_id, f.name, f.mime, f.size_bytes, f.created_at, f.uploaded_by, u.name AS uploader_name
+       FROM personal_note_files f
+       JOIN personal_notes n ON n.id = f.note_id
+       LEFT JOIN users u ON u.id = f.uploaded_by
+      WHERE ${CAN_SEE} ORDER BY f.id`,
+    [meId]
+  );
+  for (const f of fr) {
+    if (!files.has(f.note_id)) files.set(f.note_id, []);
+    files.get(f.note_id).push(formatFile(f));
   }
-});
+  const { rows: mr } = await query(
+    `SELECT m.note_id, u.id, u.name, m.role FROM personal_note_members m
+       JOIN personal_notes n ON n.id = m.note_id
+       JOIN users u ON u.id = m.user_id
+      WHERE ${CAN_SEE} ORDER BY u.name`,
+    [meId]
+  );
+  for (const m of mr) {
+    if (!members.has(m.note_id)) members.set(m.note_id, []);
+    members.get(m.note_id).push({ id: m.id, name: m.name, role: m.role === 'leitor' ? 'leitor' : 'editor' });
+  }
+  return rows.map((r) => mapNote(r, { files: files.get(r.id) || [], members: members.get(r.id) || [] }, meId));
+}
+
+// Nota que posso ver (dona ou membro). Devolve { id, isOwner, canEdit }.
+async function accessNote(req, { edit = false } = {}) {
+  const id = intParam(req.params.id);
+  const { rows: [n] } = await query(
+    `SELECT n.id, n.user_id,
+            (SELECT m.role FROM personal_note_members m WHERE m.note_id = n.id AND m.user_id = $1) AS my_role
+       FROM personal_notes n WHERE n.id = $2 AND ${CAN_SEE}`,
+    [req.user.id, id]
+  );
+  if (!n) throw new HttpError(404, 'Nota não encontrada');
+  const isOwner = n.user_id === req.user.id;
+  const canEdit = isOwner || n.my_role !== 'leitor';
+  if (edit && !canEdit) throw new HttpError(403, 'Você tem acesso somente leitura a esta nota.');
+  return { id, isOwner, canEdit };
+}
+
+router.get('/', ah(async (req, res) => {
+  res.json(await loadNotes(req.user.id));
+}));
 
 router.post('/', async (req, res, next) => {
   const parsed = z.object({
@@ -76,69 +113,72 @@ router.post('/', async (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [req.user.id, (data.title || '').trim(), data.body || '', data.color || 'none', data.pinned || false]
     );
-    res.status(201).json(mapNote(rows[0]));
+    const [note] = await loadNotes(req.user.id, rows[0].id);
+    res.status(201).json(note);
   } catch (err) {
     next(err);
   }
 });
 
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', ah(async (req, res) => {
   const parsed = noteSchema.safeParse(req.body || {});
-  if (!parsed.success) {
-    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Dados inválidos' });
-  }
-  try {
-    const data = parsed.data;
-    const fields = [];
-    const params = [];
-    let i = 1;
-    if (data.title !== undefined) { fields.push(`title = $${i++}`); params.push(data.title.trim()); }
-    if (data.body !== undefined) { fields.push(`body = $${i++}`); params.push(data.body); }
-    if (data.color !== undefined) { fields.push(`color = $${i++}`); params.push(data.color); }
-    if (data.pinned !== undefined) { fields.push(`pinned = $${i++}`); params.push(data.pinned); }
-    fields.push('updated_at = NOW()');
-    params.push(req.params.id, req.user.id);
-    const { rows } = await query(
-      `UPDATE personal_notes SET ${fields.join(', ')} WHERE id = $${i} AND user_id = $${i + 1} RETURNING *`,
-      params
-    );
-    if (!rows[0]) return res.status(404).json({ message: 'Nota não encontrada' });
-    res.json(mapNote(rows[0]));
-  } catch (err) {
-    next(err);
-  }
-});
+  if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Dados inválidos');
+  const { id } = await accessNote(req, { edit: true });
+  const data = parsed.data;
+  const fields = [];
+  const params = [];
+  let i = 1;
+  if (data.title !== undefined) { fields.push(`title = $${i++}`); params.push(data.title.trim()); }
+  if (data.body !== undefined) { fields.push(`body = $${i++}`); params.push(data.body); }
+  if (data.color !== undefined) { fields.push(`color = $${i++}`); params.push(data.color); }
+  if (data.pinned !== undefined) { fields.push(`pinned = $${i++}`); params.push(data.pinned); }
+  fields.push('updated_at = NOW()');
+  params.push(id);
+  await query(`UPDATE personal_notes SET ${fields.join(', ')} WHERE id = $${i}`, params);
+  const [note] = await loadNotes(req.user.id, id);
+  res.json(note);
+}));
 
-router.delete('/:id', async (req, res, next) => {
-  try {
-    const { rows: blobs } = await query(
-      `SELECT f.container, f.\`blob\` FROM personal_note_files f
-         JOIN personal_notes n ON n.id = f.note_id
-        WHERE n.id = $1 AND n.user_id = $2`,
-      [req.params.id, req.user.id]
-    );
-    for (const b of blobs) {
-      try { await blobService.removerBlob(b.container, b.blob); } catch { /* blob ausente não impede excluir */ }
-    }
-    const { rows } = await query(
-      'DELETE FROM personal_notes WHERE id = $1 AND user_id = $2 RETURNING id',
-      [req.params.id, req.user.id]
-    );
-    if (!rows[0]) return res.status(404).json({ message: 'Nota não encontrada' });
-    res.json({ message: 'Nota removida' });
-  } catch (err) {
-    next(err);
+// Dono exclui a nota (e os arquivos); membro apenas sai dela.
+router.delete('/:id', ah(async (req, res) => {
+  const { id, isOwner } = await accessNote(req);
+  if (!isOwner) {
+    await query('DELETE FROM personal_note_members WHERE note_id = $1 AND user_id = $2', [id, req.user.id]);
+    return res.json({ message: 'Você saiu da nota' });
   }
-});
+  const { rows: blobs } = await query('SELECT container, `blob` FROM personal_note_files WHERE note_id = $1', [id]);
+  for (const b of blobs) {
+    try { await blobService.removerBlob(b.container, b.blob); } catch { /* blob ausente não impede excluir */ }
+  }
+  await query('DELETE FROM personal_notes WHERE id = $1', [id]);
+  res.json({ message: 'Nota removida' });
+}));
+
+// ---- Compartilhar com pessoas (qualquer equipe) -------------------------------
+router.put('/:id/members', ah(async (req, res) => {
+  const { id, isOwner } = await accessNote(req);
+  if (!isOwner) throw new HttpError(403, 'Só quem criou a nota escolhe quem participa.');
+  const parsed = z.object({
+    members: z.array(z.object({ user_id: z.number().int().positive(), role: z.enum(['editor', 'leitor']) })).max(100),
+  }).safeParse(req.body || {});
+  if (!parsed.success) throw new HttpError(400, 'Lista de pessoas inválida');
+  const seen = new Set();
+  const valid = [];
+  for (const m of parsed.data.members) {
+    if (m.user_id === req.user.id || seen.has(m.user_id)) continue;
+    seen.add(m.user_id);
+    const { rows: [u] } = await query('SELECT id FROM users WHERE id = $1 AND active IS DISTINCT FROM false', [m.user_id]);
+    if (u) valid.push(m);
+  }
+  await query('DELETE FROM personal_note_members WHERE note_id = $1', [id]);
+  for (const m of valid) {
+    await query('INSERT INTO personal_note_members (note_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [id, m.user_id, m.role]);
+  }
+  const [note] = await loadNotes(req.user.id, id);
+  res.json(note);
+}));
 
 // ---- Anexos da nota (qualquer tipo de arquivo) ----------------------------------
-async function ownNote(req) {
-  const id = intParam(req.params.id);
-  const { rows: [n] } = await query('SELECT id FROM personal_notes WHERE id = $1 AND user_id = $2', [id, req.user.id]);
-  if (!n) throw new HttpError(404, 'Nota não encontrada');
-  return id;
-}
-
 router.post(
   '/:id/files',
   uploadNoteFiles.array('files', 30),
@@ -147,7 +187,7 @@ router.post(
     const incoming = Array.isArray(req.files) ? req.files : [];
     let id;
     try {
-      id = await ownNote(req);
+      ({ id } = await accessNote(req, { edit: true }));
       if (!incoming.length) throw new HttpError(400, 'Envie pelo menos um arquivo.');
     } catch (err) {
       incoming.forEach((f) => unlinkQuiet(f.path));
@@ -179,7 +219,7 @@ router.post(
 );
 
 router.get('/:id/files/:fileId', ah(async (req, res) => {
-  const id = await ownNote(req);
+  const { id } = await accessNote(req);
   const fileId = intParam(req.params.fileId, 'fileId');
   const { rows: [row] } = await query(
     'SELECT name, mime, container, `blob` FROM personal_note_files WHERE id = $1 AND note_id = $2',
@@ -193,7 +233,7 @@ router.get('/:id/files/:fileId', ah(async (req, res) => {
 }));
 
 router.delete('/:id/files/:fileId', ah(async (req, res) => {
-  const id = await ownNote(req);
+  const { id } = await accessNote(req, { edit: true });
   const fileId = intParam(req.params.fileId, 'fileId');
   const { rows: [row] } = await query(
     'SELECT container, `blob` FROM personal_note_files WHERE id = $1 AND note_id = $2',
@@ -202,6 +242,7 @@ router.delete('/:id/files/:fileId', ah(async (req, res) => {
   if (!row) throw new HttpError(404, 'Arquivo não encontrado.');
   try { await blobService.removerBlob(row.container, row.blob); } catch { /* já removido */ }
   await query('DELETE FROM personal_note_files WHERE id = $1', [fileId]);
+  await query('UPDATE personal_notes SET updated_at = NOW() WHERE id = $1', [id]);
   res.json({ ok: true });
 }));
 

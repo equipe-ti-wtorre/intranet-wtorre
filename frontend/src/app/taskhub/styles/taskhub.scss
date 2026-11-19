@@ -1470,6 +1470,8 @@ div.td-kpi { cursor: default; }
 .note-files { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .note-files__title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; color: var(--text-muted); margin-bottom: 6px; }
 .note-files__help { margin-top: 8px; }
+.note-shared-ico { vertical-align: -2px; margin-right: 4px; color: var(--act); }
+.note-shared { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); background: var(--act-soft); border-radius: var(--r); padding: 6px 10px; margin: 6px 0 2px; }
 
 .reminders-page { min-width: 0; }
 .rem-form {

@@ -254,6 +254,10 @@ export interface Note {
   id: number; title: string; body: string; color: NoteColor; pinned: boolean;
   created_at: string; updated_at: string;
   files?: TaskFile[];
+  is_owner?: boolean;
+  owner?: { id: number; name: string } | null;
+  my_role?: 'owner' | 'editor' | 'leitor';
+  members?: { id: number; name: string; role?: 'editor' | 'leitor' }[];
 }
 
 export interface TeamDashboard {
