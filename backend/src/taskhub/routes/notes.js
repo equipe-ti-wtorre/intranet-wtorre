@@ -92,6 +92,35 @@ async function accessNote(req, { edit = false } = {}) {
   return { id, isOwner, canEdit };
 }
 
+// Histórico: o que cada pessoa mexeu. Edições seguidas do mesmo tipo pela mesma pessoa viram uma só linha.
+async function logNote(noteId, userId, action, detail = '', merge = false) {
+  const text = String(detail || '').slice(0, 400);
+  if (merge) {
+    const { rows: [last] } = await query(
+      `SELECT id FROM personal_note_history
+        WHERE note_id = $1 AND user_id = $2 AND action = $3 AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+        ORDER BY id DESC LIMIT 1`,
+      [noteId, userId, action]
+    );
+    if (last) {
+      await query('UPDATE personal_note_history SET detail = $1, created_at = NOW() WHERE id = $2', [text, last.id]);
+      return;
+    }
+  }
+  await query('INSERT INTO personal_note_history (note_id, user_id, action, detail) VALUES ($1, $2, $3, $4)', [noteId, userId, action, text]);
+}
+
+router.get('/:id/history', ah(async (req, res) => {
+  const { id } = await accessNote(req);
+  const { rows } = await query(
+    `SELECT h.id, h.action, h.detail, h.created_at, h.user_id, u.name AS user_name
+       FROM personal_note_history h LEFT JOIN users u ON u.id = h.user_id
+      WHERE h.note_id = $1 ORDER BY h.id DESC LIMIT 200`,
+    [id]
+  );
+  res.json(rows.map((r) => ({ id: r.id, action: r.action, detail: r.detail || '', created_at: r.created_at, user: r.user_id ? { id: r.user_id, name: r.user_name } : null })));
+}));
+
 router.get('/', ah(async (req, res) => {
   res.json(await loadNotes(req.user.id));
 }));
@@ -113,6 +142,7 @@ router.post('/', async (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [req.user.id, (data.title || '').trim(), data.body || '', data.color || 'none', data.pinned || false]
     );
+    await logNote(rows[0].id, req.user.id, 'criou');
     const [note] = await loadNotes(req.user.id, rows[0].id);
     res.status(201).json(note);
   } catch (err) {
@@ -125,6 +155,7 @@ router.patch('/:id', ah(async (req, res) => {
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Dados inválidos');
   const { id } = await accessNote(req, { edit: true });
   const data = parsed.data;
+  const { rows: [old] } = await query('SELECT title, body, color, pinned FROM personal_notes WHERE id = $1', [id]);
   const fields = [];
   const params = [];
   let i = 1;
@@ -135,6 +166,12 @@ router.patch('/:id', ah(async (req, res) => {
   fields.push('updated_at = NOW()');
   params.push(id);
   await query(`UPDATE personal_notes SET ${fields.join(', ')} WHERE id = $${i}`, params);
+  if (old) {
+    if (data.title !== undefined && data.title.trim() !== (old.title || '')) await logNote(id, req.user.id, 'titulo', data.title.trim(), true);
+    if (data.body !== undefined && data.body !== (old.body || '')) await logNote(id, req.user.id, 'texto', '', true);
+    if (data.color !== undefined && data.color !== old.color) await logNote(id, req.user.id, 'cor', data.color);
+    if (data.pinned !== undefined && !!data.pinned !== !!old.pinned) await logNote(id, req.user.id, data.pinned ? 'fixou' : 'desafixou');
+  }
   const [note] = await loadNotes(req.user.id, id);
   res.json(note);
 }));
@@ -144,6 +181,7 @@ router.delete('/:id', ah(async (req, res) => {
   const { id, isOwner } = await accessNote(req);
   if (!isOwner) {
     await query('DELETE FROM personal_note_members WHERE note_id = $1 AND user_id = $2', [id, req.user.id]);
+    await logNote(id, req.user.id, 'saiu');
     return res.json({ message: 'Você saiu da nota' });
   }
   const { rows: blobs } = await query('SELECT container, `blob` FROM personal_note_files WHERE note_id = $1', [id]);
@@ -174,6 +212,7 @@ router.put('/:id/members', ah(async (req, res) => {
   for (const m of valid) {
     await query('INSERT INTO personal_note_members (note_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [id, m.user_id, m.role]);
   }
+  await logNote(id, req.user.id, 'compartilhou', valid.length ? valid.length + ' pessoa(s) com acesso' : 'deixou só dela');
   const [note] = await loadNotes(req.user.id, id);
   res.json(note);
 }));
@@ -210,6 +249,7 @@ router.post(
         created.push(formatFile(row));
       }
       await query('UPDATE personal_notes SET updated_at = NOW() WHERE id = $1', [id]);
+      await logNote(id, req.user.id, 'anexou', created.map((c) => c.name).join(', '));
     } catch (err) {
       incoming.forEach((f) => unlinkQuiet(f.path));
       throw err;
@@ -236,10 +276,11 @@ router.delete('/:id/files/:fileId', ah(async (req, res) => {
   const { id } = await accessNote(req, { edit: true });
   const fileId = intParam(req.params.fileId, 'fileId');
   const { rows: [row] } = await query(
-    'SELECT container, `blob` FROM personal_note_files WHERE id = $1 AND note_id = $2',
+    'SELECT name, container, `blob` FROM personal_note_files WHERE id = $1 AND note_id = $2',
     [fileId, id]
   );
   if (!row) throw new HttpError(404, 'Arquivo não encontrado.');
+  await logNote(id, req.user.id, 'tirou_anexo', row.name);
   try { await blobService.removerBlob(row.container, row.blob); } catch { /* já removido */ }
   await query('DELETE FROM personal_note_files WHERE id = $1', [fileId]);
   await query('UPDATE personal_notes SET updated_at = NOW() WHERE id = $1', [id]);

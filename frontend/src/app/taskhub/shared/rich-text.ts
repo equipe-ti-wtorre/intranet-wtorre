@@ -29,6 +29,8 @@ function clean(node: Node, out: Node, doc: Document) {
       copy.setAttribute('target', '_blank');
       copy.setAttribute('rel', 'noopener noreferrer');
     }
+    if (el.tagName === 'UL' && el.hasAttribute('data-check')) copy.setAttribute('data-check', '1');
+    if (el.tagName === 'LI' && el.hasAttribute('data-done')) copy.setAttribute('data-done', el.getAttribute('data-done') === 'true' ? 'true' : 'false');
     clean(el, copy, doc);
     out.appendChild(copy);
   });

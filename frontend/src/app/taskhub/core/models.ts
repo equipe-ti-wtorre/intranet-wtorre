@@ -260,6 +260,10 @@ export interface Note {
   members?: { id: number; name: string; role?: 'editor' | 'leitor' }[];
 }
 
+export interface NoteHistoryEntry {
+  id: number; action: string; detail: string; created_at: string; user: { id: number; name: string } | null;
+}
+
 export interface TeamDashboard {
   team: { id: number; name: string; color: string };
   scope?: 'full' | 'mine';

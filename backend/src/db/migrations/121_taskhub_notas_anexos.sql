@@ -38,3 +38,16 @@ SET @sql := IF(@existe = 0, 'ALTER TABLE th_personal_note_members ADD COLUMN rol
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+-- Histórico de cada nota: quem mexeu e no quê.
+CREATE TABLE IF NOT EXISTS th_personal_note_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  note_id INT NOT NULL,
+  user_id INT NULL,
+  action VARCHAR(24) NOT NULL,
+  detail VARCHAR(400) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_th_pnh_note (note_id, id),
+  CONSTRAINT fk_th_pnh_note FOREIGN KEY (note_id) REFERENCES th_personal_notes(id) ON DELETE CASCADE,
+  CONSTRAINT fk_th_pnh_user FOREIGN KEY (user_id) REFERENCES th_users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
