@@ -59,6 +59,16 @@ async function createMicrosoftUser({ email, nome, departamento, microsoftId, use
      VALUES (?, ?, ?, ?, ?, 1, 'USER', 1)`,
     [username || email.split('@')[0], nome, email, departamento, microsoftId]
   );
+  // Todo usuário novo já entra com o perfil "TaskHub" (se existir e estiver ativo).
+  try {
+    await pool.execute(
+      `INSERT IGNORE INTO usuario_perfis (usuario_id, perfil_id)
+       SELECT ?, id FROM perfis_acesso WHERE nome = 'TaskHub' AND ativo = 1 LIMIT 1`,
+      [result.insertId]
+    );
+  } catch (err) {
+    console.error('Falha ao vincular perfil TaskHub ao novo usuário:', err.message);
+  }
   return findById(result.insertId);
 }
 
