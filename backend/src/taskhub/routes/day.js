@@ -89,7 +89,9 @@ router.get('/', ah(async (req, res) => {
   );
   const routine = routineRows.map(r => ({ id: r.id, title: r.title, done: r.done, period: periodOfTime(r.start_time), time: String(r.start_time).slice(0, 5) }));
   const { rows: remRows } = await query(
-    `SELECT id, title, reminder_time, done FROM reminders WHERE user_id = $1 AND reminder_date = $2 ORDER BY reminder_time`, [me, date]
+    `SELECT r.id, r.title, r.reminder_time, r.done FROM reminders r
+      WHERE (r.user_id = $1 OR EXISTS (SELECT 1 FROM reminder_members m WHERE m.reminder_id = r.id AND m.user_id = $1))
+        AND r.reminder_date = $2 ORDER BY r.reminder_time`, [me, date]
   );
   const reminders = remRows.map(r => ({ id: r.id, title: r.title, done: r.done, period: periodOfTime(r.reminder_time), time: String(r.reminder_time).slice(0, 5) }));
 

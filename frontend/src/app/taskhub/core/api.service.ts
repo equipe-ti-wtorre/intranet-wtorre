@@ -70,6 +70,7 @@ export class ApiService {
   reminders(filters: { date?: string } = {}) { return this.http.get<Reminder[]>(`${U}/reminders`, { params: this.params(filters) }); }
   addReminder(body: { date: string; time: string; title: string; repeat?: ReminderRepeat }) { return this.http.post<Reminder>(`${U}/reminders`, body); }
   updateReminder(id: number, body: Partial<Reminder>) { return this.http.put<Reminder>(`${U}/reminders/${id}`, body); }
+  setReminderMembers(id: number, user_ids: number[]) { return this.http.put<Reminder>(`${U}/reminders/${id}/members`, { user_ids }); }
   deleteReminder(id: number) { return this.http.delete(`${U}/reminders/${id}`); }
   notes() { return this.http.get<Note[]>(`${U}/notes`); }
   createNote(body: Partial<Pick<Note, 'title' | 'body' | 'color' | 'pinned'>> = {}) { return this.http.post<Note>(`${U}/notes`, body); }
