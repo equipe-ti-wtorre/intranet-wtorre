@@ -248,7 +248,10 @@ export interface Notification {
 
 export interface RoutineBlock { id: number; startTime: string; endTime: string | null; label: string; icon: string | null; done?: boolean; }
 export type ReminderRepeat = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly';
-export interface Reminder { id: number; date: string; time: string; title: string; done: boolean; repeat: ReminderRepeat; notified?: boolean; }
+export interface Reminder {
+  id: number; date: string; time: string; title: string; done: boolean; repeat: ReminderRepeat; notified?: boolean;
+  is_owner?: boolean; owner?: { id: number; name: string }; members?: { id: number; name: string }[];
+}
 export type NoteColor = 'none' | 'yellow' | 'blue' | 'green' | 'purple' | 'orange' | 'red';
 export interface Note {
   id: number; title: string; body: string; color: NoteColor; pinned: boolean;

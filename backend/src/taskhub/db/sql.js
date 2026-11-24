@@ -53,6 +53,7 @@ const TABLES = [
   'projects',
   'sectors',
   'reminders',
+  'reminder_members',
   'tasks',
   'teams',
   'users',

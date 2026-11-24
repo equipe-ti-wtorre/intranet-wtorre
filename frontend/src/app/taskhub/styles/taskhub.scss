@@ -1375,7 +1375,13 @@ div.td-kpi { cursor: default; }
   .tl-label { flex-basis: 168px; width: 168px; }
   .rem-row { flex-wrap: wrap; row-gap: 4px; }
   .rem-title { flex: 1 1 140px; }
-  .rem-when, .rem-repeat { white-space: normal; }
+  .rem-when, .rem-shared { display: inline-flex; align-items: center; gap: 4px; color: var(--mu); font-size: 12.5px; white-space: nowrap; }
+.rem-row--edit { flex-wrap: wrap; row-gap: 8px; background: var(--bg); }
+.rem-row--edit .grow { flex: 1 1 200px; min-width: 160px; }
+.rem-row--edit input[type='date'] { width: 148px; }
+.rem-row--edit input[type='time'] { width: 112px; }
+.rem-row--edit .select { width: 138px; background-color: var(--bg); }
+.rem-repeat { white-space: normal; }
 }
 .nav-section { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--menu-section); padding: 18px 10px 4px; border-top: 1px solid var(--menu-line); margin-top: 10px; }
 .nav-section--toggle { display: flex; align-items: center; gap: 6px; }

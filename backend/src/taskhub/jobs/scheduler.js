@@ -100,10 +100,13 @@ async function dueReminders() {
   );
   for (const row of rows) {
     try {
-      await notify(null, {
-        userId: row.user_id, actorId: null, type: 'reminder',
-        title: 'Lembrete', body: row.title,
-      });
+      const { rows: mem } = await query('SELECT user_id FROM reminder_members WHERE reminder_id = $1', [row.id]);
+      for (const uid of [row.user_id, ...mem.map((m) => m.user_id)]) {
+        await notify(null, {
+          userId: uid, actorId: null, type: 'reminder',
+          title: 'Lembrete', body: row.title,
+        });
+      }
       if (row.repeat && row.repeat !== 'none') {
         let next = nextOccurrence(row.reminder_date, row.repeat);
         let guard = 0;
